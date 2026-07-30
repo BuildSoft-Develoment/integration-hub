@@ -248,6 +248,19 @@ public class Mt101PayUncertainResolutionService {
             Mt101StatusQueryExecutor.QueryPlanConfig planConfig, Set<String> accepted, Set<String> rejected,
             String reasonText, String executedBy, Long processExecutionId, Long taskDefinitionId)
             throws SQLException {
+        // Fail-loud: sin execId la trama saldria SIN correlacion (process_execution_id y trace_id apagados), que
+        // es exactamente el defecto que este metodo vino a cerrar. La columna lo permite —`process_execution_id`
+        // es nullable y su FK es `on delete set null`, asi que un valor bueno puede volverse NULL si se purga la
+        // ejecucion—, de modo que sin esta guarda el arreglo degradaria en silencio al comportamiento anterior.
+        // Se comprueba AQUI y no en el guard de resolveUncertainNormalPay a proposito: la primera pasada
+        // (UNCERTAIN -> SENT/REJECTED) resuelve estado real de pagos y no necesita el execId; abortarla por un
+        // hueco de auditoria seria desproporcionado. Aqui aborta antes de tocar ninguna pagina, sin dejar
+        // reconciliacion a medias.
+        if (processExecutionId == null) {
+            throw new IllegalStateException("MT101 fragment set " + set + " has no process execution (orphan set): "
+                    + "reconciling it would emit PAY_CONFLICT frames without correlation. Restore "
+                    + "mt101_build_fragment.process_execution_id for the set before reconciling.");
+        }
         int conflicts = 0;
         int afterIndex = 0;
         while (true) {

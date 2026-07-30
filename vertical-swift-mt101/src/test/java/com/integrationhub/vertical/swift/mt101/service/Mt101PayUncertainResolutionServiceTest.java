@@ -287,6 +287,28 @@ class Mt101PayUncertainResolutionServiceTest {
     }
 
     @Test
+    void anOrphanSetFailsLoudInsteadOfEmittingAnUncorrelatedFrame() throws Exception {
+        // mt101_build_fragment.process_execution_id es nullable y su FK es `on delete set null`: purgar la
+        // ejecución deja el set huérfano. Sin guarda, la trama volvería a salir sin correlación —el defecto que
+        // este camino vino a cerrar— en silencio y sin test que lo viera. Debe fallar en voz alta.
+        var setId = "PAY-SENT-CONFLICT-HUERFANO";
+        seedOrphan(setId, "K8", 1, "SENT");
+        stubFor(get(urlEqualTo("/status/K8")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"REJECTED\",\"gatewayReference\":\"GW-K8\"}")));
+
+        var error = assertThrows(IllegalStateException.class,
+                () -> service.resolveUncertainNormalPay(null, setId, "ana", "reconciliacion SENT"));
+
+        assertTrue(error.getMessage().contains(setId), () -> "el error nombra el set: " + error.getMessage());
+        assertTrue(error.getMessage().contains("orphan set"),
+                () -> "el error explica la causa: " + error.getMessage());
+        assertFalse(payConflictFor(setId, "K8"),
+                "aborta ANTES de marcar el conflicto: no deja reconciliación a medias");
+        assertTrue(auditEmitter.firstOfStage("PAY_CONFLICT").isEmpty(),
+                "no se emite ninguna trama sin correlación");
+    }
+
+    @Test
     void reconcilingSentIsIdempotentAndDoesNotReflagAnExistingConflict() throws Exception {
         // Idempotencia: una segunda reconciliación de un SENT ya marcado pay_conflict NO lo re-procesa ni duplica la
         // confirmación (el filtro pay_conflict=false lo excluye).
@@ -354,6 +376,25 @@ class Mt101PayUncertainResolutionServiceTest {
 
     private void seed(String setId, String reference, int index, String status) throws SQLException {
         seed(setId, reference, index, status, DEFAULT_SEED_EXECUTION_ID);
+    }
+
+    /**
+     * Set HUERFANO: {@code process_execution_id} a NULL, que es lo que deja una purga de {@code process_execution}
+     * (la FK es {@code on delete set null}). Sirve para fijar la guarda fail-loud de la reconciliacion.
+     */
+    private void seedOrphan(String setId, String reference, int index, String status) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("insert into mt101_build_fragment (fragment_set_id, "
+                     + "process_execution_id, task_definition_id, source_table, fragment_index, fragment_total, "
+                     + "senders_reference, payload_hash, raw_payload, message_json, status) "
+                     + "values (?, null, 20, 'staging_record', ?, 3, ?, repeat('a',64), 'raw', "
+                     + "'{\"sequenceA\":{\"sendersReference\":\"" + reference + "\"}}', ?)")) {
+            statement.setString(1, setId);
+            statement.setInt(2, index);
+            statement.setString(3, reference);
+            statement.setString(4, status);
+            statement.executeUpdate();
+        }
     }
 
     /**
