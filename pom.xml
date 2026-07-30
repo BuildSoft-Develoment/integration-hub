@@ -27,6 +27,11 @@
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <quarkus-amazon-services.version>3.19.0</quarkus-amazon-services.version>
+        <!-- Carril local/CI estable: evita saturar Docker con forks paralelos y deja las pruebas
+             de performance fuera salvo que se pidan de forma explicita. -->
+        <test.excluded.groups>perf</test.excluded.groups>
+        <test.fork.count>1</test.fork.count>
+        <test.reuse.forks>true</test.reuse.forks>
     </properties>
 
     <dependencyManagement>
@@ -63,12 +68,55 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${surefire-plugin.version}</version>
+                    <configuration>
+                        <excludedGroups>${test.excluded.groups}</excludedGroups>
+                        <forkCount>${test.fork.count}</forkCount>
+                        <reuseForks>${test.reuse.forks}</reuseForks>
+                        <systemPropertyVariables>
+                            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                        </systemPropertyVariables>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
+                    <configuration>
+                        <excludedGroups>${test.excluded.groups}</excludedGroups>
+                        <forkCount>${test.fork.count}</forkCount>
+                        <reuseForks>${test.reuse.forks}</reuseForks>
+                        <systemPropertyVariables>
+                            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                        </systemPropertyVariables>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
     </build>
 
     <profiles>
+        <profile>
+            <id>fast-tests</id>
+            <properties>
+                <!-- Carril rapido: mantiene unitarias/ITs funcionales y saca la matriz multi-BD. -->
+                <test.excluded.groups>perf,compat-db</test.excluded.groups>
+            </properties>
+        </profile>
+        <profile>
+            <id>compat-db-tests</id>
+            <properties>
+                <!-- Ejecuta solo la matriz multi-motor: mvn -Pcompat-db-tests test. -->
+                <groups>compat-db</groups>
+                <test.excluded.groups>perf</test.excluded.groups>
+            </properties>
+        </profile>
+        <profile>
+            <id>all-tests</id>
+            <properties>
+                <!-- Incluye tambien pruebas perf; reservado para validaciones largas. -->
+                <test.excluded.groups></test.excluded.groups>
+            </properties>
+        </profile>
         <profile>
             <id>native</id>
             <properties>
@@ -108,4 +156,3 @@
         </profile>
     </profiles>
 </project>
-

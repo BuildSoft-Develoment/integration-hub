@@ -1,11 +1,9 @@
 package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Connection;
 import java.sql.Statement;
@@ -15,19 +13,13 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers
+@Tag("compat-db")
 class StoredProcedureTaskProviderSqlServerCompatibilityTest extends StoredProcedureTaskProviderCompatibilityTestSupport {
-
-    @Container
-    static final MSSQLServerContainer<?> SQLSERVER = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04")
-            .acceptLicense()
-            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesProcedureWithOutputsOnSqlServer() throws Exception {
         prepareSqlServer();
-        var provider = provider(dataSource(SQLSERVER.getJdbcUrl(), SQLSERVER.getUsername(), SQLSERVER.getPassword()), ConnectionType.SQLSERVER);
+        var provider = provider(dataSource(), ConnectionType.SQLSERVER);
 
         var result = provider.execute(taskContext(), Map.of(
                 "connectionRef", "sqlserver-test",
@@ -45,10 +37,15 @@ class StoredProcedureTaskProviderSqlServerCompatibilityTest extends StoredProced
     }
 
     private void prepareSqlServer() throws Exception {
-        try (Connection connection = dataSource(SQLSERVER.getJdbcUrl(), SQLSERVER.getUsername(), SQLSERVER.getPassword()).getConnection();
+        try (Connection connection = dataSource().getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("if object_id('dbo.sp_collect_result', 'P') is not null drop procedure dbo.sp_collect_result");
             statement.execute("create procedure dbo.sp_collect_result @p_idinstancia varchar(50), @resultado varchar(100) output, @filas_actualizadas int output as begin set nocount on; set @resultado = 'OK-' + @p_idinstancia; set @filas_actualizadas = 7; end");
         }
+    }
+
+    private javax.sql.DataSource dataSource() {
+        var sqlServer = CompatibilityJdbcContainers.sqlServer();
+        return dataSource(sqlServer.getJdbcUrl(), sqlServer.getUsername(), sqlServer.getPassword());
     }
 }

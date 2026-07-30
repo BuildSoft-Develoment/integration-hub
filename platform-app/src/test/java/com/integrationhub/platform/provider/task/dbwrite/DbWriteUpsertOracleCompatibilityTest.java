@@ -1,14 +1,10 @@
 package com.integrationhub.platform.provider.task.dbwrite;
 
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.time.Duration;
-
+@Tag("compat-db")
 class DbWriteUpsertOracleCompatibilityTest extends DbWriteUpsertCompatibilityTestSupport {
 
     @Override
@@ -23,45 +19,16 @@ class DbWriteUpsertOracleCompatibilityTest extends DbWriteUpsertCompatibilityTes
 
     /**
      * Es tambien la evidencia de que Oracle acepta parametros sin tipar dentro del
-     * {@code select ... from dual} que alimenta el MERGE — el punto del diseno sobre el que habia mas
+     * {@code select ... from dual} que alimenta el MERGE: el punto del diseno sobre el que habia mas
      * duda, porque el motor a veces exige un cast para deducir el tipo de un {@code ?} en la lista de
      * seleccion.
      */
     @Test
     void upsertsOnOracle() throws Exception {
-        try (GenericContainer<?> oracle = new GenericContainer<>("gvenzl/oracle-free:23-slim-faststart")
-                .withEnv("ORACLE_PASSWORD", "test")
-                .withEnv("APP_USER", "test")
-                .withEnv("APP_USER_PASSWORD", "test")
-                .withExposedPorts(1521)
-                .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofMinutes(8)))) {
-            oracle.start();
-            var dataSource = dataSource(jdbcUrl(oracle), "test", "test");
-            waitUntilServiceIsRegistered(dataSource);
+        var dataSource = dataSource(CompatibilityJdbcContainers.oracleJdbcUrl(),
+                CompatibilityJdbcContainers.USERNAME, CompatibilityJdbcContainers.PASSWORD);
+        CompatibilityJdbcContainers.waitUntilOracleServiceIsRegistered(dataSource);
 
-            assertUpsertWritesThenOverwrites(dataSource);
-        }
-    }
-
-    /**
-     * El listener de Oracle acepta conexiones antes de que el servicio de la PDB este registrado, y en
-     * esa ventana responde ORA-12514. Se reintenta igual que en las demas pruebas de compatibilidad.
-     */
-    private void waitUntilServiceIsRegistered(DataSource dataSource) throws Exception {
-        SQLException lastError = null;
-        var deadline = System.nanoTime() + Duration.ofMinutes(5).toNanos();
-        while (System.nanoTime() < deadline) {
-            try (Connection ignored = dataSource.getConnection()) {
-                return;
-            } catch (SQLException error) {
-                lastError = error;
-                Thread.sleep(5000);
-            }
-        }
-        throw lastError == null ? new SQLException("Oracle no quedo disponible a tiempo") : lastError;
-    }
-
-    private String jdbcUrl(GenericContainer<?> oracle) {
-        return "jdbc:oracle:thin:@localhost:" + oracle.getMappedPort(1521) + "/FREEPDB1";
+        assertUpsertWritesThenOverwrites(dataSource);
     }
 }

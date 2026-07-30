@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 @TestProfile(AuditRelayKafkaE2EIT.AuditRelayProfile.class)
 @QuarkusTestResource(PostgresTestResource.class)
-@QuarkusTestResource(KafkaTestResource.class)
+@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
 class AuditRelayKafkaE2EIT {
 
     private static final int EVENT_COUNT = 300;

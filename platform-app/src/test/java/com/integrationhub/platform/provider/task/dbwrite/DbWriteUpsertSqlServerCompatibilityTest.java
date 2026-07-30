@@ -1,20 +1,11 @@
 package com.integrationhub.platform.provider.task.dbwrite;
 
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Tag("compat-db")
 class DbWriteUpsertSqlServerCompatibilityTest extends DbWriteUpsertCompatibilityTestSupport {
-
-    @Container
-    static final MSSQLServerContainer<?> SQLSERVER =
-            new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04")
-                    .acceptLicense()
-                    // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-                    .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Override
     protected String createTableStatement() {
@@ -32,7 +23,11 @@ class DbWriteUpsertSqlServerCompatibilityTest extends DbWriteUpsertCompatibility
      */
     @Test
     void upsertsOnSqlServer() throws Exception {
-        assertUpsertWritesThenOverwrites(
-                dataSource(SQLSERVER.getJdbcUrl(), SQLSERVER.getUsername(), SQLSERVER.getPassword()));
+        assertUpsertWritesThenOverwrites(dataSource());
+    }
+
+    private javax.sql.DataSource dataSource() {
+        var sqlServer = CompatibilityJdbcContainers.sqlServer();
+        return dataSource(sqlServer.getJdbcUrl(), sqlServer.getUsername(), sqlServer.getPassword());
     }
 }

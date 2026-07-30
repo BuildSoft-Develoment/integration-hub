@@ -1,10 +1,8 @@
 package com.integrationhub.platform.provider.task.dbfunction;
 
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Connection;
 import java.sql.Statement;
@@ -14,23 +12,13 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers
+@Tag("compat-db")
 class DatabaseFunctionTaskProviderMySqlCompatibilityTest extends DatabaseFunctionTaskProviderCompatibilityTestSupport {
-
-    @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
-            .withDatabaseName("integration_hub_mysql_fn")
-            .withUsername("mysql")
-            .withPassword("mysql")
-            .withCommand("--log-bin-trust-function-creators=1")
-            // Este es el contenedor que tumbaba el reactor: agotaba los reintentos a los 383 s.
-            // Ver CompatibilityContainerTimeouts para los tiempos medidos y por que 8 minutos.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesScalarFunctionOnMySqlUsingDynamicAlias() throws Exception {
         prepareMySql();
-        var provider = provider(dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()));
+        var provider = provider(dataSource());
 
         var result = provider.execute(taskContext(), Map.of(
                 "functionName", "fn_collect_result",
@@ -45,10 +33,15 @@ class DatabaseFunctionTaskProviderMySqlCompatibilityTest extends DatabaseFunctio
     }
 
     private void prepareMySql() throws Exception {
-        try (Connection connection = dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()).getConnection();
+        try (Connection connection = dataSource().getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop function if exists fn_collect_result");
             statement.executeUpdate("create function fn_collect_result(p_idinstancia varchar(50)) returns varchar(100) deterministic return concat('OK-', p_idinstancia)");
         }
+    }
+
+    private javax.sql.DataSource dataSource() {
+        var mysql = CompatibilityJdbcContainers.mysql();
+        return dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
     }
 }

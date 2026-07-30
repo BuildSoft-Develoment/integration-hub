@@ -1,19 +1,12 @@
 package com.integrationhub.platform.repository;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Tag("compat-db")
 class TaskInputPaginationMySqlCompatibilityTest extends TaskInputPaginationCompatibilityTestSupport {
-
-    @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
-            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Override
     protected String createTableStatement() {
@@ -41,6 +34,7 @@ class TaskInputPaginationMySqlCompatibilityTest extends TaskInputPaginationCompa
     }
 
     private javax.sql.DataSource dataSource() {
-        return dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+        var mysql = CompatibilityJdbcContainers.mysql();
+        return dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
     }
 }

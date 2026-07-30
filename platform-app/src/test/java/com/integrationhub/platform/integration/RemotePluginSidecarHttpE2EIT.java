@@ -54,7 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 @TestProfile(RemotePluginSidecarHttpE2EIT.Profile.class)
 @QuarkusTestResource(PostgresTestResource.class)
-@QuarkusTestResource(KafkaTestResource.class)
+@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
 class RemotePluginSidecarHttpE2EIT {
 
     private static final String PLUGIN_ID = "acme-tasks";

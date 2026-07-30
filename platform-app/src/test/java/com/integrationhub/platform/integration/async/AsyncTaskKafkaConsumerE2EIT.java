@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 @TestProfile(AsyncKafkaConsumerTestProfile.class)
 @QuarkusTestResource(PostgresTestResource.class)
-@QuarkusTestResource(KafkaTestResource.class)
+@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
 class AsyncTaskKafkaConsumerE2EIT {
 
     @Inject

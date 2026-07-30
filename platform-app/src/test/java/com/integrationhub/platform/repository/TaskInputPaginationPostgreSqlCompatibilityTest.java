@@ -1,19 +1,12 @@
 package com.integrationhub.platform.repository;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Tag("compat-db")
 class TaskInputPaginationPostgreSqlCompatibilityTest extends TaskInputPaginationCompatibilityTestSupport {
-
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Override
     protected String createTableStatement() {
@@ -41,6 +34,7 @@ class TaskInputPaginationPostgreSqlCompatibilityTest extends TaskInputPagination
     }
 
     private javax.sql.DataSource dataSource() {
-        return dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var postgres = CompatibilityJdbcContainers.postgres();
+        return dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
     }
 }

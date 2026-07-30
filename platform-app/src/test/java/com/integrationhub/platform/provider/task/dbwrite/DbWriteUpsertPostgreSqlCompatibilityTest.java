@@ -1,18 +1,11 @@
 package com.integrationhub.platform.provider.task.dbwrite;
 
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Tag("compat-db")
 class DbWriteUpsertPostgreSqlCompatibilityTest extends DbWriteUpsertCompatibilityTestSupport {
-
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Override
     protected String createTableStatement() {
@@ -26,7 +19,11 @@ class DbWriteUpsertPostgreSqlCompatibilityTest extends DbWriteUpsertCompatibilit
 
     @Test
     void upsertsOnPostgreSql() throws Exception {
-        assertUpsertWritesThenOverwrites(
-                dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()));
+        assertUpsertWritesThenOverwrites(dataSource());
+    }
+
+    private javax.sql.DataSource dataSource() {
+        var postgres = CompatibilityJdbcContainers.postgres();
+        return dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
     }
 }

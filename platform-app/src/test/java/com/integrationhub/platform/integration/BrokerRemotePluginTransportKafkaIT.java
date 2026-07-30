@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 @TestProfile(IntegrationTestProfile.class)
 @QuarkusTestResource(PostgresTestResource.class)
-@QuarkusTestResource(KafkaTestResource.class)
+@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
 class BrokerRemotePluginTransportKafkaIT {
 
     private static final String RESUME_SECRET = "test-resume-secret";

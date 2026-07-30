@@ -137,6 +137,9 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>${surefire-plugin.version}</version>
                 <configuration>
+                    <excludedGroups>${test.excluded.groups}</excludedGroups>
+                    <forkCount>${test.fork.count}</forkCount>
+                    <reuseForks>${test.reuse.forks}</reuseForks>
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                     </systemPropertyVariables>

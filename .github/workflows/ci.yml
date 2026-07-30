@@ -18,20 +18,33 @@ jobs:
       - name: Verificaciones del framework y del proyecto
         run: npm run check:all
 
-  backend:
-    name: Backend Quarkus (build + test + IT)
+  backend-fast:
+    name: Backend Quarkus fast (build + test + IT)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
-      # `verify` corre tests unitarios (surefire) y de integracion *IT (failsafe).
-      # Los *IT usan Testcontainers (Postgres) -> requieren Docker (disponible en ubuntu-latest).
-      - name: Maven verify
-        working-directory: platform-app
-        run: ./mvnw -B verify
+          java-version: 25
+          cache: maven
+      # Carril rapido para PR: compila dependencias desde la raiz y excluye perf/compat-db.
+      - name: Maven verify (fast)
+        run: mvn -B -pl platform-app -am -Pfast-tests verify
+
+  backend-compat-db:
+    name: Backend Quarkus compat-db (multi-motor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      # Carril dedicado a la matriz multi-BD: Oracle, PostgreSQL, SQL Server y MySQL.
+      - name: Maven test (compat-db)
+        run: mvn -B -pl platform-app -am -Pcompat-db-tests test
 
   frontend:
     name: Frontend Angular (lint + test + build)

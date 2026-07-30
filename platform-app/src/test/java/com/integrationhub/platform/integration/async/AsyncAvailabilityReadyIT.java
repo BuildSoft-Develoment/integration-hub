@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @QuarkusTest
 @TestProfile(AsyncAvailabilityReadyIT.AllGatesKafkaProfile.class)
 @QuarkusTestResource(PostgresTestResource.class)
-@QuarkusTestResource(KafkaTestResource.class)
+@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
 class AsyncAvailabilityReadyIT {
 
     public static class AllGatesKafkaProfile implements QuarkusTestProfile {

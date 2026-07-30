@@ -1,10 +1,8 @@
 package com.integrationhub.platform.provider.task.dbfunction;
 
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Connection;
 import java.sql.Statement;
@@ -14,19 +12,13 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers
+@Tag("compat-db")
 class DatabaseFunctionTaskProviderSqlServerCompatibilityTest extends DatabaseFunctionTaskProviderCompatibilityTestSupport {
-
-    @Container
-    static final MSSQLServerContainer<?> SQLSERVER = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04")
-            .acceptLicense()
-            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesTableValuedFunctionOnSqlServer() throws Exception {
         prepareSqlServer();
-        var provider = provider(dataSource(SQLSERVER.getJdbcUrl(), SQLSERVER.getUsername(), SQLSERVER.getPassword()));
+        var provider = provider(dataSource());
 
         var result = provider.execute(taskContext(), Map.of(
                 "functionName", "dbo.fn_collect_result",
@@ -41,10 +33,15 @@ class DatabaseFunctionTaskProviderSqlServerCompatibilityTest extends DatabaseFun
     }
 
     private void prepareSqlServer() throws Exception {
-        try (Connection connection = dataSource(SQLSERVER.getJdbcUrl(), SQLSERVER.getUsername(), SQLSERVER.getPassword()).getConnection();
+        try (Connection connection = dataSource().getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("if object_id('dbo.fn_collect_result') is not null drop function dbo.fn_collect_result");
             statement.executeUpdate("create function dbo.fn_collect_result (@p_idinstancia nvarchar(50)) returns table as return select cast('OK-' + @p_idinstancia as nvarchar(100)) as resultado, cast(7 as int) as filas_actualizadas");
         }
+    }
+
+    private javax.sql.DataSource dataSource() {
+        var sqlServer = CompatibilityJdbcContainers.sqlServer();
+        return dataSource(sqlServer.getJdbcUrl(), sqlServer.getUsername(), sqlServer.getPassword());
     }
 }

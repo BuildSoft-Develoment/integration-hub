@@ -1,11 +1,9 @@
 package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Connection;
 import java.sql.Statement;
@@ -15,21 +13,13 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers
+@Tag("compat-db")
 class StoredProcedureTaskProviderPostgreSqlCompatibilityTest extends StoredProcedureTaskProviderCompatibilityTestSupport {
-
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("integration_hub_pg")
-            .withUsername("postgres")
-            .withPassword("postgres")
-            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesProcedureWithOutputsOnPostgreSql() throws Exception {
         preparePostgreSql();
-        var provider = provider(dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()), ConnectionType.POSTGRESQL);
+        var provider = provider(dataSource(), ConnectionType.POSTGRESQL);
 
         var result = provider.execute(taskContext(), Map.of(
                 "connectionRef", "postgres-test",
@@ -47,10 +37,15 @@ class StoredProcedureTaskProviderPostgreSqlCompatibilityTest extends StoredProce
     }
 
     private void preparePostgreSql() throws Exception {
-        try (Connection connection = dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()).getConnection();
+        try (Connection connection = dataSource().getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop procedure if exists public.sp_collect_result(varchar, out varchar, out integer)");
             statement.executeUpdate("create or replace procedure public.sp_collect_result(in p_idinstancia varchar, out resultado varchar, out filas_actualizadas integer) language plpgsql as $$ begin resultado := 'OK-' || p_idinstancia; filas_actualizadas := 7; end; $$");
         }
+    }
+
+    private javax.sql.DataSource dataSource() {
+        var postgres = CompatibilityJdbcContainers.postgres();
+        return dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
     }
 }

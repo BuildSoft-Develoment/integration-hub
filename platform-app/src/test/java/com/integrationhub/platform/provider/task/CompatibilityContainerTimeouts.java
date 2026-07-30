@@ -11,10 +11,10 @@ package com.integrationhub.platform.provider.task;
  *   <caption>Tiempos observados</caption>
  *   <tr><th>Contenedor</th><th>Aislado</th><th>En el reactor</th></tr>
  *   <tr><td>MySQL (funciones)</td><td>237 s</td><td><b>fallo</b> a los 383 s</td></tr>
- *   <tr><td>MySQL (procedimientos)</td><td>—</td><td>118 s</td></tr>
- *   <tr><td>Oracle</td><td>—</td><td>288 s / 200 s</td></tr>
- *   <tr><td>SQL Server</td><td>—</td><td>85 s / 67 s</td></tr>
- *   <tr><td>PostgreSQL</td><td>—</td><td>12 s / 8 s</td></tr>
+ *   <tr><td>MySQL (procedimientos)</td><td>-</td><td>118 s</td></tr>
+ *   <tr><td>Oracle</td><td>-</td><td>288 s / 200 s</td></tr>
+ *   <tr><td>SQL Server</td><td>-</td><td>85 s / 67 s</td></tr>
+ *   <tr><td>PostgreSQL</td><td>-</td><td>12 s / 8 s</td></tr>
  * </table>
  *
  * <p>El fallo de MySQL <b>no era la imagen</b>: otro contenedor de {@code mysql:8.4} arranco bien en
@@ -26,7 +26,7 @@ package com.integrationhub.platform.provider.task;
  * nuevo: una sola politica para toda la suite multi-BD.</p>
  *
  * <p><b>Por que no se saca la suite a un perfil aparte.</b> Porque esconderia el problema y dejaria
- * la compatibilidad multi-BD fuera del build base — lo contrario de lo que exige una homologacion
+ * la compatibilidad multi-BD fuera del build base: lo contrario de lo que exige una homologacion
  * bancaria. El arreglo es calibrar el timeout, no dejar de medir.</p>
  */
 public final class CompatibilityContainerTimeouts {

@@ -1,18 +1,11 @@
 package com.integrationhub.platform.provider.task.dbwrite;
 
-import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
+import com.integrationhub.platform.provider.task.CompatibilityJdbcContainers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Tag("compat-db")
 class DbWriteUpsertMySqlCompatibilityTest extends DbWriteUpsertCompatibilityTestSupport {
-
-    @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
-            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
-            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Override
     protected String createTableStatement() {
@@ -32,7 +25,11 @@ class DbWriteUpsertMySqlCompatibilityTest extends DbWriteUpsertCompatibilityTest
      */
     @Test
     void upsertsOnMySql() throws Exception {
-        assertUpsertWritesThenOverwrites(
-                dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()));
+        assertUpsertWritesThenOverwrites(dataSource());
+    }
+
+    private javax.sql.DataSource dataSource() {
+        var mysql = CompatibilityJdbcContainers.mysql();
+        return dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
     }
 }

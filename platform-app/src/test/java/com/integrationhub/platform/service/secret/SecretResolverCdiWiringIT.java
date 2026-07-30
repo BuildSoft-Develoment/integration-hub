@@ -32,6 +32,8 @@ class SecretResolverCdiWiringIT {
                     "quarkus.oidc.enabled", "false",
                     "quarkus.scheduler.enabled", "false",
                     "quarkus.devservices.enabled", "false",
+                    "quarkus.kafka.devservices.enabled", "false",
+                    "mp.messaging.outgoing.audit-out.connector", "smallrye-in-memory",
                     "quarkus.flyway.migrate-at-start", "true",
                     // fuente 'config' (ConfigSecretValueProvider) resuelve la referencia como clave MP config
                     "integrationhub.test.cdi-secret", "valor-config-cdi",
