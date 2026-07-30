@@ -44,6 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @WireMockTest
 class Mt101PayUncertainResolutionServiceTest {
 
+    /** Ejecucion que siembra {@code seed} por defecto; es la que debe acabar correlacionando la trama. */
+    private static final long DEFAULT_SEED_EXECUTION_ID = 100L;
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("pay_uncertain_resolution")
@@ -251,6 +254,36 @@ class Mt101PayUncertainResolutionServiceTest {
         assertEquals("SENT", trama.get().attributes().get("previousStatus"));
         assertEquals("REJECTED", trama.get().attributes().get("incomingTerminal"));
         assertEquals("ana", trama.get().attributes().get("actor"), "queda el actor que ejecutó la reconciliación");
+        // Regresión: la trama del camino STATUS debe llevar la correlación de ejecución del set. Se emitía con null,
+        // que apaga a la vez process_execution_id y trace_id en audit_record_event -> el conflicto desaparecía del
+        // drill-down que la consola de PAY Conflicts abre acotando por (paymentReference, processExecutionId).
+        assertEquals(Long.valueOf(DEFAULT_SEED_EXECUTION_ID), trama.get().processExecutionId(),
+                "la trama se ancla a la ejecución del set (mt101_build_fragment.process_execution_id)");
+        assertEquals("exec-" + DEFAULT_SEED_EXECUTION_ID, trama.get().traceId(),
+                "el traceId se deriva del execId: sin él, el timeline por ejecución pierde el conflicto");
+    }
+
+    @Test
+    void theConflictFrameTakesItsExecutionFromTheSetAndNotFromAConstant() throws Exception {
+        // Complementa al test anterior: allí el fixture siembra la ejecución 100, así que un valor cableado pasaría
+        // igual. Aquí el set nace en OTRA ejecución, de modo que el aserto solo puede cumplirse leyendo la metadata
+        // del set. Es la propiedad que importa para los dos llamadores: el pipeline tiene TaskContext, pero el REST
+        // del operador (Mt101QuarantineResource) no, y aun así la trama debe correlacionar.
+        var otherExecution = 4242L;
+        var setId = "PAY-SENT-CONFLICT-OTRA-EXEC";
+        seed(setId, "K9", 1, "SENT", otherExecution);
+        seedArchive("K9", otherExecution, 6009L);
+        stubFor(get(urlEqualTo("/status/K9")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"REJECTED\",\"gatewayReference\":\"GW-K9\"}")));
+
+        var result = service.resolveUncertainNormalPay(null, setId, "ana", "reconciliacion SENT");
+
+        assertEquals(1, result.conflicts(), "K9: SENT contradicho por banco REJECTED -> 1 conflicto");
+        var trama = auditEmitter.firstOfStage("PAY_CONFLICT");
+        assertTrue(trama.isPresent(), "STATUS/RECONCILE emite la trama append-only PAY_CONFLICT");
+        assertEquals(Long.valueOf(otherExecution), trama.get().processExecutionId(),
+                "la correlación sale de la metadata del set, no de una constante");
+        assertEquals("exec-" + otherExecution, trama.get().traceId());
     }
 
     @Test
@@ -320,16 +353,27 @@ class Mt101PayUncertainResolutionServiceTest {
     }
 
     private void seed(String setId, String reference, int index, String status) throws SQLException {
+        seed(setId, reference, index, status, DEFAULT_SEED_EXECUTION_ID);
+    }
+
+    /**
+     * Variante con {@code process_execution_id} explicito. Existe para que un test pueda sembrar un set con una
+     * ejecucion DISTINTA de la del resto: sin eso, un aserto sobre la correlacion de la trama no distinguiria
+     * "leido de la metadata del set" de "constante cableada".
+     */
+    private void seed(String setId, String reference, int index, String status, long processExecutionId)
+            throws SQLException {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement("insert into mt101_build_fragment (fragment_set_id, "
                      + "process_execution_id, task_definition_id, source_table, fragment_index, fragment_total, "
                      + "senders_reference, payload_hash, raw_payload, message_json, status) "
-                     + "values (?, 100, 20, 'staging_record', ?, 3, ?, repeat('a',64), 'raw', "
+                     + "values (?, ?, 20, 'staging_record', ?, 3, ?, repeat('a',64), 'raw', "
                      + "'{\"sequenceA\":{\"sendersReference\":\"" + reference + "\"}}', ?)")) {
             statement.setString(1, setId);
-            statement.setInt(2, index);
-            statement.setString(3, reference);
-            statement.setString(4, status);
+            statement.setLong(2, processExecutionId);
+            statement.setInt(3, index);
+            statement.setString(4, reference);
+            statement.setString(5, status);
             statement.executeUpdate();
         }
     }

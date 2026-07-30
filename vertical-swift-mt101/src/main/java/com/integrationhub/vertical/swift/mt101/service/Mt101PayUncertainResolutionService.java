@@ -218,7 +218,7 @@ public class Mt101PayUncertainResolutionService {
             // pay_conflict + confirmación append-only y NO se sobrescribe (conciliación manual). Cierra la asimetría
             // SENT→banco-REJECTED, que la primera pasada (solo UNCERTAIN/DISPATCHING) no veía.
             int conflicts = reconcileSentAgainstStatus(dataSource, set, planConfig, accepted, rejected, reasonText,
-                    executedBy, meta.taskDefinitionId());
+                    executedBy, meta.processExecutionId(), meta.taskDefinitionId());
             return new NormalPayResolution(resolvedSent, resolvedRejected, pending, errors, conflicts);
         } catch (SQLException error) {
             throw new IllegalStateException("cannot resolve uncertain PAY for set " + set + ": " + error.getMessage(),
@@ -232,10 +232,22 @@ public class Mt101PayUncertainResolutionService {
      * {@code REJECTED} son terminales incompatibles → se marca {@code pay_conflict} + confirmación append-only y NO
      * se auto-resuelve (conciliación manual), espejo del correctivo. Nunca reenvía (STATUS solo consulta). Si el
      * banco confirma {@code SENT} o la consulta es no concluyente/pendiente, el fragmento no se toca.
+     *
+     * <p><b>Correlacion de la trama (ADR-010):</b> el {@code processExecutionId} es el de la ejecucion que CONSTRUYO
+     * el set ({@code mt101_build_fragment.process_execution_id}, via {@code findSetMetadata}), no el de la corrida que
+     * detecta la contradiccion. Es deliberado: (a) es el unico disponible en los DOS llamadores — el pipeline
+     * ({@code Mt101StatusTaskProvider#resolveNormalPay}) y el REST del operador
+     * ({@code Mt101QuarantineResource#resolveUncertainNormalPay}, que no tiene {@code TaskContext}); enhebrar el
+     * contexto dejaria el camino REST emitiendo null, que es el fallback silencioso que esto viene a quitar; y (b) es
+     * la MISMA columna por la que la consola de PAY Conflicts acota el lineage ({@code paymentReference} +
+     * {@code processExecutionId}), de modo que la trama aparece en el drill-down del conflicto que el operador esta
+     * conciliando. Un solo argumento repuebla DOS columnas: {@code process_execution_id} y {@code trace_id}, porque
+     * {@link Mt101PayConflictAudit#envelope} deriva el segundo del primero.</p>
      */
     private int reconcileSentAgainstStatus(DataSource dataSource, String set,
             Mt101StatusQueryExecutor.QueryPlanConfig planConfig, Set<String> accepted, Set<String> rejected,
-            String reasonText, String executedBy, Long taskDefinitionId) throws SQLException {
+            String reasonText, String executedBy, Long processExecutionId, Long taskDefinitionId)
+            throws SQLException {
         int conflicts = 0;
         int afterIndex = 0;
         while (true) {
@@ -264,7 +276,7 @@ public class Mt101PayUncertainResolutionService {
                     confirmationRows.add(new Mt101ConfirmationRepository.ConfirmationRow(
                             longOrNull(record.get("archiveId")), "STATUS_API",
                             result.gatewayReference(), result.confirmedStatus(), result.rawBody()));
-                    conflictAudit.add(Mt101PayConflictAudit.envelope(null, taskDefinitionId, reference,
+                    conflictAudit.add(Mt101PayConflictAudit.envelope(processExecutionId, taskDefinitionId, reference,
                             "SENT", "REJECTED", result.gatewayReference(),
                             Mt101PayConflictAudit.Source.STATUS, executedBy));
                 }
