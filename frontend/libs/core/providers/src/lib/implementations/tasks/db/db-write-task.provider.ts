@@ -31,6 +31,23 @@ export interface DbWriteTaskDraft extends ProcessTaskRuntimeDraft {
  */
 export const DB_WRITE_DEFAULT_PLATFORM_TABLE = 'staging_record';
 
+/**
+ * Lote de INSERT de DB_WRITE cuando la clave no viene en la configuracion.
+ *
+ * Debe coincidir con el default del backend: `DbTaskSupport.jdbcBatchSize()` devuelve 500. La UI
+ * proponia 1000 en tres sitios distintos (borrador nuevo, hidratacion y envio), de modo que la MISMA
+ * tarea se comportaba distinto segun por donde entrara: creada por API sin la clave usaba 500, creada
+ * o editada por el formulario usaba 1000. Se alinea al backend, que es la fuente de verdad.
+ *
+ * Ojo al cambiarlo: las tareas ya guardadas llevan el valor explicito dentro de su configurationJson,
+ * asi que no se ven afectadas; esto solo gobierna las nuevas y las que nunca declararon la clave.
+ *
+ * No confundir con `batchSize` (lote FUNCIONAL de registros que trocea el motor, default 1000 en
+ * ProcessTaskRuntimeService) ni con `input.batchSize`, que tiene prioridad sobre aquel. Son tres
+ * conceptos distintos con nombres casi iguales.
+ */
+export const DB_WRITE_DEFAULT_JDBC_BATCH_SIZE = 500;
+
 @Injectable()
 export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
   readonly descriptor = {
@@ -64,7 +81,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       // 011: una tarea nueva arranca con el datasource de la plataforma (connectionRef vacio) -> tabla por
       // defecto. Antes quedaba vacia y el prefill solo aparecia si el usuario tocaba el selector de conexion.
       targetTable: DB_WRITE_DEFAULT_PLATFORM_TABLE,
-      jdbcBatchSize: '1000',
+      jdbcBatchSize: String(DB_WRITE_DEFAULT_JDBC_BATCH_SIZE),
       mappings: [],
     };
   }
@@ -119,7 +136,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       mode: String(config.mode || 'insert'),
       targetSchema: schema,
       targetTable: table,
-      jdbcBatchSize: String(config.jdbcBatchSize ?? 1000),
+      jdbcBatchSize: String(config.jdbcBatchSize ?? DB_WRITE_DEFAULT_JDBC_BATCH_SIZE),
       mappings: Array.from(rowsByColumn.values()),
     };
   }
@@ -161,7 +178,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
     const payload: any = this.withRuntime({
       mode: draft.mode || 'insert',
       targetTable: qualifiedTable,
-      jdbcBatchSize: Number(draft.jdbcBatchSize || 1000),
+      jdbcBatchSize: Number(draft.jdbcBatchSize || DB_WRITE_DEFAULT_JDBC_BATCH_SIZE),
     }, draft, 'batch');
     if (draft.connectionRef) payload.connectionRef = draft.connectionRef;
     if (keyColumns.length) payload.keyColumns = keyColumns;
