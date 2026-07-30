@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -275,6 +276,150 @@ class RestPaymentTransportTest {
 
         assertTrue(result.accepted());
         assertEquals("INNER-REF", result.gatewayReference());
+    }
+
+    // --- prueba de aceptacion declarada (fail-open del 2xx) --------------------------------------------
+
+    @Test
+    void anExplicitNullIsNotABankRejection(WireMockRuntimeInfo wm) {
+        // Antes: NullNode.asText() = "null" -> Boolean.parseBoolean = false -> REJECTED, un terminal de negocio
+        // que ademas sincroniza mt101_archive. Un null explicito no es "el banco dijo que no": es que no dijo.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":null}")));
+
+        var result = transport.send(sampleMessage("PROC-NULL", "u"), restConfig(wm, Map.of()));
+
+        assertFalse(result.accepted());
+        assertTrue(result.uncertain(), "un null explicito deja el pago INCIERTO, no rechazado");
+        assertTrue(result.lastError().contains("explicitly null"), result.lastError());
+    }
+
+    @Test
+    void anUndeclaredLiteralIsNotABankRejection(WireMockRuntimeInfo wm) {
+        // Antes: "OK" -> parseBoolean = false -> REJECTED. Un banco que acusa con "OK" quedaba registrado como
+        // rechazo bancario sobre dinero que casi con seguridad salio.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":\"OK\"}")));
+
+        var result = transport.send(sampleMessage("PROC-OK", "u"), restConfig(wm, Map.of()));
+
+        assertFalse(result.accepted());
+        assertTrue(result.uncertain(), "un literal no declarado es desconocido, no un rechazo");
+        assertTrue(result.lastError().contains("undeclared value"), result.lastError());
+    }
+
+    @Test
+    void declaredLiteralsLetANonBooleanGatewayBeUnderstood(WireMockRuntimeInfo wm) {
+        // La salida para ese banco: declarar su vocabulario en vez de forzarlo a booleanos.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":\"OK\"}")));
+
+        var result = transport.send(sampleMessage("PROC-OK2", "u"), restConfig(wm, Map.of(
+                "successField", "$.accepted",
+                "successValues", List.of("OK", "ACCEPTED"),
+                "rejectedValues", List.of("KO"))));
+
+        assertTrue(result.accepted(), result.lastError());
+    }
+
+    @Test
+    void aDeclaredRejectionIsStillATerminalRejection(WireMockRuntimeInfo wm) {
+        // Contraparte imprescindible: el rechazo REAL del banco no se convierte en incierto.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200)
+                .withBody("{\"accepted\":false,\"error\":{\"message\":\"cuenta cerrada\"}}")));
+
+        var result = transport.send(sampleMessage("PROC-NO", "u"), restConfig(wm, Map.of()));
+
+        assertFalse(result.accepted());
+        assertFalse(result.uncertain(), "un false declarado SI es rechazo del banco");
+        assertTrue(result.lastError().contains("cuenta cerrada"), result.lastError());
+    }
+
+    @Test
+    void aMalformedSuccessPathNeverReachesTheBank(WireMockRuntimeInfo wm) {
+        // Antes, un path sin "$." hacia que extractField devolviera null SIEMPRE y, con la regla
+        // "ausente = aceptado", el gateway dejaba de poder rechazar un solo pago. Un typo apagaba el control.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":false}")));
+
+        var error = assertThrows(PreDispatchTransportException.class,
+                () -> transport.send(sampleMessage("PROC-TYPO", "u"),
+                        restConfig(wm, Map.of("successField", "accepted"))));
+
+        assertTrue(error.getMessage().contains("Nothing was sent"), error.getMessage());
+        assertEquals(0, getAllServeEvents().size(), "no debe salir NADA al banco con la config rota");
+    }
+
+    @Test
+    void declaringBothProofsAtOnceIsRejectedBeforeSending(WireMockRuntimeInfo wm) {
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":true}")));
+
+        var error = assertThrows(PreDispatchTransportException.class,
+                () -> transport.send(sampleMessage("PROC-BOTH", "u"),
+                        restConfig(wm, Map.of("successField", "$.accepted", "acceptOn2xx", true))));
+
+        assertTrue(error.getMessage().contains("exactly one"), error.getMessage());
+        assertEquals(0, getAllServeEvents().size());
+    }
+
+    @Test
+    void acceptOn2xxIsAnExplicitPolicyForGatewaysThatProveNothing(WireMockRuntimeInfo wm) {
+        // El gateway fire-and-forget legitimo: 200 pelado. Con la politica declarada, se acepta; sin ella y con
+        // el gate encendido, no sale nada (ver el test siguiente). Lo que ya no ocurre es aceptar por descuido.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200)));
+        var strict = new RestPaymentTransport(java.net.http.HttpClient.newHttpClient(), new ObjectMapper(), true);
+
+        var result = strict.send(sampleMessage("PROC-FF", "u"),
+                restConfig(wm, Map.of("acceptOn2xx", true)));
+
+        assertTrue(result.accepted(), result.lastError());
+    }
+
+    @Test
+    void withTheGateOnAnUndeclaredProofNeverReachesTheBank(WireMockRuntimeInfo wm) {
+        // mt101.pay.require-gateway-proof=true: la ambiguedad de CONFIGURACION se rechaza en el canal de
+        // configuracion (pre-despacho -> INVALIDATED -> re-pagable), no se convierte en dinero ambiguo.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"ok\":true}")));
+        var strict = new RestPaymentTransport(java.net.http.HttpClient.newHttpClient(), new ObjectMapper(), true);
+
+        var error = assertThrows(PreDispatchTransportException.class,
+                () -> strict.send(sampleMessage("PROC-NOPROOF", "u"), restConfig(wm, Map.of())));
+
+        assertTrue(error.getMessage().contains("declares no acceptance proof"), error.getMessage());
+        assertEquals(0, getAllServeEvents().size());
+    }
+
+    @Test
+    void withTheGateOnAnUnreadableProofLeavesThePaymentUncertain(WireMockRuntimeInfo wm) {
+        // Distinto del anterior: aqui la config SI declara la prueba, pero la RESPUESTA no la trae. El 2xx ya
+        // salio, asi que es incierto (lo resuelve STATUS) y nunca rechazo, que seria re-solicitable.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"ok\":true}")));
+        var strict = new RestPaymentTransport(java.net.http.HttpClient.newHttpClient(), new ObjectMapper(), true);
+
+        var result = strict.send(sampleMessage("PROC-ABSENT", "u"),
+                restConfig(wm, Map.of("successField", "$.accepted")));
+
+        assertFalse(result.accepted());
+        assertTrue(result.uncertain(), "el 2xx ya salio: incierto, nunca rechazado");
+        assertTrue(result.lastError().contains("is absent"), result.lastError());
+    }
+
+    @Test
+    void migrationModeKeepsTheHistoricBehaviourButOnlyThere(WireMockRuntimeInfo wm) {
+        // Con el gate apagado (default) una respuesta sin el campo se sigue aceptando, para no romper
+        // definiciones ya publicadas ni planes correctivos congelados. Es un modo por ambiente, no un fallback:
+        // el mismo caso con el gate encendido no llega ni a salir.
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"ok\":true}")));
+
+        var result = transport.send(sampleMessage("PROC-MIG", "u"), restConfig(wm, Map.of()));
+
+        assertTrue(result.accepted(), "modo migracion: comportamiento historico intacto");
+    }
+
+    private Map<String, Object> restConfig(WireMockRuntimeInfo wm, Map<String, Object> expected) {
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("rest", Map.of("url", wm.getHttpBaseUrl() + "/v1/svc"));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+        if (!expected.isEmpty()) {
+            configuration.put("expectedGatewayResponse", expected);
+        }
+        return configuration;
     }
 
     @Test

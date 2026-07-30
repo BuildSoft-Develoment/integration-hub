@@ -9,6 +9,7 @@ import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
 import java.net.ConnectException;
@@ -19,6 +20,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.Map;
 
 /**
@@ -45,21 +48,46 @@ public class RestPaymentTransport implements PaymentMessageTransport {
     private static final long DEFAULT_INITIAL_BACKOFF_SECONDS = 30L;
     private static final long DEFAULT_MAX_BACKOFF_SECONDS = 900L;
 
+    /** Literales que, en el campo declarado, significan que el banco acepto. Configurable por si no usa booleanos. */
+    private static final Set<String> DEFAULT_SUCCESS_VALUES = Set.of("true");
+    /** Literales que significan un rechazo REAL del banco (terminal de negocio, no incertidumbre). */
+    private static final Set<String> DEFAULT_REJECTED_VALUES = Set.of("false");
+
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    /**
+     * ADR-010 / politica fail-loud. Con {@code true}, un MT101_PAY REST que no declare COMO se prueba la
+     * aceptacion se rechaza ANTES de enviar nada. Default {@code false} = modo migracion, para no romper
+     * definiciones ya publicadas ni planes correctivos congelados; mismo patron por ambiente que
+     * {@code mt101.pay.direct-list.enabled} y {@code mt101.pay.route-sink.strict}.
+     */
+    private final boolean requireGatewayProof;
 
     @Inject
-    public RestPaymentTransport(ObjectMapper objectMapper) {
+    public RestPaymentTransport(ObjectMapper objectMapper,
+                                @ConfigProperty(name = "mt101.pay.require-gateway-proof", defaultValue = "false")
+                                boolean requireGatewayProof) {
         this.objectMapper = objectMapper;
+        this.requireGatewayProof = requireGatewayProof;
         this.httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
     }
 
+    /** Compat: modo migracion (no exige prueba declarada). */
+    public RestPaymentTransport(ObjectMapper objectMapper) {
+        this(objectMapper, false);
+    }
+
     /** Constructor para tests: permite inyectar un HttpClient custom. */
     RestPaymentTransport(HttpClient httpClient, ObjectMapper objectMapper) {
+        this(httpClient, objectMapper, false);
+    }
+
+    RestPaymentTransport(HttpClient httpClient, ObjectMapper objectMapper, boolean requireGatewayProof) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
+        this.requireGatewayProof = requireGatewayProof;
     }
 
     @Override
@@ -87,6 +115,9 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         var extraHeaders = configuredHeaders(restCfg.get("extraHeaders"), restCfg.get("extraHeadersJson"));
         var retry = retryPolicy(configuration.get("retryPolicy"));
         var expected = mapValue(configuration.get("expectedGatewayResponse"));
+        // Se resuelve ANTES de resolveAuthorizationHeader, que puede hacer I/O de login: un problema de
+        // configuracion tiene que fallar cuando todavia es seguro afirmar que no salio nada al banco.
+        var proof = resolveAcceptanceProof(expected);
 
         var headers = new LinkedHashMap<String, String>();
         headers.put("Content-Type", contentType);
@@ -99,7 +130,129 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         }
         headers.putAll(extraHeaders);
 
-        return attemptWithRetry(method, url, headers, message.rawPayload(), timeoutSeconds, retry, expected);
+        return attemptWithRetry(method, url, headers, message.rawPayload(), timeoutSeconds, retry, expected, proof);
+    }
+
+    /** Como se prueba que el banco acepto. Se resuelve una vez por envio, antes de tocar la red. */
+    private record AcceptanceProof(String successPath, boolean acceptOn2xx, boolean tolerateUnreadable,
+                                   Set<String> successValues, Set<String> rejectedValues) {
+    }
+
+    private enum ProofOutcome { ACCEPTED, REJECTED, UNCERTAIN }
+
+    private record ProofVerdict(ProofOutcome outcome, String detail) {
+    }
+
+    /**
+     * Exige que el MT101_PAY REST declare COMO se prueba la aceptacion: o un campo del cuerpo
+     * ({@code expectedGatewayResponse.successField}) o la politica explicita de que cualquier 2xx basta
+     * ({@code acceptOn2xx=true}). Exactamente una de las dos.
+     *
+     * <p>Los fallos de aqui son de CONFIGURACION, y por eso son {@link PreDispatchTransportException}: el
+     * provider los mapea a {@code transportFailure} -> {@code INVALIDATED}, o sea que el fragmento vuelve a
+     * ser pagable en cuanto se corrija la config. Un problema de configuracion no debe convertirse en dinero
+     * en estado ambiguo: para desatascar un {@code UNCERTAIN} hace falta una tarea MT101_STATUS, y podria no
+     * haberla.</p>
+     */
+    private AcceptanceProof resolveAcceptanceProof(Map<String, Object> expected) {
+        var rawField = expected.get("successField");
+        var declaredField = rawField != null && !String.valueOf(rawField).isBlank();
+        var acceptOn2xx = Boolean.parseBoolean(stringValue(expected.get("acceptOn2xx"), "false").trim());
+        if (declaredField && acceptOn2xx) {
+            throw new PreDispatchTransportException("MT101_PAY expectedGatewayResponse declares BOTH successField "
+                    + "and acceptOn2xx=true; declare exactly one. Nothing was sent.");
+        }
+        if (declaredField) {
+            var path = String.valueOf(rawField).trim();
+            if (!path.startsWith("$.") || path.length() <= 2) {
+                // Antes, un path mal escrito hacia que extractField devolviera null SIEMPRE y, con la regla
+                // "ausente = aceptado", el gateway dejaba de poder rechazar un solo pago. Un typo apagaba la
+                // comprobacion entera en silencio. Ahora no sale nada al banco hasta corregirlo.
+                throw new PreDispatchTransportException("MT101_PAY expectedGatewayResponse.successField must be a "
+                        + "JSON path starting with \"$.\" naming a field (got: \"" + path + "\"). A malformed path "
+                        + "silently disabled the acceptance check and accepted every payment. Nothing was sent.");
+            }
+            return new AcceptanceProof(path, false, false,
+                    literalSet(expected.get("successValues"), DEFAULT_SUCCESS_VALUES),
+                    literalSet(expected.get("rejectedValues"), DEFAULT_REJECTED_VALUES));
+        }
+        if (acceptOn2xx) {
+            return new AcceptanceProof(null, true, false, Set.of(), Set.of());
+        }
+        if (requireGatewayProof) {
+            throw new PreDispatchTransportException("MT101_PAY transport=REST declares no acceptance proof: set "
+                    + "expectedGatewayResponse.successField, or expectedGatewayResponse.acceptOn2xx=true if the "
+                    + "gateway really proves nothing beyond the HTTP status. Nothing was sent.");
+        }
+        // Modo migracion (gate apagado): se conserva el comportamiento historico -campo $.accepted por defecto y
+        // "ilegible = aceptado"- para no romper definiciones ya publicadas ni planes correctivos congelados. Es un
+        // modo por ambiente, no un fallback: con el gate encendido esta rama no existe.
+        return new AcceptanceProof("$.accepted", false, true,
+                DEFAULT_SUCCESS_VALUES, DEFAULT_REJECTED_VALUES);
+    }
+
+    /**
+     * Evalua el campo declarado distinguiendo las causas que antes colapsaban todas en {@code null} -y con ello
+     * en "aceptado"-. Solo un literal declarado como rechazo es un rechazo del banco; lo demas es incierto,
+     * porque el 2xx ya salio y el dinero pudo moverse.
+     */
+    private ProofVerdict evaluateProof(String body, AcceptanceProof proof) {
+        var unreadable = proof.tolerateUnreadable() ? ProofOutcome.ACCEPTED : ProofOutcome.UNCERTAIN;
+        if (body == null || body.isBlank()) {
+            return new ProofVerdict(unreadable, "empty response body");
+        }
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(body);
+        } catch (IOException error) {
+            return new ProofVerdict(unreadable, "response body is not JSON");
+        }
+        var node = locate(root, proof.successPath().substring(2));
+        if (node == null || node.isMissingNode()) {
+            return new ProofVerdict(unreadable, "field " + proof.successPath() + " is absent");
+        }
+        if (!node.isValueNode()) {
+            return new ProofVerdict(unreadable, "field " + proof.successPath() + " is a container, not a value");
+        }
+        if (node.isNull()) {
+            // Antes: NullNode.asText() = "null" -> parseBoolean = false -> RECHAZO TERMINAL del banco, con
+            // sincronizacion del archive incluida. Un null explicito no es un rechazo: es ausencia de respuesta.
+            return new ProofVerdict(ProofOutcome.UNCERTAIN, "field " + proof.successPath() + " is explicitly null");
+        }
+        var literal = node.asText().trim().toLowerCase(Locale.ROOT);
+        if (proof.successValues().contains(literal)) {
+            return new ProofVerdict(ProofOutcome.ACCEPTED, literal);
+        }
+        if (proof.rejectedValues().contains(literal)) {
+            return new ProofVerdict(ProofOutcome.REJECTED, literal);
+        }
+        // Antes: "OK", "YES" o 1 -> parseBoolean = false -> RECHAZO TERMINAL sobre dinero que muy probablemente
+        // salio. Un valor que no se declaro es desconocido, no un "no".
+        return new ProofVerdict(ProofOutcome.UNCERTAIN, "field " + proof.successPath() + " has an undeclared value \""
+                + node.asText() + "\" (declare it in expectedGatewayResponse.successValues or rejectedValues)");
+    }
+
+    /** Navegacion que DISTINGUE ausente, null y contenedor, cosa que {@link #navigate} colapsa en null. */
+    private JsonNode locate(JsonNode node, String path) {
+        if (node == null) {
+            return null;
+        }
+        var dot = path.indexOf('.');
+        var next = node.path(dot < 0 ? path : path.substring(0, dot));
+        if (dot < 0) {
+            return next;
+        }
+        return next.isMissingNode() || next.isNull() || !next.isObject() ? null : locate(next, path.substring(dot + 1));
+    }
+
+    private Set<String> literalSet(Object raw, Set<String> defaults) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return defaults;
+        }
+        return rawList.stream()
+                .map(String::valueOf)
+                .map(value -> value.trim().toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -194,7 +347,8 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                                              String body,
                                              int timeoutSeconds,
                                              RetryPolicy retry,
-                                             Map<String, Object> expected) {
+                                             Map<String, Object> expected,
+                                             AcceptanceProof proof) {
         var startedAt = System.currentTimeMillis();
         String lastError = null;
         // STICKY: si CUALQUIER intento quedo INCIERTO (la peticion salio y el gateway pudo recibirla), el resultado
@@ -215,13 +369,22 @@ public class RestPaymentTransport implements PaymentMessageTransport {
 
                 if (status >= 200 && status < 300) {
                     var gatewayRef = extractField(bodyResponse, expected, "referenceField", "$.gatewayReference");
-                    var successFlag = extractField(bodyResponse, expected, "successField", "$.accepted");
-                    var declaredOk = successFlag == null || Boolean.parseBoolean(successFlag);
-                    if (declaredOk) {
+                    var verdict = proof.acceptOn2xx()
+                            ? new ProofVerdict(ProofOutcome.ACCEPTED, "acceptOn2xx")
+                            : evaluateProof(bodyResponse, proof);
+                    if (verdict.outcome() == ProofOutcome.ACCEPTED) {
                         return TransportResult.accepted(gatewayRef, attempt, System.currentTimeMillis() - startedAt);
                     }
-                    lastError = "gateway returned 2xx but successField is false: "
-                            + extractField(bodyResponse, expected, "errorMessageField", "$.error.message");
+                    if (verdict.outcome() == ProofOutcome.UNCERTAIN) {
+                        // El 2xx ya salio: el banco pudo haber ejecutado la orden. No se degrada a rechazo, que es
+                        // re-solicitable, porque eso abriria la puerta al doble pago. Se resuelve por STATUS.
+                        uncertainError = "gateway returned 2xx but the declared acceptance proof is not conclusive: "
+                                + verdict.detail();
+                        return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt,
+                                uncertainError);
+                    }
+                    lastError = "gateway returned 2xx and the declared proof says rejected (" + verdict.detail()
+                            + "): " + extractField(bodyResponse, expected, "errorMessageField", "$.error.message");
                     if (!retry.shouldRetry("4xx")) {
                         return anyUncertain
                                 ? TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, uncertainError)
