@@ -24,6 +24,7 @@ import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -129,6 +130,37 @@ class Mt101PayTaskProviderTest {
         assertEquals("RECORD_SENT", captured.get(0).stage());
         assertEquals("PROC-1", captured.get(0).recordId());
         assertEquals("PROC-2", captured.get(1).recordId());
+        // ADR-010: la trama lleva la referencia con la que el banco acusó el pago. Se emitía a null teniéndola
+        // en la mano, así que audit_record_event.gateway_reference quedaba vacía para TODO pago aceptado y la
+        // única prueba vivía en la muestra acotada del payload de TASK_COMPLETED. Cada mensaje lleva la SUYA:
+        // un aserto sobre una sola no distinguiría "propagada" de "constante".
+        assertEquals("GW-1", captured.get(0).gatewayReference(),
+                "la trama del pago aceptado lleva la referencia que devolvió el gateway");
+        assertEquals("GW-2", captured.get(1).gatewayReference(),
+                "y cada mensaje lleva la suya, no la del primero");
+    }
+
+    @Test
+    void aPaymentThatNeverGotAReferenceDoesNotInventOne() {
+        // Contraparte: rejected/uncertain/transportFailure ponen gatewayReference=null por construcción. La
+        // trama debe reflejarlo tal cual — declarar una referencia bancaria de un pago que el banco nunca
+        // acusó sería peor que no tener ninguna.
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.rejected(1, 100L, "cuenta de beneficiario cerrada")
+        ));
+        var captured = new ArrayList<AuditEnvelope>();
+        RecordAuditEmitter emitter = captured::addAll;
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), null, null, emitter);
+
+        provider.execute(contextWith(List.of(sampleMessage("PROC-9"))), Map.of(
+                "transport", "REST",
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                "rest", Map.of("url", "https://test.example/mt101")
+        ));
+
+        assertEquals(1, captured.size());
+        assertEquals("RECORD_REJECTED", captured.get(0).stage());
+        assertNull(captured.get(0).gatewayReference(), "sin acuse del banco no hay referencia que declarar");
     }
 
     @Test

@@ -696,7 +696,14 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 null,
                 null,
                 null,
-                null,
+                // ADR-010: la referencia con la que el banco acusa el pago. Se dejaba a null teniendola aqui,
+                // asi que audit_record_event.gateway_reference quedaba SIEMPRE vacia para las tramas de PAY
+                // -mientras STATUS y PAY_CONFLICT si la rellenan-, y la unica prueba de "el banco acuso este
+                // pago con la referencia X" vivia en la muestra acotada del payload de TASK_COMPLETED. Los
+                // caminos no aceptados la traen a null por construccion (TransportResult.rejected/uncertain/
+                // transportFailure), que es lo correcto: no se declara referencia bancaria de un pago que
+                // nunca la obtuvo.
+                result.gatewayReference(),
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
     }
