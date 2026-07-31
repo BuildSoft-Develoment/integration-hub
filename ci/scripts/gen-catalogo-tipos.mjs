@@ -28,7 +28,7 @@ const argv = process.argv.slice(2);
 const root = resolve(argv.includes('--root') ? argv[argv.indexOf('--root') + 1] : '.');
 const check = argv.includes('--check');
 
-const TARGET = join(root, 'docs', 'transversal', '90.08-catalogo-de-tipos.md');
+const TARGET = join(root, 'docs', 'transversal', '90.17-catalogo-de-tipos.md');
 const ZONE = 'catalogo-tipos';
 
 /** Recorre un directorio devolviendo todos los .java. */
