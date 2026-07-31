@@ -18,6 +18,23 @@ Preparar salida a ambientes, controles de pipeline, rollback y evidencia de rele
 - [controles/pipeline-y-runbook](controles/pipeline-y-runbook.md)
 - [controles/rollback-release-y-evidencias](controles/rollback-release-y-evidencias.md)
 
+## Donde vive el despliegue REAL
+
+Esta carpeta es el gate documental. Siguiendo solo sus enlaces nunca se llegaba al despliegue de
+verdad; estos son los que faltaban:
+
+- [ADR-024 — despliegue nativo bajo subpath](../fase-3-arquitectura/adr/ADR-024-despliegue-nativo-bajo-subpath.md):
+  por que el perfil `appih` es una decision de build-time irreversible.
+- [`ops/fase-7-deploy/dist/`](../../ops/fase-7-deploy/dist/README.md): artefactos por destino
+  (onprem, aws, azure, gcp, oracle) y el Dockerfile nativo.
+- [`dist/NATIVE-STATUS.md`](../../ops/fase-7-deploy/dist/NATIVE-STATUS.md): que capacidades estan
+  homologadas en nativo, con su evidencia.
+- [`ops/fase-7-deploy/runbook.md`](../../ops/fase-7-deploy/runbook.md): el procedimiento por ambiente.
+- [`ops/fase-7-deploy/rollback.md`](../../ops/fase-7-deploy/rollback.md): **esta release no es
+  reversible solo con el artefacto**.
+- [`.github/workflows/`](../../.github/workflows/): el CI (`ci.yml`) y la matriz multi-motor
+  (`ci-compat-db.yml`).
+
 ## Adopcion real de la fase
 
 - La evidencia operativa vive en `ci/`, `ops/fase-7-deploy/` y `releases/`.

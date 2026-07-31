@@ -46,6 +46,8 @@ las env-vars son solo override opcional:
 | `mt101.pay.direct-list.enabled` | **false** | PAY solo con `build_fragment` **persistido** (sin atajo por lista en memoria) → durable, auditable, anti-doble-pago |
 | `mt101.build.insert-batch-max-bytes` | **200000** | evita el deadlock H7 de pgJDBC a escala (evidenciado a 1M) |
 | `mt101.pay.require-normal-pay-resolver` | **false** | ponlo `true` solo si concilias PAY **inline** (no por scheduler) |
+| `mt101.pay.route-sink.strict` | **true** | el MT101_PAY por SFTP debe resolver su destino por `sinkRef`, no con credenciales inline en la definicion del proceso |
+| `mt101.pay.require-gateway-proof` | **false** | **sale APAGADO a proposito.** Encenderlo hace fallar pre-despacho toda definicion REST que no declare como se prueba la aceptacion: migra las definiciones ANTES |
 
 ## Frontera demo ↔ prod (secretos)
 

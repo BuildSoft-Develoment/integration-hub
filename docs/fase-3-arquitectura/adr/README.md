@@ -31,6 +31,9 @@
 - [ADR-019 Auditoria por dominio: standard packs (limite plataforma <-> estandar)](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md)
 - [ADR-020 Correccion masiva de cuarentena MT101: agrupacion por causa + planilla de correccion](ADR-020-correccion-masiva-cuarentena-mt101-agrupacion-y-planilla.md)
 - [ADR-021 Limite motor <-> verticales: camino de extension para nuevos estandares y ubicacion de MT101](ADR-021-limite-motor-verticales-camino-de-extension.md)
+- [ADR-022 Upsert de DB_WRITE por dialecto de motor](ADR-022-upsert-db-write-por-motor.md)
+- [ADR-023 Cada modulo es dueno de su esquema de base de datos](ADR-023-separacion-schemas-motor-vertical.md)
+- [ADR-024 Despliegue nativo bajo un subpath, horneado en build-time](ADR-024-despliegue-nativo-bajo-subpath.md)
 
 ## Regla
 

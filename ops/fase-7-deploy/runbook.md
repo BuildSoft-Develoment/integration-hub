@@ -17,19 +17,36 @@
 - scheduler
 - overview y auditoria
 
-## Frontend servido por Quinoa
+## Despliegue real por ambiente
 
-- `platform-app` sirve la UI desde `frontend/` via Quinoa
-  (`quarkus.quinoa.ui-dir=../frontend`, `quarkus.quinoa.build-dir=dist/browser`).
-- Despues de ejecutar `npx nx build web`, reiniciar Quarkus dev para que el runtime
-  sirva el bundle nuevo. `start-platform-stack.cmd` no reinicia la app si el puerto
-  `8080` ya esta escuchando.
-- Smoke recomendado tras reinicio:
-  - `http://localhost:8080/q/health` responde `200`.
-  - Login Keycloak con usuario operativo.
-  - `http://localhost:8080/#/plugins` muestra `Plugins - Integration Hub` y la
-    seccion `Backend`.
+> Lo que habia aqui describia el bucle de desarrollo en la laptop (Quinoa sirviendo el bundle en
+> `localhost:8080` tras `nx build web`). Eso es util para desarrollar, pero **no es el despliegue de
+> ningun ambiente**: en todos los ambientes desplegados la UI viaja YA COMPILADA dentro del binario
+> nativo. Se conserva el detalle de desarrollo en la guia de construccion, no aqui.
 
+### On-premise (integracion y produccion chica)
+
+Flujo **sin rebuild en destino**: se construye la imagen aqui, se exporta y se carga alla.
+
+1. Build nativo con el perfil del subpath:
+   `mvn -pl platform-app -am clean package -Dmaven.test.skip=true -Pnative,appih`
+   `-Dquarkus.native.container-build=true`
+2. Imagen desde `dist/common/Dockerfile.native` con el runner como `--build-arg RUNNER=...`
+3. `docker save` de las imagenes -> `docker load` en el servidor -> `docker compose up -d`
+
+Detalle completo, incluidos los gotchas del servidor: [`dist/README.md`](dist/README.md),
+[`dist/NATIVE-STATUS.md`](dist/NATIVE-STATUS.md) y [`dist/onprem/int/README.md`](dist/onprem/int/README.md).
+
+### Nube
+
+Misma imagen nativa, desplegada por Helm: [`dist/common/helm/`](dist/common/helm/). Hay variantes por
+proveedor en `dist/aws`, `dist/azure`, `dist/gcp` y `dist/oracle`.
+
+### Antes de cualquiera de los dos
+
+Pasar el [checklist de salida a produccion](../../docs/fase-7-deploy/07.00-checklist-salida-produccion.md),
+que cubre la recreacion de base que exige ADR-023 y los seis controles bancarios. Y leer
+[`rollback.md`](rollback.md): **esta release no es reversible solo con el artefacto**.
 ## Plugins backend
 
 - Los plugins externos backend se declaran en `plugin_descriptor`.
