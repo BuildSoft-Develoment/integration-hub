@@ -1,36 +1,78 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://integration-hub.acme.example/contracts/events/audit-log.schema.json",
-  "title": "AuditLogEntry",
-  "description": "Evento de auditoria emitido por el Integration Hub ante toda accion gobernada (alta/baja de sources, connections, processes y ejecuciones de tareas).",
+  "title": "AuditEnvelope",
+  "description": "Trama de auditoria publicada en el topic `audit-events`. Refleja el record Java com.integrationhub.platform.audit.AuditEnvelope (platform-contract), que es la fuente de verdad: si divergen, manda el record. La version anterior de este schema describia un mensaje generico (actor/action/resourceType/resourceId/outcome) que nunca se publico -seis de sus siete campos obligatorios no existen en el productor-, de modo que un consumidor escrito contra el habria rechazado el 100% del trafico real.",
   "type": "object",
-  "required": ["eventId", "occurredAt", "actor", "action", "resourceType", "resourceId", "outcome"],
+  "required": ["eventId", "level", "stage", "timestamp", "schemaVersion"],
   "additionalProperties": false,
   "properties": {
-    "eventId": { "type": "string", "format": "uuid" },
-    "occurredAt": { "type": "string", "format": "date-time" },
-    "actor": {
+    "eventId": {
+      "type": "string",
+      "description": "Identificador unico de la trama. El productor rechaza vacio o en blanco."
+    },
+    "traceId": {
+      "type": ["string", "null"],
+      "description": "Correlacion con la traza OpenTelemetry."
+    },
+    "recordId": {
+      "type": ["string", "null"],
+      "description": "Registro de negocio al que se refiere la trama, cuando level = RECORD."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["PROCESS", "RECORD"],
+      "description": "Granularidad. El productor rechaza null."
+    },
+    "stage": {
+      "type": "string",
+      "description": "Etapa del pipeline que emite. El productor rechaza vacio o en blanco."
+    },
+    "status": {
+      "type": ["string", "null"],
+      "description": "Resultado de la etapa. Sin enum a proposito: cada vertical aporta los suyos."
+    },
+    "processExecutionId": {
+      "type": ["integer", "null"],
+      "description": "Ejecucion que origino la trama. Su ausencia rompe la correlacion de los conflictos de pago."
+    },
+    "taskDefinitionId": { "type": ["integer", "null"] },
+    "message": { "type": ["string", "null"] },
+    "payloadJson": {
+      "type": ["string", "null"],
+      "description": "Detalle serializado. Cadena JSON, no objeto anidado."
+    },
+    "attributes": {
       "type": "object",
-      "required": ["subject", "role"],
-      "properties": {
-        "subject": { "type": "string", "description": "Sub del token OIDC." },
-        "role": {
-          "type": "string",
-          "enum": ["platform-admin", "integration-admin", "operator", "auditor", "scheduler"]
-        }
-      }
+      "additionalProperties": { "type": "string" },
+      "description": "Pares clave/valor libres. El productor normaliza null a mapa vacio, asi que en el topic siempre viaja presente."
     },
-    "action": {
+    "standard": { "type": ["string", "null"], "description": "Estandar de mensajeria, p. ej. SWIFT." },
+    "messageType": { "type": ["string", "null"], "description": "Tipo dentro del estandar, p. ej. MT101." },
+    "sourceFileName": { "type": ["string", "null"] },
+    "sourceFileHash": { "type": ["string", "null"], "description": "SHA-256 del archivo de origen." },
+    "recordNumber": { "type": ["integer", "null"] },
+    "businessKey": { "type": ["string", "null"] },
+    "businessKeyHash": { "type": ["string", "null"] },
+    "paymentReference": {
+      "type": ["string", "null"],
+      "description": "Referencia del pago (:20: en MT101). Es la unica clave por la que correlaciona el cierre automatico de un fragmento UNCERTAIN."
+    },
+    "transactionReference": { "type": ["string", "null"] },
+    "uetr": { "type": ["string", "null"], "description": "Unique End-to-end Transaction Reference." },
+    "archiveId": { "type": ["integer", "null"] },
+    "gatewayReference": {
+      "type": ["string", "null"],
+      "description": "Referencia devuelta por el gateway o el destino remoto. En SFTP es la ruta completa del archivo depositado, por eso la columna es varchar(255) y no 120."
+    },
+    "timestamp": {
       "type": "string",
-      "enum": ["CREATE", "UPDATE", "DELETE", "EXECUTE", "READ"]
+      "format": "date-time",
+      "description": "Instante de emision. El productor lo rellena con el momento actual si llega null, de modo que en el topic nunca viaja ausente."
     },
-    "resourceType": {
-      "type": "string",
-      "enum": ["SOURCE", "READER", "CONNECTION", "PROCESS", "EXECUTION", "TASK", "NOTIFICATION"]
-    },
-    "resourceId": { "type": "string" },
-    "outcome": { "type": "string", "enum": ["SUCCESS", "FAILURE"] },
-    "correlationId": { "type": "string", "description": "Traza distribuida (OpenTelemetry)." },
-    "detail": { "type": "object", "description": "Metadatos adicionales no sensibles." }
+    "schemaVersion": {
+      "type": "integer",
+      "description": "Version del contrato de la trama. Valor actual: 2 (AuditEnvelope.CURRENT_SCHEMA_VERSION)."
+    }
   }
 }

@@ -3,51 +3,36 @@ info:
   title: Integration Hub - Eventos
   version: 0.4.0
   description: >-
-    Contrato de eventos asincronos del Integration Hub. Cubre la auditoria
-    gobernada y las notificaciones emitidas por el motor de ejecucion de tareas.
+    Contrato de eventos asincronos del Integration Hub.
+
+    Un solo canal, porque en todo el repositorio hay un solo canal saliente de mensajeria:
+    `mp.messaging.outgoing.audit-out` sobre el topic `audit-events`. El contrato declaraba antes
+    tambien `integration-hub.notifications`, un stream que no existe ni existio:
+    `NotificationTaskProvider` entrega por webhook/HTTP y no publica en Kafka. Se retiro en vez de
+    dejarlo documentado, porque un canal contratado que nadie emite termina con alguien
+    construyendo un consumidor contra el.
+
+    El `address` del canal de auditoria tampoco era el real (`integration-hub.audit-log` frente a
+    `audit-events`), de modo que ni el topic ni el payload correspondian a lo que viaja de verdad.
 defaultContentType: application/json
 channels:
   auditLog:
-    address: integration-hub.audit-log
+    address: audit-events
+    description: >-
+      Trama de auditoria gobernada. La produce platform-app (canal `audit-out`) y la consume
+      audit-consumer (canal `audit-in`, en lotes de hasta 500) para volcarla a ClickHouse.
     messages:
-      auditLogEntry:
-        $ref: '#/components/messages/AuditLogEntry'
-  notifications:
-    address: integration-hub.notifications
-    messages:
-      notification:
-        $ref: '#/components/messages/Notification'
+      auditEnvelope:
+        $ref: '#/components/messages/AuditEnvelope'
 operations:
   publishAuditLog:
     action: send
     channel:
       $ref: '#/channels/auditLog'
-  publishNotification:
-    action: send
-    channel:
-      $ref: '#/channels/notifications'
 components:
   messages:
-    AuditLogEntry:
-      name: AuditLogEntry
-      title: Entrada de auditoria
+    AuditEnvelope:
+      name: AuditEnvelope
+      title: Trama de auditoria
       payload:
         $ref: ./audit-log.schema.json
-    Notification:
-      name: Notification
-      title: Notificacion de ejecucion
-      payload:
-        type: object
-        required: [notificationId, executionId, status, emittedAt]
-        properties:
-          notificationId:
-            type: string
-            format: uuid
-          executionId:
-            type: string
-          status:
-            type: string
-            enum: [STARTED, COMPLETED, FAILED]
-          emittedAt:
-            type: string
-            format: date-time
