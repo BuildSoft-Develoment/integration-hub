@@ -135,6 +135,38 @@
                     </execution>
                 </executions>
             </plugin>
+            <!--
+                PR-3: este modulo NO declaraba failsafe, asi que sus tres clases *IT se compilaban y no
+                se ejecutaban NUNCA — ni en el carril del CI ni en un `mvn verify` del reactor completo.
+                Surefire no las recoge (no casan con su patron de inclusion) y sin failsafe no las
+                recoge nadie.
+
+                Entre ellas estaba Mt101OutboundEndToEndIT, el E2E del money-path: el modulo que mueve
+                dinero era el unico del reactor sin carril de integracion. Se replica la misma
+                configuracion de platform-app para que los tags (perf, compat-db) y el forkCount se
+                gobiernen igual desde las propiedades del padre.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${surefire-plugin.version}</version>
+                <configuration>
+                    <excludedGroups>${test.excluded.groups}</excludedGroups>
+                    <forkCount>${test.fork.count}</forkCount>
+                    <reuseForks>${test.reuse.forks}</reuseForks>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

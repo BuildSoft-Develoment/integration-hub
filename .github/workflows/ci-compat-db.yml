@@ -64,4 +64,4 @@ jobs:
       # fallos que NO son del codigo (timeouts de arranque, ORA-12514). Medido en local: con -T1C daba
       # 11 errores y con forkCount=3 daba 3; con forkCount=1, cero.
       - name: Maven test (compat-db)
-        run: mvn -B -pl platform-app -am -Pcompat-db-tests test -DforkCount=1
+        run: mvn -B -Pcompat-db-tests test -DforkCount=1

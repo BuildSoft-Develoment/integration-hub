@@ -35,9 +35,14 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: maven
-      # Carril rapido para PR: compila dependencias desde la raiz y excluye perf/compat-db.
+      # Carril rapido para PR: excluye perf y compat-db.
+      #
+      # PR-4: antes usaba `-pl platform-app -am`. `-am` arrastra las DEPENDENCIAS de platform-app,
+      # y audit-consumer es un modulo HERMANO, no una dependencia: sus tests -incluido
+      # AuditConsumerKafkaBatchIT- no se ejecutaban nunca. Se construye el reactor completo, que
+      # ademas es lo unico que ejercita los ITs del vertical del money-path.
       - name: Maven verify (fast)
-        run: mvn -B -pl platform-app -am -Pfast-tests verify
+        run: mvn -B -Pfast-tests verify
 
 # El carril compat-db (matriz Oracle / SQL Server / MySQL / PostgreSQL) vive ahora en su propio
 # workflow, ci-compat-db.yml, filtrado por `paths`: es el mas caro del pipeline y en produccion se sale
