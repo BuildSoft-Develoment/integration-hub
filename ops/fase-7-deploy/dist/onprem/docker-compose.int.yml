@@ -240,6 +240,12 @@ services:
       # File Vault (PKCS12) para ${secret:...}: el pago correctivo MT101 exige que la password
       # del SFTP sea una referencia al vault, no texto plano.
       - ../../../../secrets/dev-secrets.p12:/work/secrets/dev-secrets.p12:ro
+      # Fuente FILESYSTEM (cuarta fuente de las pruebas manuales, junto a SFTP/FTP/S3). Es un bind
+      # mount para que el operador pueda dejar y retirar ficheros desde el host -en el Ubuntu, un
+      # simple cp al directorio- sin entrar al contenedor. En la definicion de la fuente, `path`
+      # apunta a /work/data/filesystem. NO va :ro: el motor puede mover o borrar el fichero
+      # procesado segun la politica de la fuente.
+      - ./int/data-filesystem:/work/data/filesystem
     environment:
       QUARKUS_PROFILE: "prod,onprem"
       QUARKUS_HTTP_HOST: "0.0.0.0"

@@ -24,6 +24,7 @@ fi
 FILES=(
   "$DATA_DIR/mt101-10k.csv"            # CSV principal (E2E)
   "$DATA_DIR/mt101-6.csv"             # humo rapido (6 filas)
+  "$DATA_DIR/cp-mt101.csv"            # set de los casos de prueba manuales (60 filas)
   "$DATA_DIR/mt101-10k.xlsx"          # reader Excel
   "$DATA_DIR/mt101-10k.txt"           # reader TXT ancho fijo
   "$FIN_DIR/swift-mt101-10k-qa.fin"   # FIN SWIFT (si existe)
@@ -33,6 +34,11 @@ SFTP_C="ih-int-sftp-source";  SFTP_DIR="/home/ihsource/upload"
 FTP_C="ih-int-ftp-source";    FTP_DIR="/ftp/ihftp"
 MINIO_C="ih-int-minio";       MINIO_BUCKET="ih-source-inbox"
 MINIO_USER="minioadmin";      MINIO_PASS="minioadmin"
+# Cuarta fuente: FILESYSTEM. No es un contenedor propio sino un bind mount del compose sobre la app
+# (./int/data-filesystem -> /work/data/filesystem), asi que aqui se copia al DIRECTORIO DEL HOST, no
+# con docker cp. Asi el operador tambien puede dejar ficheros a mano sin tocar Docker.
+FS_HOST_DIR="$SCRIPT_DIR/data-filesystem"
+FS_IN_APP="/work/data/filesystem"   # el valor que hay que poner en `path` al definir la fuente
 
 # Convierte una ruta git-bash (/c/...) a Windows (C:\...) para que docker la acepte con la conversion apagada.
 winpath() { cygpath -w "$1"; }
@@ -52,7 +58,9 @@ minio_alias() { docker exec "$MINIO_C" mc alias set local "http://localhost:9000
 main() {
   require_up
   minio_alias
-  echo "== Precargando en SFTP ($SFTP_C:$SFTP_DIR), FTP ($FTP_C:$FTP_DIR) y S3 ($MINIO_C/$MINIO_BUCKET) =="
+  mkdir -p "$FS_HOST_DIR"
+  echo "== Precargando en SFTP ($SFTP_C:$SFTP_DIR), FTP ($FTP_C:$FTP_DIR), S3 ($MINIO_C/$MINIO_BUCKET)"
+  echo "   y FILESYSTEM ($FS_HOST_DIR -> $FS_IN_APP) =="
   local ok=0
   for f in "${FILES[@]}"; do
     if [[ ! -f "$f" ]]; then echo "  (omito, no existe: $f)"; continue; fi
@@ -63,17 +71,29 @@ main() {
     docker cp "$w" "$MINIO_C:/tmp/$base"
     docker exec "$MINIO_C" mc cp "/tmp/$base" "local/$MINIO_BUCKET/$base" >/dev/null
     docker exec "$MINIO_C" rm -f "/tmp/$base"
+    # FILESYSTEM: copia directa al directorio del host que el compose monta en la app.
+    cp -f "$f" "$FS_HOST_DIR/$base"
     ok=$((ok+1))
   done
   docker exec "$SFTP_C" chown -R 1001:1001 "$SFTP_DIR" 2>/dev/null || true
+  # La app corre como uid 1001 (imagen quarkus-micro) y puede necesitar mover/borrar el procesado.
+  chmod -R a+rwX "$FS_HOST_DIR" 2>/dev/null || true
 
   echo ""
   echo "== Verificacion =="
   echo "-- SFTP $SFTP_DIR --"; docker exec "$SFTP_C" ls -la "$SFTP_DIR"
   echo "-- FTP $FTP_DIR --";   docker exec "$FTP_C"  ls -la "$FTP_DIR"
   echo "-- S3 $MINIO_BUCKET --"; docker exec "$MINIO_C" mc ls "local/$MINIO_BUCKET"
+  # Se verifica DENTRO de la app, no en el host: es lo unico que prueba que el bind mount existe y
+  # que el proceso ve los ficheros con la ruta que hay que poner en `path`.
+  echo "-- FILESYSTEM $FS_IN_APP (visto desde el contenedor de la app) --"
+  if docker exec ih-int-app ls -la "$FS_IN_APP" 2>/dev/null; then :; else
+    echo "  AVISO: la app no ve $FS_IN_APP. Revisa que el compose monte ./int/data-filesystem y"
+    echo "         que el stack se haya recreado despues de anadirlo (un simple start no basta)."
+  fi
   echo ""
-  echo "OK. $ok archivos precargados en las 3 fuentes (SFTP / FTP / S3)."
+  echo "OK. $ok archivos precargados en las 4 fuentes (SFTP / FTP / S3 / FILESYSTEM)."
+  echo "Al definir la fuente FILESYSTEM en la UI, el campo 'path' va con: $FS_IN_APP"
 }
 
 main "$@"
