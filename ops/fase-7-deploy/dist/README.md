@@ -6,8 +6,10 @@ correr en **AWS, Azure, GCP, Oracle Cloud y on-premise**.
 > ✅ **Modo de compilación:** la imagen **nativa** compila y está verificada (arranque 1.5s,
 > ~70 MiB RAM, health UP, UI embebida) — requisitos y los 5 fixes que la habilitaron en
 > [`NATIVE-STATUS.md`](NATIVE-STATUS.md) (Quarkus ≥3.37.2, builder con ≥12 GB de RAM).
-> La imagen **JVM** (`common/Dockerfile.jvm`) sigue disponible como alternativa; el SFTP del
-> money-path aún debe homologarse en nativo antes de producción.
+> La imagen **JVM** (`common/Dockerfile.jvm`) sigue disponible como alternativa. El SFTP del
+> money-path **ya está homologado en nativo**: ver [`NATIVE-STATUS.md`](NATIVE-STATUS.md), que da por
+> validados el handshake de jsch y el pipeline `MT101_PAY` completo, con evidencia en
+> `qa/fase-6-qa/evidencias/sftp-native-e2e-20260712.md`.
 
 > No confundir con `releases/` ni con `scripts/package-bundle.mjs`: eso empaqueta el
 > *template de la metodología* (ZIP para instanciar proyectos). Esto es el despliegue de

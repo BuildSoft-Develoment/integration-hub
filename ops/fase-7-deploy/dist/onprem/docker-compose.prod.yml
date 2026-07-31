@@ -9,7 +9,7 @@ services:
   platform-app:
     # Imagen NATIVA (verificada: arranque 1.5s, ~70 MiB RAM, health UP, UI embebida).
     # Requisitos de build y fixes en ../NATIVE-STATUS.md. Alternativa JVM: integration-hub:jvm-onprem
-    # (Dockerfile.jvm). Nota: homologar SFTP (pagos MT101) en nativo antes de produccion.
+    # (Dockerfile.jvm). El SFTP de pagos MT101 YA esta homologado en nativo (ver ../NATIVE-STATUS.md).
     image: integration-hub:native
     env_file: .env
     environment:

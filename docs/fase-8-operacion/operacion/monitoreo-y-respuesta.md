@@ -18,7 +18,10 @@ Documentar la rutina minima de vigilancia y respuesta sobre la plataforma en ope
 - revisar login `OIDC`
 - revisar conectividad a `PostgreSQL`
 - revisar scheduler
-- revisar ejecuciones fallidas
+- revisar ejecuciones fallidas, **y tambien las que quedaron en `NEEDS_RECONCILIATION` o
+  `SUSPENDED`**: son estados NO terminales del money-path que no aparecen como "fallidas" y que
+  bloquean el cierre de la ejecucion. Hoy no son filtrables desde la consola: hay que consultarlos
+  en base (`process_execution.status`) o revisar el inbox de conflictos de pago.
 - revisar trazas, auditoria y errores de integracion
 
 ## Health checks
@@ -67,6 +70,19 @@ Toda incidencia recurrente debe dejar aprendizaje util en `ops/`, `releases/` o 
 
 - drenar trafico si aplica y reiniciar pods uno por uno en `PROD`
 - restaurar base de datos desde backup validado
+
+> **⚠️ Restaurar la base NO revierte los pagos ya despachados al banco.** El dinero que salio no
+> vuelve porque se restaure una tabla. Un restore deja el ledger (`mt101_pay_dispatch_intent`,
+> `mt101_build_fragment`) diciendo una cosa y al banco habiendo recibido otra, y devuelve los
+> fragmentos a un estado re-pagable: la siguiente corrida puede **pagar dos veces**.
+>
+> Si hubo despachos entre el backup y el incidente, la conciliacion contra el banco es **previa** a
+> reintentar nada. Ver `ops/fase-7-deploy/rollback.md`.
+
+> **⚠️ Reiniciar nodos deja residuo.** Las ejecuciones que estaban en vuelo quedan en
+> `NEEDS_RECONCILIATION`; no es un fallo del reinicio, es la salvaguarda funcionando. Hay que
+> revisarlas explicitamente antes de dar el servicio por recuperado, porque un `COMPLETED` global
+> no implica que esas queden resueltas.
 - restaurar secretos desde mecanismo seguro y revalidar referencias
 
 ## Escalamiento

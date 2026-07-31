@@ -5,7 +5,7 @@ Coherente con `stacks/stack-operacion-onprem.md` (Compose en DEV, Kubernetes en 
 
 > ✅ **Nativo verificado** (arranque 1.5s, ~70 MiB RAM). Requisitos: Quarkus ≥3.37.2 y builder
 > con ≥12 GB RAM — fixes y detalle en [`../NATIVE-STATUS.md`](../NATIVE-STATUS.md).
-> Homologar SFTP (pagos MT101) en nativo antes de producción.
+> El SFTP de pagos MT101 ya está homologado en nativo (ver `../NATIVE-STATUS.md`).
 
 ## Opción A — Docker Compose (imagen NATIVA, verificada)
 ```bash

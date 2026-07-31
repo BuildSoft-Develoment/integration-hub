@@ -14,8 +14,13 @@ Concentrar la verificacion minima que acompana la construccion antes de pasar a 
 
 ## Verificaciones tecnicas base
 
-- `test-jdk25.cmd`
-- `test-quarkus-jdk25.cmd`
+> Los dos runners `test-jdk25.cmd` y `test-quarkus-jdk25.cmd` figuraban aqui como verificaciones
+> base y **no verifican nada**: el primero ejecuta `mvn -version` y el segundo `mvn quarkus:dev`.
+> Ninguno compila, prueba ni valida. Se retiran de la lista.
+
+- `mvn -B -pl platform-app -am -Pfast-tests verify` (carril rapido: compila y corre unitarios + ITs)
+- `mvn -B -o verify` (reactor completo, incluido el carril failsafe)
+- `npm run check:all` (gobernanza: trazabilidad, API vs codigo, RBAC vs codigo)
 - `npm run build` dentro de `frontend/`
 - `npm run test -- --watch=false` dentro de `frontend/`
 
