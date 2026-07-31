@@ -14,12 +14,36 @@ Relacionar el seguimiento operativo con las metricas minimas y las mejoras poste
 
 ## Metricas minimas
 
+> **Distincion que faltaba y hacia construir paneles vacios:** las de abajo NO son series
+> instrumentadas en `/q/metrics`. Se obtienen **consultando la API** (ejecuciones, tareas,
+> auditoria). Un dashboard apuntado contra `/q/metrics` buscandolas no encuentra nada.
+
+Indicadores de negocio, via API:
+
 - procesos ejecutados por estado
 - ultima ejecucion programada
 - tiempo por tarea
 - filas procesadas
 - fallos por proceso
 - latencia DB y REST
+
+### Las nueve metricas que SI estan instrumentadas
+
+Expuestas en `/q/metrics`. Cinco de ellas **alertan con cualquier valor mayor que cero**, porque no
+miden tendencia sino evidencia perdida o trabajo del dinero muerto:
+
+| Metrica | Umbral |
+|---|---|
+| `audit_spool_dead` | **> 0** |
+| `audit_dead_letter_total` | **> 0** |
+| `tasks_outbox_dead` | **> 0** |
+| `tasks_inbox_dead` | **> 0** |
+| `tasks_inbox_poison` | **> 0** |
+
+De tendencia: `audit_spool_pending`, `audit_spool_sent`, `tasks_outbox_pending`, `tasks_outbox_sent`.
+
+El detalle de que hacer cuando alguna se dispara esta en
+[el runbook del money-path](../../../ops/runbooks/008-mensajeria-pagos-runbook.md).
 
 ## Fuentes actuales
 

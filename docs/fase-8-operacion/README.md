@@ -29,3 +29,16 @@ Operar, medir y evolucionar la solucion en produccion sobre una base trazable.
 - [../../ops/fase-8-operacion/README.md](../../ops/fase-8-operacion/README.md)
 - [../../ops/observabilidad.md](../../ops/observabilidad.md)
 - [../../releases/README.md](../../releases/README.md)
+
+## Activos operativos vivos
+
+Esta fase describe el marco; la operacion real vive en `ops/`. Enlaces que faltaban:
+
+- **[Runbook del money-path MT101](../../ops/runbooks/008-mensajeria-pagos-runbook.md)** — que hacer
+  con `NEEDS_RECONCILIATION`, `UNCERTAIN` y `pay_conflict`, las consolas, los endpoints de
+  remediacion y el flujo maker-checker. **Es el documento a leer en un incidente de pagos.**
+- [Guardia y escalamiento](../../ops/fase-8-operacion/oncall.md)
+- [Objetivos de servicio (SLO)](../../ops/fase-8-operacion/slo.md)
+- [Resto de runbooks](../../ops/runbooks/) — incluido el del backbone asincrono.
+- [Rollback](../../ops/fase-7-deploy/rollback.md) — leer ANTES de revertir una release que toque
+  esquema o pagos: esta no es reversible solo con el artefacto.
