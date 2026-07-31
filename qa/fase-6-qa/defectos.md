@@ -6,8 +6,30 @@ Registrar aqui defectos abiertos o historicos relevantes cuando se formalicen ci
 
 ## Estado actual
 
-- baseline creado
-- sin catalogo formal de defectos migrado a esta carpeta todavia
+- catalogo activo desde 2026-06-12
+- **al consultar este fichero, mirar la fecha del ultimo registro**: si no cubre el periodo de los
+  cambios que se evaluan, el criterio de salida por defectos no es concluyente
+
+## Registro 2026-07-31 - reingenieria documental y endurecimiento del money-path
+
+Hallazgos de las siete semanas posteriores al registro anterior, consolidados desde los analisis de
+`qa/fase-6-qa/` y los mensajes de commit. Los tres primeros son **de producto**, no de documentacion.
+
+| ID | Tipo | Severidad | Estado | Descripcion | Evidencia |
+| --- | --- | --- | --- | --- | --- |
+| QA-CI-001 | Control ausente | **Alta** | Cerrado | El workflow de CI disparaba sobre las ramas `main` y `develop`, que **no existen** en este repositorio. Los cuatro jobs no se habian ejecutado nunca, asi que todos los gates que las fases 4-7 citaban como control eran ficcion operativa. | `949441a2`; `.github/workflows/ci.yml` |
+| QA-CI-002 | Verde falso | **Alta** | Cerrado | El gate de RBAC extraia solo literales entre comillas de `@RolesAllowed(...)`, pero el codigo usa constantes importadas: el conjunto salia vacio, imprimia "Roles en codigo: (ninguno)" y **salia con 0**. Un gate ciego que pasa sostiene una confianza inexistente. | `949441a2`; `ci/scripts/check-rbac-vs-code.mjs` |
+| QA-CI-003 | Verde falso | **Alta** | Cerrado | El harvest de `@trace` escaneaba una lista de directorios cableada en cuatro sitios que se quedo en `platform-app`. 82 anotaciones invisibles, 72 de ellas en el vertical del money-path: el gate daba por cubierto el codigo que mueve dinero. | `949441a2`; `ci/scripts/_lib/source-roots.mjs` |
+| QA-PAY-001 | Defecto | **Alta** | Cerrado | `RestPaymentTransport` aceptaba un pago cuando la prueba de aceptacion declarada **no estaba presente** en la respuesta 2xx. Cinco causas distintas colapsaban en el mismo `null`, incluido un `successField` mal escrito, que apagaba la comprobacion entera en silencio. | `c81cac3f`, `259b557d` |
+| QA-PAY-002 | Defecto | **Alta** | Cerrado | Terminales FALSOS: `{"accepted":null}` y valores no booleanos (`"OK"`, `1`) se resolvian como **rechazo del banco** por `parseBoolean`, con sincronizacion del archivo incluida. Un banco que acusa con "OK" quedaba registrado como rechazo sobre dinero que salio. | `c81cac3f` |
+| QA-PAY-003 | Defecto | **Alta** | Cerrado | `SftpPaymentTransport.statRemote` se tragaba cualquier `SftpException` como "el fichero no existe", convirtiendo un permiso denegado en "no hay duplicado, adelante". Y con `posix-rename` sobre OpenSSH, el rename **sobrescribe en silencio**: re-entrega de un pago que el banco pudo haber consumido. | `7901a3cc` |
+| QA-PAY-004 | Defecto | Media | Cerrado | Comodin en el `dropPath` resuelto: `?` es caracter legal del set X de SWIFT y el `:20:` solo se valida por longitud, asi que jsch podia redirigir el `put` a un fichero AJENO. | `7901a3cc` |
+| QA-AUD-001 | Defecto | Media | Cerrado | La trama por registro del pago aceptado no llevaba la referencia del banco: `audit_record_event.gateway_reference` quedaba vacia para TODO pago aceptado, y la unica prueba vivia en una muestra acotada a 1000. | `9ce95a78`, `V104` |
+| QA-AUD-002 | Defecto | Media | Cerrado | La trama `PAY_CONFLICT` del camino STATUS perdia `process_execution_id` y `trace_id`, con lo que el conflicto no aparecia en el drill-down que la consola abre desde la propia fila del conflicto. | `e8b5620d`, `e8b8160e` |
+| QA-DOC-001 | Documentacion | **Alta** | Cerrado | Las diez fases contradecian la realidad: 123 desfases (64 de gravedad alta) y 95 huecos. Cuatro documentos ordenaban implementar en `platform-app/`, que rompe el trinquete congelado; uno de ellos es la instruccion que consume un agente de IA. | `d9cf3a8f` y siguientes |
+| QA-SEC-001 | Cobertura falsa | **Alta** | **Abierto** | `90.15-seguridad-dependencias` describe una cadena de suministro (gitleaks, syft, trivy, cosign, dependabot) de la que **no existe ni una herramienta**. Marcado como objetivo no implementado; pendiente implementarlo o retirarlo. | `d9cf3a8f` |
+| QA-API-001 | Deuda de contrato | Media | **Abierto** | Primera medicion real del gate de API: **123 endpoints en codigo contra 40 en `openapi.yaml`** — 83 sin contrato. No es una regresion: es deuda que llevaba meses sin medirse porque el CI no corria. | `949441a2` |
+| QA-OPS-001 | Riesgo operativo | Media | **Abierto** | Los estados no terminales del money-path (`NEEDS_RECONCILIATION`, `SUSPENDED`) **no son filtrables desde la consola**: hay que consultarlos por base. Documentado en el runbook como limitacion conocida. | `8e4f903a` |
 
 ## Registro 2026-06-12 - spec 008 mensajeria de pagos
 

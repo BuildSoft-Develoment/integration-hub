@@ -1,5 +1,15 @@
 # Criterios de salida y defectos
 
+> **Aviso sobre el control de defectos.** Este documento evalua contra `qa/fase-6-qa/defectos.md`,
+> que tiene catalogo desde el 2026-06-12 pero **estuvo siete semanas sin actualizarse** mientras el
+> money-path cambiaba. Un criterio de salida que mira un registro desactualizado da un verde que no
+> significa nada.
+>
+> Al aplicar el criterio, comprobar primero la fecha del ultimo registro. Si no cubre el periodo de
+> los cambios que se van a promover, el criterio por defectos **no es concluyente**: apoyarse en la
+> ejecucion de los casos del eje por modulo funcional y en los carriles del
+> [plan de pruebas](../06.00-plan-pruebas.md).
+
 [README principal](../../../README.md) | [Indice docs](../../README.md) | [Volver a la fase](../README.md)
 
 <!-- nav-guided:start -->

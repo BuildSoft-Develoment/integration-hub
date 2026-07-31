@@ -10,7 +10,24 @@
 
 ## Objetivo
 
-Hacer visible la cobertura actual de QA sobre las features formalizadas en `specs/`.
+Hacer visible la cobertura actual de QA.
+
+> **Hay DOS ejes de cobertura y este documento solo mostraba uno.** El eje por feature de `specs/`
+> -la tabla de abajo- es en buena parte plantillas. El que de verdad se ejecuta es el **eje por
+> modulo funcional** de `qa/fase-6-qa/casos-prueba-qa-2026-07-16.md`, organizado en modulos F0-F8 y
+> con ejecutor declarado (Tecnico/Dev o Manual-QA). Mirar solo el primero da una impresion de
+> cobertura mucho peor que la real.
+
+### Eje 1 — por modulo funcional (el que se ejecuta)
+
+`qa/fase-6-qa/casos-prueba-qa-2026-07-16.md`. Casos con ID estable (MP-xx money-path, PAY-xx,
+STAT-xx, E2E-xx...), resultado por ronda de ejecucion (v1, v2...) y enlace a su evidencia. Es el
+que se corre contra el ambiente de integracion on-premise, con datos sembrados en las cuatro fuentes.
+
+Los casos del money-path son los criticos: MP-01 (camino feliz), MP-13 (enrutado por canal), PAY-21
+(mapeo de la respuesta del gateway) y STAT-02 (NACK del banco).
+
+### Eje 2 — por feature de `specs/`
 
 ## Cobertura vigente
 
