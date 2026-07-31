@@ -94,7 +94,11 @@ services:
       KC_HEALTH_ENABLED: "true"
     volumes:
       - ${KC_REALM:-./int/keycloak/integration-hub-realm.json}:/opt/keycloak/data/import/integration-hub-realm.json:ro
-      - ../../../../keycloak/themes:/opt/keycloak/themes:ro
+      # Override-able como KC_REALM: el default apunta a la raiz del REPO (4 niveles arriba desde
+      # ops/fase-7-deploy/dist/onprem), pero en el paquete autocontenido de deploy los temas viajan
+      # dentro de dist/onprem/, donde esa ruta relativa se sale del paquete y falla con "Mounts denied".
+      # El paquete lo sobreescribe en int/.env con ./keycloak/themes.
+      - ${KC_THEMES:-../../../../keycloak/themes}:/opt/keycloak/themes:ro
     networks: [ihnet]
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8180'"]
@@ -239,7 +243,8 @@ services:
       - ./int/config/application.properties:/work/config/application.properties:ro
       # File Vault (PKCS12) para ${secret:...}: el pago correctivo MT101 exige que la password
       # del SFTP sea una referencia al vault, no texto plano.
-      - ../../../../secrets/dev-secrets.p12:/work/secrets/dev-secrets.p12:ro
+      # Mismo motivo que KC_THEMES: el default vale para el repo, el paquete lo sobreescribe en int/.env.
+      - ${SECRETS_P12:-../../../../secrets/dev-secrets.p12}:/work/secrets/dev-secrets.p12:ro
       # Fuente FILESYSTEM (cuarta fuente de las pruebas manuales, junto a SFTP/FTP/S3). Es un bind
       # mount para que el operador pueda dejar y retirar ficheros desde el host -en el Ubuntu, un
       # simple cp al directorio- sin entrar al contenedor. En la definicion de la fuente, `path`
