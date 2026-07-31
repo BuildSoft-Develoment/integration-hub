@@ -40,8 +40,14 @@ MINIO_USER="minioadmin";      MINIO_PASS="minioadmin"
 FS_HOST_DIR="$SCRIPT_DIR/data-filesystem"
 FS_IN_APP="/work/data/filesystem"   # el valor que hay que poner en `path` al definir la fuente
 
-# Convierte una ruta git-bash (/c/...) a Windows (C:\...) para que docker la acepte con la conversion apagada.
-winpath() { cygpath -w "$1"; }
+# Convierte una ruta git-bash (/c/...) a Windows (C:\...) para que docker la acepte con la conversion
+# apagada. En LINUX -que es el destino real de este paquete- cygpath no existe y la ruta ya sirve tal cual.
+# Se decide por `command -v`, no por $OSTYPE: lo que importa es si la herramienta esta, no como se llame el SO.
+# Antes se invocaba cygpath a secas: en el servidor Ubuntu devolvia vacio y los `docker cp` recibian un origen
+# vacio ("source can not be empty"), dejando SFTP/FTP/S3 SIN datos.
+winpath() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 
 require_up() {
   for c in "$SFTP_C" "$FTP_C" "$MINIO_C"; do
@@ -61,19 +67,22 @@ main() {
   mkdir -p "$FS_HOST_DIR"
   echo "== Precargando en SFTP ($SFTP_C:$SFTP_DIR), FTP ($FTP_C:$FTP_DIR), S3 ($MINIO_C/$MINIO_BUCKET)"
   echo "   y FILESYSTEM ($FS_HOST_DIR -> $FS_IN_APP) =="
-  local ok=0
+  local ok=0 fail=0
   for f in "${FILES[@]}"; do
     if [[ ! -f "$f" ]]; then echo "  (omito, no existe: $f)"; continue; fi
-    local base w; base="$(basename "$f")"; w="$(winpath "$f")"
+    local base w bad; base="$(basename "$f")"; w="$(winpath "$f")"; bad=0
     echo "  -> $base"
-    docker cp "$w" "$SFTP_C:$SFTP_DIR/$base"
-    docker cp "$w" "$FTP_C:$FTP_DIR/$base"
-    docker cp "$w" "$MINIO_C:/tmp/$base"
-    docker exec "$MINIO_C" mc cp "/tmp/$base" "local/$MINIO_BUCKET/$base" >/dev/null
-    docker exec "$MINIO_C" rm -f "/tmp/$base"
+    # Cada copia se comprueba. Antes el contador subia pasara lo que pasara, asi que el script podia
+    # terminar con "OK. N archivos precargados" habiendo fallado TODAS las copias: un verde falso que
+    # manda a ejecutar los casos de prueba sobre fuentes vacias.
+    docker cp "$w" "$SFTP_C:$SFTP_DIR/$base"                                   || bad=1
+    docker cp "$w" "$FTP_C:$FTP_DIR/$base"                                     || bad=1
+    docker cp "$w" "$MINIO_C:/tmp/$base"                                       || bad=1
+    docker exec "$MINIO_C" mc cp "/tmp/$base" "local/$MINIO_BUCKET/$base" >/dev/null || bad=1
+    docker exec "$MINIO_C" rm -f "/tmp/$base" >/dev/null 2>&1 || true
     # FILESYSTEM: copia directa al directorio del host que el compose monta en la app.
-    cp -f "$f" "$FS_HOST_DIR/$base"
-    ok=$((ok+1))
+    cp -f "$f" "$FS_HOST_DIR/$base"                                            || bad=1
+    if (( bad == 0 )); then ok=$((ok+1)); else fail=$((fail+1)); echo "     FALLO en $base"; fi
   done
   docker exec "$SFTP_C" chown -R 1001:1001 "$SFTP_DIR" 2>/dev/null || true
   # La app corre como uid 1001 (imagen quarkus-micro) y puede necesitar mover/borrar el procesado.
@@ -92,6 +101,11 @@ main() {
     echo "         que el stack se haya recreado despues de anadirlo (un simple start no basta)."
   fi
   echo ""
+  if (( fail > 0 )); then
+    echo "FALLO: $fail de $((ok+fail)) archivos NO se precargaron completos. Las fuentes de arriba" >&2
+    echo "       que salgan vacias NO tienen datos: no ejecutes los casos de prueba todavia." >&2
+    exit 1
+  fi
   echo "OK. $ok archivos precargados en las 4 fuentes (SFTP / FTP / S3 / FILESYSTEM)."
   echo "Al definir la fuente FILESYSTEM en la UI, el campo 'path' va con: $FS_IN_APP"
 }
