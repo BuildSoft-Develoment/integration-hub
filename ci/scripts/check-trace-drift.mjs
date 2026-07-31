@@ -26,6 +26,7 @@ import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { resolve, join, basename, extname } from "node:path";
 import process from "node:process";
 import { DatabaseSync } from "node:sqlite";
+import { SOURCE_ROOTS } from "./_lib/source-roots.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const root = resolve(args.root || ".");
@@ -37,7 +38,10 @@ if (!existsSync(dbPath)) {
 }
 
 const db = new DatabaseSync(dbPath);
-const SOURCE_DIRS = ["src", "backend", "frontend", "tests", "platform-app"];
+// Fuente unica: ci/scripts/_lib/source-roots.mjs. Antes la lista estaba cableada aqui y solo llegaba a
+// "platform-app", de modo que las 82 @trace de los verticales, el SPI y el audit-consumer eran
+// invisibles y el gate daba verde sobre codigo que no habia mirado.
+const SOURCE_DIRS = SOURCE_ROOTS;
 const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".mjs", ".java", ".kt", ".py", ".go", ".rs", ".cs"]);
 
 const sourceFiles = collectFiles(root, SOURCE_DIRS, SOURCE_EXTS);

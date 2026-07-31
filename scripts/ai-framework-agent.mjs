@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { SOURCE_ROOTS } from "../ci/scripts/_lib/source-roots.mjs";
 
 const SUPPORTED_STACKS = new Set(["node-next", "java-monolith", "quarkus-angular", "spring-react"]);
 const DEFAULT_DOC_PATHS = [
@@ -1295,7 +1296,11 @@ function gitLastChange(root, relativePath) {
 // trazabilidad realmente existe en el repo. Usado por syncTraceLinks para
 // distinguir 'planned' (declarado pero no existe) de 'implemented' (existe).
 // Mismo criterio que check-trace-drift.mjs para mantener coherencia.
-const SOURCE_SEARCH_DIRS = ["src", "backend", "frontend", "tests", "stacks", "platform-app"];
+// Ambos leen la fuente unica de ci/scripts/_lib/source-roots.mjs. El comentario de arriba decia
+// "mismo criterio" pero eran DOS copias independientes, y las dos se quedaron en platform-app cuando
+// el repo paso a siete modulos: un @trace del vertical se clasificaba como "planned" aunque el
+// codigo existiera.
+const SOURCE_SEARCH_DIRS = [...SOURCE_ROOTS, "stacks"];
 const SOURCE_SEARCH_EXTS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
   ".java", ".kt",
@@ -5583,7 +5588,9 @@ function diffSince(root, db, ref) {
 // Debe mantenerse en sintonia con SOURCE_SEARCH_DIRS (drift-checker): los proyectos
 // monoliticos Maven/Gradle ubican el codigo en un modulo (p.ej. platform-app/), no en
 // src/ raiz. Sin platform-app el harvest escanea dirs vacios y cosecha 0 @trace.
-const HARVEST_SOURCE_DIRS = ["src", "backend", "frontend", "tests", "platform-app"];
+// Fuente unica: ci/scripts/_lib/source-roots.mjs (antes solo llegaba a "platform-app": las @trace de
+// los verticales, el SPI y el audit-consumer no se cosechaban y el gate daba verde sin haberlas visto).
+const HARVEST_SOURCE_DIRS = SOURCE_ROOTS;
 const HARVEST_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".mjs", ".cjs",
   ".java", ".kt",

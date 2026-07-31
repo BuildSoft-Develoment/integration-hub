@@ -31,6 +31,7 @@ import { resolve, join } from "node:path";
 import { listIncludedFeatures, isReengineering } from "../ci/scripts/_lib/feature-filter.mjs";
 import { loadIgnoreConfig, shouldIgnorePath } from "../ci/scripts/_lib/ignore-paths.mjs";
 import { summarizePrototypeStates } from "../ci/scripts/_lib/prototype-state.mjs";
+import { SOURCE_ROOTS, TEST_ROOTS } from "../ci/scripts/_lib/source-roots.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const root = resolve(args.root || ".");
@@ -233,7 +234,8 @@ function analyzePhase5() {
   // records, config, entidades no llevan @trace). Exigir 373/373 nunca completa.
   // Criterio correcto: cada RF con `Codigo` declarado en su matriz tiene >=1
   // @trace en codigo. Se escanea el codigo fuente (independiente de la BD).
-  const srcDirs = ["src", "backend", "frontend", "platform-app"];
+  // Fuente unica: ci/scripts/_lib/source-roots.mjs.
+  const srcDirs = SOURCE_ROOTS;
   let codeFiles = 0;
   const tracedCodes = new Set();
   const tagRe = /@(?:trace|covers|implements)\s+((?:RF-\d+|RNF-\d+|HU-\d+)(?:\s*,\s*(?:RF-\d+|RNF-\d+|HU-\d+))*)/gi;
@@ -286,7 +288,8 @@ function analyzePhase5() {
 }
 
 function analyzePhase6() {
-  const testDirs = ["tests", "qa/automated", "src", "platform-app", "backend", "frontend"];
+  // Fuente unica: ci/scripts/_lib/source-roots.mjs.
+  const testDirs = TEST_ROOTS;
   let testFiles = 0;
   for (const d of testDirs) {
     const abs = join(root, d);

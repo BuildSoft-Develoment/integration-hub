@@ -64,19 +64,60 @@ function listJavaFiles(dir, out) {
   }
   return out;
 }
-const codeRoles = new Set();
-const rolesAllowedRe = /@RolesAllowed\(\s*\{?([^)}]*)\}?\s*\)/g;
-const quotedRe = /"([^"]+)"/g;
+// Este gate solo miraba literales entre comillas dentro de @RolesAllowed(...). El codigo real NO usa
+// literales: usa constantes importadas (PlatformRoles.OPERATOR, Mt101Roles.PAY_CONFLICT_MAKER...), asi
+// que el conjunto salia VACIO, el gate imprimia "Roles en codigo: (ninguno)" y salia con 0. Un gate que
+// pasa en verde estando ciego es peor que no tenerlo: sostiene una confianza que no existe. Ahora se
+// resuelven las constantes antes de comparar.
+
+/** Mapa NOMBRE_DE_CONSTANTE -> valor, tomado de las declaraciones `static final String X = "y";`. */
+const constantValues = new Map();
+const constantDeclRe = /static\s+final\s+String\s+([A-Z0-9_]+)\s*=\s*"([^"]+)"\s*;/g;
+
+/** Ficheros con @RolesAllowed, cacheados para no leer dos veces el arbol. */
+const annotatedFiles = [];
+
 for (const dir of scanDirs) {
   for (const file of listJavaFiles(dir, [])) {
     const text = readFileSync(file, "utf8");
-    if (!text.includes("@RolesAllowed")) continue;
-    let m;
-    while ((m = rolesAllowedRe.exec(text)) !== null) {
-      let q;
-      while ((q = quotedRe.exec(m[1])) !== null) codeRoles.add(q[1]);
+    // Las constantes se recolectan de TODOS los ficheros: las clases que las declaran
+    // (PlatformRoles, Mt101Roles) normalmente no llevan ninguna anotacion.
+    let d;
+    while ((d = constantDeclRe.exec(text)) !== null) constantValues.set(d[1], d[2]);
+    if (text.includes("@RolesAllowed")) annotatedFiles.push(text);
+  }
+}
+
+const codeRoles = new Set();
+const unresolved = new Set();
+const rolesAllowedRe = /@RolesAllowed\(\s*\{?([^)}]*)\}?\s*\)/g;
+const quotedRe = /"([^"]+)"/g;
+// Identificador suelto o cualificado: OPERATOR, PlatformRoles.OPERATOR, Mt101Roles.PAY_CONFLICT_MAKER.
+const identifierRe = /(?:([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*)?([A-Z][A-Z0-9_]{2,})/g;
+
+for (const text of annotatedFiles) {
+  let m;
+  while ((m = rolesAllowedRe.exec(text)) !== null) {
+    const args = m[1];
+    let q;
+    let sawLiteral = false;
+    while ((q = quotedRe.exec(args)) !== null) { codeRoles.add(q[1]); sawLiteral = true; }
+    if (sawLiteral) continue;
+    let id;
+    while ((id = identifierRe.exec(args)) !== null) {
+      const name = id[2];
+      if (constantValues.has(name)) codeRoles.add(constantValues.get(name));
+      // Se registra lo no resuelto en vez de ignorarlo: si manana alguien mete un rol por una via que
+      // este parser no entiende, el gate lo DICE en vez de volver a quedarse callado.
+      else unresolved.add(id[1] ? id[1] + "." + name : name);
     }
   }
+}
+
+if (unresolved.size > 0) {
+  console.log("⚠ Referencias en @RolesAllowed que no se pudieron resolver a un valor de rol: "
+    + [...unresolved].sort().join(", "));
+  console.log("  (declara la constante como `static final String X = \"...\"` en una clase escaneada)");
 }
 
 // ── ADR ──────────────────────────────────────────────────────────────────────

@@ -43,6 +43,14 @@
     "oidcAudience": "integration-hub-api",
     "oidcRolesClaim": "roles"
   },
+  "api": {
+    "codeScanDirs": [
+      "platform-app/src/main/java",
+      "platform-spi/src/main/java",
+      "vertical-swift-mt101/src/main/java",
+      "vertical-iso20022/src/main/java"
+    ]
+  },
   "observability": {
     "prometheusUrl": "http://localhost:9090",
     "grafanaUrl": "http://localhost:3000",
