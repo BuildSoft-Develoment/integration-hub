@@ -25,3 +25,10 @@ Esta fase usa numeracion compuesta `00.xx`. El prefijo `00` identifica la fase y
 - [00.04-roles-y-responsabilidades](00.04-roles-y-responsabilidades.md)
 - [00.05-checklist-preparacion-proyecto](00.05-checklist-preparacion-proyecto.md)
 - [00.06-ruta-guiada-integration-hub](00.06-ruta-guiada-integration-hub.md)
+
+## Documentos que faltaban en este indice
+
+- [00.05-checklist-adopcion](00.05-checklist-adopcion.md) — el contrato **ejecutable** de la fase
+  (`npm run check:*`, `gate-0-1`). Estaba en la cadena de navegacion pero no en el indice.
+- [00.07-glosario](00.07-glosario.md) — terminos del producto. **Nuevo**: hasta ahora solo estaban
+  definidos dentro del codigo, incluidos los tres estados del money-path.
