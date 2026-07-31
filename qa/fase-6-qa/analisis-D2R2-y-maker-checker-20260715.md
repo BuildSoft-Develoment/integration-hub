@@ -1,4 +1,4 @@
-# Análisis D2-R2 + decisión maker-checker (PAY_CONFLICT_RESOLVED) — 2026-07-15
+# Analisis D2-R2 + decisión maker-checker (PAY_CONFLICT_RESOLVED) — 2026-07-15
 
 > Entrega **para autorización**. No se ha implementado nada. Regla: sin caminos legacy/fallback en el fuente.
 

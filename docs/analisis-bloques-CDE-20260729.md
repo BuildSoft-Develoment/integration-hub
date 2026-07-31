@@ -1,4 +1,4 @@
-# Análisis profundo — bloques C, D y E
+# Analisis profundo — bloques C, D y E
 
 Continuación de [analisis-v74-verificado-20260729.md](analisis-v74-verificado-20260729.md), tras
 cerrar A y B. Contrastado contra el código en `experiment/quarkus-lts-native` @ `c055241a`.

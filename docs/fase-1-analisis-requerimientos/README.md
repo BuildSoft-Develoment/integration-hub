@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [De idea a documentacion inicial con IA](../fase-0-iniciacion/00.10-idea-a-documentacion-inicial-con-ia.md)
+- Anterior: [Glosario](../fase-0-iniciacion/00.07-glosario.md)
 - Siguiente: [Analisis de requerimientos](01.00-analisis-requerimientos.md)
 <!-- nav-guided:end -->
 

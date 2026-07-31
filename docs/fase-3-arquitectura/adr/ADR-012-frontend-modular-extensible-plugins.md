@@ -148,8 +148,8 @@ La primera implementacion real aplica al shell de navegacion:
 - Todo cambio en `frontend/apps/web/public/plugins/catalog.json` debe pasar
   `npm run validate:plugins` o `npx nx run web:validate-plugins` antes de
   build/release.
-- El catalogo versionado debe referenciar `./catalog.schema.json` mediante
-  `$schema`; un `$schema` distinto falla en el gate local.
+- El catalogo versionado debe declarar `"$schema": "./catalog.schema.json"`; un
+  `$schema` distinto falla en el gate local.
 
 ## Flujo de instalacion metadata-only
 

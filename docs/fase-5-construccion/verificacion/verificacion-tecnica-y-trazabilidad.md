@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [Mapa de construccion backend y frontend](../modulos/mapa-construccion-backend-frontend.md)
-- Siguiente: [Fase 6 - QA](../../fase-6-qa/README.md)
+- Siguiente: [Catalogo de plugins de frontend](../modulos/frontend-plugin-catalog.md)
 <!-- nav-guided:end -->
 
 ## Objetivo

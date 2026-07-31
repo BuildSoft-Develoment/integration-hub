@@ -9,7 +9,7 @@
 > Catalogo vigente, generado desde el codigo:
 > [90.17-catalogo-de-tipos](../../docs/transversal/90.17-catalogo-de-tipos.md).
 >
-> Este diseno ademas cita `provider/task/payments/iso20022/format/Pain001XmlFormatter.java`, ruta que
+> Este diseno ademas cita `provider/format/Pain001XmlFormatter.java`, ruta que
 > ya no existe: el vertical ISO 20022 vive en `vertical-iso20022/`.
 > **Estado**: **bootstrap activo** (formatter implementado + tests). Documenta
 > cómo se integra ISO 20022 `pain.001` a la vertical 008 sin romper
@@ -18,7 +18,7 @@
 > Cubre la tarea **T-027** de [spec-tareas.md](spec-tareas.md).
 >
 > **Implementado en `Pain001XmlFormatter`** (commit del slice 4.3):
-> - `provider/task/payments/iso20022/format/Pain001XmlFormatter.java`
+> - `provider/format/Pain001XmlFormatter.java`
 > - 10 tests cubriendo grupo header, payment info, debtor/creditor, ChrgBr,
 >   escapado XML, namespace.
 >

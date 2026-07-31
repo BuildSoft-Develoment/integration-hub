@@ -61,7 +61,7 @@ todo contra el código real:
 ## B.1 — [P1, prioridad 2] Hueco de obligatoriedad multi-PAY — **CONFIRMADO** (severidad corregida)
 
 **El código.** `Mt101PayResolutionValidator.validate` decide "este PAY tiene resolutor" así
-([líneas 72-76](platform-app/src/main/java/com/integrationhub/platform/service/process/Mt101PayResolutionValidator.java)):
+([líneas 72-76](../../vertical-swift-mt101/src/main/java/com/integrationhub/vertical/swift/mt101/service/Mt101PayResolutionValidator.java)):
 
 ```java
 var hasDownstreamNormalPayResolver = tasks.stream().anyMatch(candidate ->

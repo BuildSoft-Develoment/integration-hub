@@ -1,5 +1,11 @@
 # Guía de autor de plugins (frontend + backend)
 
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [Checklist de arquitectura](03.04-checklist-arquitectura.md)
+- Siguiente: [ADR](adr/README.md)
+<!-- nav-guided:end -->
+
 Guía práctica para construir, firmar y publicar un plugin instalable desde fuera. Cubre
 el contrato, el modelo de seguridad y el versionado. Complementa ADR-012 (frontend
 modular), ADR-013 (module federation remotos) y ADR-014 (backend modular).

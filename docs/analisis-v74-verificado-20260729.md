@@ -1,4 +1,4 @@
-# Análisis v74 verificado contra el código — 2026-07-29
+# Analisis v74 verificado contra el código — 2026-07-29
 
 Revisión del análisis externo v74, contrastado punto por punto contra el árbol real
 (rama `experiment/quarkus-lts-native`, HEAD `a022b919`) y contra evidencia medida hoy.

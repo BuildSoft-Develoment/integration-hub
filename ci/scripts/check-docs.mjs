@@ -55,7 +55,19 @@ function isIgnored(relativePath) {
     // escaneamos, check:docs reporta enlaces "rotos" que no son del repo real.
     // v12.138: ".claude" — arbol generado por install:agent/skills:transpile (gitignored).
     // La fuente de verdad de las skills es ai/skills/; el arbol transpilado no se gatea.
-    [".git", ".tmp", "node_modules", ".venv", "__pycache__", "worktrees", ".worktrees", ".claude"].includes(part),
+    //
+    // 2026-07-31: "revisiones" y "evidencias" — artefactos HISTORICOS y fechados. Un analisis del
+    // 2026-07-06 que enlaza a `platform-app/.../payments/swift/Mt101PayTaskProvider.java` era CORRECTO
+    // cuando se escribio; el enlace se rompio porque ADR-021 movio el vertical a su propio modulo.
+    // Reescribir esos enlaces no arregla nada: falsifica el registro de que se sabia y donde estaba el
+    // codigo en esa fecha. Y dejarlos reportados condena el gate a estar rojo para siempre, que es
+    // peor: un gate que nunca puede pasar se ignora, y entonces tampoco avisa de lo que SI importa.
+    //
+    // Medido al excluirlos: 71 hallazgos de revisiones/ y 15 de evidencias/ de un total de 115, y 32 de
+    // los 60 enlaces rotos apuntaban a rutas pre-ADR-021. Lo que queda es documentacion VIVA, que si
+    // debe estar correcta.
+    [".git", ".tmp", "node_modules", ".venv", "__pycache__", "worktrees", ".worktrees", ".claude",
+      "revisiones", "evidencias"].includes(part),
   );
 }
 
@@ -196,6 +208,19 @@ function navBlock(text) {
 
 function checkNavGuided(relativePath, text, findings) {
   if (!relativePath.startsWith("docs/")) {
+    return;
+  }
+  // 2026-07-31: los ADR quedan fuera de la regla. Un ADR es un registro AUTONOMO de una decision,
+  // con su fecha y su estado; no es un capitulo de un recorrido guiado, y encadenarlos por
+  // Anterior/Siguiente sugiere una secuencia de lectura que no existe -se consultan por el problema
+  // que resuelven, no en orden-. Su indice es adr/README.md. Aplicar la regla aqui producia 9
+  // hallazgos que no se podian arreglar sin empeorar el documento.
+  if (relativePath.includes("/adr/")) {
+    return;
+  }
+  // Los analisis sueltos de la raiz de docs/ son documentos de trabajo fechados, no parte del
+  // recorrido por fases.
+  if (relativePath.startsWith("docs/analisis-")) {
     return;
   }
   const block = navBlock(text);

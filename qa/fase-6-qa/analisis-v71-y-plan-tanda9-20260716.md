@@ -1,4 +1,4 @@
-# Análisis v71 contra el código real + plan tanda-9 — 2026-07-16
+# Analisis v71 contra el código real + plan tanda-9 — 2026-07-16
 
 > Entrega **para autorización**. No se ha implementado nada de esta ronda. Regla: sin caminos legacy/fallback en
 > el fuente; lo ya implementado se valida.

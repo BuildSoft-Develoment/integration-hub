@@ -1,4 +1,4 @@
-# Análisis v67 contra el código real + plan tanda-4 — 2026-07-15
+# Analisis v67 contra el código real + plan tanda-4 — 2026-07-15
 
 > Entrega **para autorización**. No se ha implementado nada de esta tanda todavía. Regla vigente:
 > **sin código fallback / sin caminos legacy en el fuente**; lo ya implementado se **valida**.

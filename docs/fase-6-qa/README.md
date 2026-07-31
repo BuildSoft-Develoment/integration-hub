@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Verificacion tecnica y trazabilidad](../fase-5-construccion/verificacion/verificacion-tecnica-y-trazabilidad.md)
+- Anterior: [Verificacion tecnica y trazabilidad](../fase-5-construccion/modulos/frontend-plugin-catalog.md)
 - Siguiente: [Plan de pruebas](06.00-plan-pruebas.md)
 <!-- nav-guided:end -->
 

@@ -201,8 +201,8 @@ Costos:
 - Streaming/temp: `provider/source/TempFileSourcePayload.java` (patron a espejar por writers, compresor y sinks).
 - Sync/async: `spi/task/AsyncOffloadSupport.java` (enum a declarar por tarea) + `service/execution/async/` (`AsyncSliceDispatchService`, `AsyncPageChainService`, `TaskDispatchPlanner`); `ArtifactStore` net-new (`LocalTempArtifactStore` | `S3ArtifactStore` sobre `service/artifact/ArtifactStagingProducer.java`).
 - Compresion: net-new; `FileCompressor` (registry CDI como los otros) + `ZipCompressor` con **`zip4j`** (`ZipFile`/`ZipParameters`, plano + AES streaming por entrada) + `GzipCompressor` con `java.util.zip.GZIPOutputStream`; multi-archivo via `summary.files` (publicado por `FILE_WRITE`, leido por `FILE_COMPRESS`). `configSchema()` para el auto-form. Sin compresion previa en el repo (grep vacio); `zip4j` = dependencia nueva + smoke test native.
-- Sink SFTP referencia: `provider/task/payments/swift/transport/SftpPaymentTransport.java` (upload-with-rename + dup-policy; **corregir el byte-array**).
-- Gobernanza: `service/JsonConfigurationMapper.java` (`${secret:...}`), `provider/task/payments/swift/Mt101DispatchPlanCompiler.java` (`COMPLETE_REF`).
+- Sink SFTP referencia: `provider/task/transport/SftpPaymentTransport.java` (upload-with-rename + dup-policy; **corregir el byte-array**).
+- Gobernanza: `service/JsonConfigurationMapper.java` (`${secret:...}`), `provider/Mt101DispatchPlanCompiler.java` (`COMPLETE_REF`).
 - Frontend: registries `PROCESS_TASK_PROVIDERS` + `PROCESS_TASK_FORM_REGISTRY`; union `PlatformProcessTaskType`.
 - Datos: `entity/SourceDefinition.java`; migraciones `db/migration/`.
 

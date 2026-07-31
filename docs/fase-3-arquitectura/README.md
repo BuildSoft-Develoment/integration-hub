@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Validacion UX con operacion](../fase-2-ux-ui/validaciones/validacion-ux-con-operacion.md)
+- Anterior: [Validacion UX con operacion](../fase-2-ux-ui/02.17-plan-implementacion-ux-ui.md)
 - Siguiente: [Arquitectura](03.00-arquitectura.md)
 <!-- nav-guided:end -->
 

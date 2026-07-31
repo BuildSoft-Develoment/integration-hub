@@ -165,7 +165,7 @@ drill-in, cambio visual de idioma) y **no se marcaron**: un `Pass` desde una lla
 
 Dos casos **bajaron** respecto de v1 por esta misma razón, y conviene leerlos como límite del método,
 no como regresión: **MC-19** (estado "cargando modo") y **UI-10** (los textos cambian entre es/en) son
-observaciones visuales. Los catálogos existen con paridad (`dictionaries/es.ts` y `en.ts`, con
+observaciones visuales. Los catálogos existen con paridad (`frontend/libs/core/i18n/src/lib/dictionaries/es.ts` y `en.ts`, con
 `dictionary-parity.spec.ts`) y el switch está cubierto por `i18n.service.spec.ts`, pero *ver* el
 cambio exige navegador.
 
@@ -225,7 +225,7 @@ es política del entorno. Quedan para ejecución manual con esta misma guía.
 
 ---
 
-## Preparación (leer antes de ejecutar)
+## Preparacion (leer antes de ejecutar)
 
 **Acceso:** abrir `https://<host>/appih` (local: `https://192.168.0.15:8443/appih`). El navegador avisa por el **cert self-signed** → Firefox: *Avanzado → Aceptar el riesgo*; Chrome: teclear `thisisunsafe`. Una vez por origen.
 
@@ -356,7 +356,7 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 
 > La columna **Orden** (1..236) da la secuencia sugerida de punta a punta. Dentro de una fase los casos son en su mayoría independientes; las dependencias fuertes están dentro de **Configuración → E2E**.
 
-## Índice de módulos (en orden de ejecución)
+## Indice de módulos (en orden de ejecución)
 
 - **INFRA** (F0) — Deploy / Infraestructura / Acceso (nginx, TLS, /appih) (14)
 - **AUTH** (F1) — Autenticacion / OIDC / Roles (Keycloak) (14)

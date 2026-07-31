@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { docPathRoots } from "./_lib/source-roots.mjs";
+
 const PATH_EXTENSIONS = new Set([
   ".md",
   ".yml",
@@ -52,6 +54,12 @@ const IGNORED_FILE_PREFIXES = [
   "releases/",
   "revisiones/",
 ];
+// Carpetas de registro fechado: una evidencia de QA describe lo que se verifico EL DIA que se
+// verifico. Sus rutas se rompieron porque despues ADR-021 movio el codigo, no porque el documento
+// este mal: reescribirlas para que el gate pase falsificaria el registro, que es justo lo que una
+// evidencia no puede permitirse. `revisiones/` ya estaba exento arriba por la misma razon; esto
+// extiende el criterio a las evidencias, que viven anidadas bajo `qa/fase-N/`.
+const IGNORED_PATH_SEGMENTS = new Set(["evidencias"]);
 const ROOT_PREFIXES = [
   ".github/",
   "ai/",
@@ -73,6 +81,9 @@ const ROOT_PREFIXES = [
   "tests/",
 ];
 
+/** Se rellena en main(): depende de la raiz del repositorio, que llega por argumento. */
+let DOC_PATH_ROOTS = [];
+
 function parseArgs(argv) {
   return { root: path.resolve(argv[0] || ".") };
 }
@@ -90,7 +101,10 @@ function collectMarkdown(rootDir) {
       }
       if (entry.isFile() && entry.name.endsWith(".md")) {
         const relative = path.relative(rootDir, absolute).replace(/\\/g, "/");
-        if (!IGNORED_FILE_PREFIXES.some((prefix) => relative === prefix || relative.startsWith(prefix))) {
+        const ignored =
+          IGNORED_FILE_PREFIXES.some((prefix) => relative === prefix || relative.startsWith(prefix)) ||
+          relative.split("/").some((segment) => IGNORED_PATH_SEGMENTS.has(segment));
+        if (!ignored) {
           files.push(absolute);
         }
       }
@@ -111,13 +125,25 @@ function looksLikePath(value) {
   if (/\s/.test(value.trim())) {
     return false;
   }
-  if (/[<>{}*|$]/.test(value) || value.includes("NNN") || value.includes("...")) {
+  // La elipsis tipografica U+2026 es lo mismo que "..." escrito con un solo caracter, y la
+  // documentacion la usa para elidir tramos largos (`ops/…/onprem/int/`). El guard de arriba solo
+  // cubria la version de tres puntos, asi que la misma abreviatura pasaba o fallaba segun como se
+  // hubiera tecleado.
+  if (/[<>{}*|$]/.test(value) || value.includes("NNN") || value.includes("...") || value.includes("…")) {
     return false;
   }
   if (/[A-Z]{2,}/.test(value) || /(^|\/)fase-x(\/|$)/.test(value) || /vX\.Y\.Z/.test(value)) {
     return false;
   }
   if (/^(https?:|s3:|ghcr\.io\/|gcr\.io\/|pkg:|mailto:)/.test(value)) {
+    return false;
+  }
+  // Una barra inicial marca una URL servida por la aplicacion, no un fichero del repositorio:
+  // `/plugins/catalog.json` lo descarga el host por HTTP, y su fuente vive en
+  // `frontend/apps/web/public/`. Medido sobre el arbol completo: de los 27 valores en backticks que
+  // empiezan por barra, los unicos que resolvian contra el disco eran `/` y `//` -separadores
+  // sueltos, no rutas-, asi que descartarlos no pierde ni una comprobacion real.
+  if (value.startsWith("/")) {
     return false;
   }
   const extension = path.extname(value.replace(/\\/g, "/"));
@@ -133,17 +159,36 @@ function resolveCandidate(rootDir, markdownFile, rawValue) {
   if (normalized.startsWith("../")) {
     return path.resolve(path.dirname(markdownFile), normalized);
   }
+  // Las raices desde las que la documentacion cita codigo (raiz de paquete de cada modulo Maven, sus
+  // resources, y `frontend/`). Ver el porque en _lib/source-roots.mjs. Se sigue exigiendo que el
+  // fichero EXISTA; lo unico que cambia es desde donde se busca.
+  //
+  // Se prueban ANTES de dar por buena la raiz del repositorio, no despues. Un valor que empieza por
+  // un ROOT_PREFIX (`scripts/`, `docs/`) tiene el mismo nombre en la raiz y dentro de `frontend/`:
+  // resolver a la raiz sin comprobar que existe daba por rota `scripts/sign-plugin-remote.js`, que es
+  // `frontend/scripts/sign-plugin-remote.js`. Se elige el primer candidato que EXISTE.
+  const atRoot = path.resolve(rootDir, normalized);
+  if (fs.existsSync(atRoot)) {
+    return atRoot;
+  }
+  for (const docRoot of DOC_PATH_ROOTS) {
+    const candidate = path.resolve(rootDir, docRoot, normalized);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
   if (ROOT_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(prefix))) {
-    return path.resolve(rootDir, normalized);
+    return atRoot;
   }
   if (normalized.endsWith("/") && !PATH_EXTENSIONS.has(path.extname(normalized))) {
     return path.resolve(path.dirname(markdownFile), normalized);
   }
-  return path.resolve(rootDir, normalized);
+  return atRoot;
 }
 
 function main() {
   const { root } = parseArgs(process.argv.slice(2));
+  DOC_PATH_ROOTS = docPathRoots(root, fs, path);
   const findings = [];
 
   for (const file of collectMarkdown(root)) {

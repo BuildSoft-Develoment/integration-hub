@@ -1,4 +1,4 @@
-# Auditoría asíncrona (MQ) — Despliegue y Operación
+# Auditoría asíncrona (MQ) — Despliegue y Operacion
 
 > Guía operativa del subsistema de auditoría asíncrona con outbox/spool + MQ +
 > consumidor separado + store frío de trazabilidad E2E por registro.

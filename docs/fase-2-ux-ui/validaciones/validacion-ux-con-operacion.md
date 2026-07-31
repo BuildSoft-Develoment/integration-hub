@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [Criterios de wireframes y componentes](../wireframes/criterios-wireframes-y-componentes.md)
-- Siguiente: [Fase 3 - Arquitectura](../../fase-3-arquitectura/README.md)
+- Siguiente: [Plan de implementacion UX/UI](../02.17-plan-implementacion-ux-ui.md)
 <!-- nav-guided:end -->
 
 ## Objetivo

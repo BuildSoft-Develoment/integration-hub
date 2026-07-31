@@ -62,6 +62,22 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 
 ## Requerimientos
 
+24 requisitos funcionales (RF-001 a RF-024) repartidos en seis sub-catalogos: los dos de task
+types (sprint 1 y fase 2-3), reglas, modelo de dominio, transportes, y seguridad y compliance.
+Uno esta **retirado** —RF-001 `MT101_BUILD`, absorbido por RF-022 `MT101_BUILD_FROM_TABLE`— y se
+conserva tachado en su sitio en vez de borrarse, para que un lector que encuentre el tipo citado
+en documentacion o codigo antiguo sepa que desaparecio y por que.
+
+La division no es cosmetica. Los del **sprint 1** construyen, validan, archivan y despachan: son
+el camino del dinero, y un defecto ahi mueve un pago real. Los de **fase 2-3** cierran el ciclo
+—confirmacion, conciliacion, reparacion de rechazos— y son los que permiten que un `UNCERTAIN`
+tenga salida automatica; sin ellos el camino del dinero funciona pero no se cierra solo. Los
+**transportes** (`REST`, `SFTP`) son el unico punto donde el sistema deja de poder demostrar lo
+que paso, asi que su requisito operativo dominante no es entregar sino **saber si entrego**.
+
+Cada RF se rastrea hasta codigo por el mecanismo descrito en la spec tecnica; la operacion diaria
+de lo que aqui se especifica vive en `ops/runbooks/008-mensajeria-pagos-runbook.md`.
+
 ### Catalogo de task types (sprint 1, sub-catalogo `swift/`)
 
 - ~~RF-001 task type `MT101_BUILD`~~ **RETIRADO**: el tipo se des-registro. Su capacidad la cubre

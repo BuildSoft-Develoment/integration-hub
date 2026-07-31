@@ -1,5 +1,11 @@
 # Catalogo frontend de plugins metadata-only
 
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [Verificacion tecnica y trazabilidad](../verificacion/verificacion-tecnica-y-trazabilidad.md)
+- Siguiente: [Fase 6 - QA](../../fase-6-qa/README.md)
+<!-- nav-guided:end -->
+
 [README principal](../../../README.md) | [Indice docs](../../README.md) | [Volver a la fase](../README.md)
 
 ## Objetivo
@@ -148,7 +154,7 @@ del contrato, el archivo no se actualiza.
 
 ## Reglas
 
-- El catalogo debe referenciar `./catalog.schema.json`.
+- El catalogo debe declarar `"$schema": "./catalog.schema.json"`.
 - Las rutas deben pertenecer al conjunto publicado en el schema.
 - Las capabilities deben pertenecer al conjunto publicado en el schema.
 - Las acciones `navigation` deben apuntar a rutas conocidas del shell.

@@ -110,7 +110,7 @@ Leyenda estado destino: `SENT` (aceptado banco) · `FAILED` (NACK real) · `UNCE
 - [ ] **6.4 Reconciliación de fin de día.** Cuadre: total enviado por la plataforma == total confirmado por el banco;
       diferencias → `UNCERTAIN`/`PAY_CONFLICT` con evidencia (cero descuadre silencioso).
 
-## 7. Operación / observabilidad (readiness)
+## 7. Operacion / observabilidad (readiness)
 
 - [ ] **7.1 Alertas** ante PAY_CONFLICT / UNCERTAIN / FAILED llegan al equipo operativo.
 - [ ] **7.2 Runbook** de resolución de conflictos y de recuperación de nodo probado por el operador (no solo el dev).
