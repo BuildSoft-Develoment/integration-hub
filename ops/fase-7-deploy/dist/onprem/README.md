@@ -37,7 +37,7 @@ helm upgrade --install ih ../common/helm/integration-hub -f values-onprem.yaml -
 ## Controles bancarios (activos por defecto en `prod`)
 
 El perfil `prod` ([`../config/application-prod.properties`](../config/application-prod.properties)) **enciende
-los controles bancarios** que en dev/UAT están apagados (no hereda los defaults de dev). Ya vienen correctos;
+los controles bancarios** que en dev/UAT están apagados (no hereda los defaults de dev). Cinco vienen con el valor correcto; **`mt101.pay.require-gateway-proof` sale APAGADO a proposito** y encenderlo es una decision aparte que exige migrar antes las definiciones.
 las env-vars son solo override opcional:
 
 | Control | Default en prod | Qué garantiza |

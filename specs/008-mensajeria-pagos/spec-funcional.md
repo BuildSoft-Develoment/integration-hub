@@ -188,7 +188,7 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - Existen task providers registrables `MT101_VALIDATE`, `MT101_BUILD_FROM_TABLE`,
   `MT101_ARCHIVE`, `MT101_PAY` (sprint 1) y los restantes en sus sprints.
 - El motor (spec 003) consume estos task types via SPI sin conocer su semantica.
-- Un proceso `FILE_READ -> MT101_BUILD -> MT101_VALIDATE -> MT101_ARCHIVE ->
+- Un proceso `FILE_READ -> DB_WRITE(staging) -> MT101_BUILD_FROM_TABLE -> MT101_VALIDATE -> MT101_ARCHIVE ->
   MT101_PAY -> NOTIFICATION` ejecuta end-to-end con un archivo de prueba.
 - Un proceso `FILE_READ -> DB_WRITE -> MT101_BUILD_FROM_TABLE -> MT101_VALIDATE
   -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION` procesa una carga masiva por

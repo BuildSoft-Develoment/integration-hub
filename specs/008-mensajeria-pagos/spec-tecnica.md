@@ -1,5 +1,18 @@
 # Spec tecnica - Mensajeria de pagos
+> ## ⚠️ `MT101_BUILD` ya no existe
+>
+> Este documento configura y prescribe el task type `MT101_BUILD`. **Se des-registro** por no
+> escalar a alto volumen: la clase sobrevive como colaborador interno pero no implementa
+> `TaskProvider`, asi que el registry no la expone y no es seleccionable. La unica ruta de
+> construccion es `MT101_BUILD_FROM_TABLE`, que pagina desde `staging_record`.
+>
+> Catalogo vigente, generado desde el codigo:
+> [90.17-catalogo-de-tipos](../../docs/transversal/90.17-catalogo-de-tipos.md).
+>
+> Ojo con el JSON de ejemplo de la seccion `### MT101_BUILD — ⚠️ RETIRADO, el JSON de abajo NO funciona
 
+> El `taskType` correcto es `MT101_BUILD_FROM_TABLE`, y su configuracion NO es la de abajo: lee de
+> una tabla (`source.table` + `source.payloadColumn`), no de records en memoria.`: es **copiable y no funciona**.
 ## Componentes relacionados
 
 ### Backend (`platform-app`)

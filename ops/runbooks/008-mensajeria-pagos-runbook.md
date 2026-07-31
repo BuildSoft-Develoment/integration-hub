@@ -71,6 +71,9 @@ busca: nadie lo resuelve por ti.
 
 ## Las consolas
 
+> El frontend usa **hash routing** (`withHashLocation()`), asi que la URL completa lleva `#/`:
+> por ejemplo `https://<host>/appih/#/swift-mt101/pay-conflicts`. Sin el `#`, el servidor no resuelve.
+
 | Ruta | Para que |
 |---|---|
 | `/swift-mt101/pay-conflicts` | Inbox transversal de conflictos de pago. **El primero que hay que mirar.** |
@@ -91,7 +94,7 @@ Usar solo con diagnostico hecho. Ninguno reenvia un pago.
 | `POST /api/query/audit-spool/{id}/retry` | Reintenta el envio de una trama de auditoria. |
 | `POST /api/query/mt101-pay-dispatch-intents/reconcile` | Alinea el ledger de intencion con el terminal real del archivo. **Solo copia** un terminal ya conocido; nunca inventa uno. |
 | `POST /api/query/mt101-fragments/reprocess/...` | Reproceso acotado por estado, filas origen o reapertura de rechazados. |
-| `POST /api/query/process-executions/close-reconciled` | Cierra una ejecucion cuyos fragmentos ya estan todos resueltos. |
+| `POST /api/query/mt101-quarantine/process-executions/close-reconciled` | Cierra una ejecucion cuyos fragmentos ya estan todos resueltos. Exige `connectionRef`, `processExecutionId` y `reason`; sin `reason` responde 400. |
 
 ## Flujo maker-checker del acknowledge
 

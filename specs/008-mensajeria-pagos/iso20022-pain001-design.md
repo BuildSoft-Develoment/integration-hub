@@ -1,5 +1,16 @@
 # Diseño — ISO 20022 (pain.001)
-
+> ## ⚠️ `MT101_BUILD` ya no existe
+>
+> Este documento configura y prescribe el task type `MT101_BUILD`. **Se des-registro** por no
+> escalar a alto volumen: la clase sobrevive como colaborador interno pero no implementa
+> `TaskProvider`, asi que el registry no la expone y no es seleccionable. La unica ruta de
+> construccion es `MT101_BUILD_FROM_TABLE`, que pagina desde `staging_record`.
+>
+> Catalogo vigente, generado desde el codigo:
+> [90.17-catalogo-de-tipos](../../docs/transversal/90.17-catalogo-de-tipos.md).
+>
+> Este diseno ademas cita `provider/task/payments/iso20022/format/Pain001XmlFormatter.java`, ruta que
+> ya no existe: el vertical ISO 20022 vive en `vertical-iso20022/`.
 > **Estado**: **bootstrap activo** (formatter implementado + tests). Documenta
 > cómo se integra ISO 20022 `pain.001` a la vertical 008 sin romper
 > compatibilidad con el sub-catálogo `swift/`.
