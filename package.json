@@ -99,7 +99,7 @@
     "agent:review": "node scripts/agent-review.mjs",
     "agent:start": "node scripts/agent-start.mjs",
     "agent:finish": "node scripts/agent-finish.mjs",
-    "check:project": "npm run check:trace-drift && npm run check:trace-coverage && npm run check:bd-documented && npm run check:api-documented && npm run check:test-documented && npm run check:runbook-documented && npm run check:evidence-exists && npm run check:gates-mentioned && npm run check:status-coherence && npm run check:orphan-evidence && npm run check:prototype-diversity -- --strict && npm run check:openapi-coverage && npm run check:prototype-cross-links && npm run check:prototype-bidirectional-links && npm run check:prototype-location && npm run check:prototype-domain-mismatch && npm run check:auto-zones && npm run check:prototype-portfolio && npm run check:gate-status-format && npm run check:release-binding && npm run check:runbook-binding && npm run check:feature-dependencies && npm run check:phase-contract && npm run check:prototype-contract && npm run check:prototype-coverage && npm run check:prototype-spa-coherence && npm run check:prototype-mock-data && npm run check:tasks && npm run check:tasks-executable && npm run check:tdd-evidence && npm run check:task-reviews && npm run check:architecture-baseline && npm run check:phase-validator-sync && npm run check:plantillas && npm run check:validation-coverage && npm run check:api-vs-code && npm run check:rbac-vs-code && npm run check:rbac-consistency",
+    "check:project": "npm run check:trace-drift && npm run check:trace-coverage && npm run check:bd-documented && npm run check:api-documented && npm run check:test-documented && npm run check:runbook-documented && npm run check:evidence-exists && npm run check:gates-mentioned && npm run check:status-coherence && npm run check:orphan-evidence && npm run check:prototype-diversity -- --strict && npm run check:openapi-coverage && npm run check:prototype-cross-links && npm run check:prototype-bidirectional-links && npm run check:prototype-location && npm run check:prototype-domain-mismatch && npm run check:auto-zones && npm run check:prototype-portfolio && npm run check:gate-status-format && npm run check:release-binding && npm run check:runbook-binding && npm run check:feature-dependencies && npm run check:phase-contract && npm run check:prototype-contract && npm run check:prototype-coverage && npm run check:prototype-spa-coherence && npm run check:prototype-mock-data && npm run check:tasks && npm run check:tasks-executable && npm run check:tdd-evidence && npm run check:task-reviews && npm run check:architecture-baseline && npm run check:phase-validator-sync && npm run check:plantillas && npm run check:validation-coverage && npm run check:api-vs-code && npm run check:rbac-vs-code && npm run check:rbac-consistency && npm run gen:catalogo:check",
     "check:all": "npm run check:template && npm run check:project",
     "check:all:trace": "node scripts/check-all-trace.mjs",
     "validate": "node scripts/validate.mjs",
@@ -136,6 +136,8 @@
     "prototype:contract": "node scripts/prototype-contract.mjs",
     "prototype:prompt": "node scripts/prototype-prompt.mjs",
     "skills:frontmatter": "node scripts/skills-transpile.mjs --write-frontmatter",
-    "skills:transpile": "node scripts/skills-transpile.mjs --emit-claude --out .claude/skills"
+    "skills:transpile": "node scripts/skills-transpile.mjs --emit-claude --out .claude/skills",
+    "gen:catalogo": "node ci/scripts/gen-catalogo-tipos.mjs",
+    "gen:catalogo:check": "node ci/scripts/gen-catalogo-tipos.mjs --check"
   }
 }
