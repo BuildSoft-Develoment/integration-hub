@@ -39,9 +39,11 @@ Consecuencias directas, y son las que importan en operacion:
   funciona** detras del nginx de integracion. No se arregla con una variable de entorno ni con una
   regla de proxy: el `base-href` esta dentro del bundle.
 - **Es una decision opt-in.** Sin el perfil, dev local y cualquier despliegue en raiz siguen igual.
-- **La imagen base debe ser UBI9.** El builder Mandrel es UBI9 (glibc 2.34); la variante
-  `quarkus-micro-image:2.0` es UBI8 (glibc 2.28) y el runner **no arranca** —
-  `GLIBC_2.34 not found`.
+- **La imagen base debe ser `quay.io/quarkus/ubi9-quarkus-micro-image:2.0`.** El builder Mandrel
+  jdk-25 es UBI9 (glibc 2.34). Ojo con el nombre: hay **dos** imagenes micro y solo se distinguen
+  por el prefijo `ubi9-`. La que NO lo lleva, `quarkus-micro-image:2.0`, es UBI8 (glibc 2.28) y el
+  runner **no arranca** — `GLIBC_2.34 not found`. La correcta es micro tambien; el error no esta en
+  elegir micro sino en perder el prefijo.
 
 Y el modelo de entrega: **sin rebuild en destino**. Se construye la imagen aqui, se exporta con
 `docker save`, se carga con `docker load` en el servidor y se levanta con compose. El servidor no

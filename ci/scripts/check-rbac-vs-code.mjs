@@ -122,15 +122,39 @@ if (unresolved.size > 0) {
 
 // ── ADR ──────────────────────────────────────────────────────────────────────
 const adrText = readFileSync(adrPath, "utf8");
-// Roles documentados: tokens role-like (lowercase + guiones) en backticks dentro del ADR.
+// Roles documentados. Fuente preferente: el bloque delimitado `rbac-roles` del ADR, que es la lista
+// CANONICA escrita a mano.
+//
+// Antes se rascaban todos los tokens en backticks del documento entero y se filtraban con una
+// heuristica de forma (`/-admin$/`, `/^operator$/`...). El problema no es que fallara al detectar
+// roles, sino que no puede distinguir un rol de algo que se le PARECE: el ADR explica que
+// `audit-admin` es una capacidad semantica de la UI -no existe en el realm ni en ningun
+// @RolesAllowed- y el regex la reclamaba igualmente como "rol documentado huerfano". Un gate que
+// exige borrar documentacion correcta entrena a la gente a ignorarlo.
+//
+// Con el bloque, lo que cuenta como rol es una decision explicita del autor del ADR. Sin bloque se
+// mantiene la heuristica anterior, para no romper repositorios (ni el template) que aun no lo tengan.
+const ROLE_BLOCK_RE = /<!--\s*rbac-roles:start\s*-->([\s\S]*?)<!--\s*rbac-roles:end\s*-->/;
 const docRoles = new Set();
-let b;
-const backtickRe = /`([a-z][a-z0-9-]{2,})`/g;
-while ((b = backtickRe.exec(adrText)) !== null) {
-  // heuristica: descarta tokens que claramente no son roles (rutas, anotaciones, tipos).
-  const t = b[1];
-  if (t.includes("/") || t.includes(".") || t.startsWith("api") || t === "rolesallowed") continue;
-  docRoles.add(t);
+const roleBlock = adrText.match(ROLE_BLOCK_RE);
+let usedRoleBlock = false;
+if (roleBlock) {
+  // Dentro del bloque, un rol es el primer token en backticks de cada vinneta.
+  for (const line of roleBlock[1].split(/\r?\n/)) {
+    const m = line.match(/^\s*[-*]\s*`([a-z][a-z0-9-]{2,})`/);
+    if (m) docRoles.add(m[1]);
+  }
+  usedRoleBlock = docRoles.size > 0;
+}
+if (!usedRoleBlock) {
+  let b;
+  const backtickRe = /`([a-z][a-z0-9-]{2,})`/g;
+  while ((b = backtickRe.exec(adrText)) !== null) {
+    // heuristica: descarta tokens que claramente no son roles (rutas, anotaciones, tipos).
+    const t = b[1];
+    if (t.includes("/") || t.includes(".") || t.startsWith("api") || t === "rolesallowed") continue;
+    docRoles.add(t);
+  }
 }
 
 // ── Comparacion ───────────────────────────────────────────────────────────────

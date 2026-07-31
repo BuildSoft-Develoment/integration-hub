@@ -60,8 +60,18 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: maven
-      # forkCount=1: con paralelismo de forks, los cuatro motores compiten por CPU y memoria y aparecen
-      # fallos que NO son del codigo (timeouts de arranque, ORA-12514). Medido en local: con -T1C daba
-      # 11 errores y con forkCount=3 daba 3; con forkCount=1, cero.
+      # Un solo fork: con paralelismo, los cuatro motores compiten por CPU y memoria y aparecen fallos
+      # que NO son del codigo (timeouts de arranque, ORA-12514). Medido en local: con -T1C daba 11
+      # errores y con forkCount=3 daba 3; con un unico fork, cero.
+      #
+      # El flag era `-DforkCount=1` y era INERTE. Surefire declara el parametro en el POM como
+      # <forkCount>${test.fork.count}</forkCount>, y una configuracion explicita de plugin gana sobre
+      # la user property homonima: verificado con `help:effective-pom -DforkCount=99`, que sigue
+      # resolviendo a 1. La propiedad que hay que fijar es `test.fork.count`.
+      #
+      # Hoy el comportamiento no cambia -el POM ya la trae a 1 por defecto-, pero el flag anterior
+      # daba una garantia que no existia: si alguien subiera ese valor por defecto para acelerar el
+      # carril rapido, la matriz multi-motor habria empezado a fallar por contencion, con el workflow
+      # afirmando por escrito que estaba protegida.
       - name: Maven test (compat-db)
-        run: mvn -B -Pcompat-db-tests test -DforkCount=1
+        run: mvn -B -Pcompat-db-tests test -Dtest.fork.count=1

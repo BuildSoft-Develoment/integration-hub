@@ -40,19 +40,32 @@ Compresion UPX (`quarkus.native.compression.level=7`) ya en `application.propert
 > ⚠️ El subpath se **hornea en build-time** (base-href del SPA + `quarkus.http.root-path`).
 > La imagen por defecto sirve en `/`, NO en `/appih`.
 
-Cambios (aislados en una configuracion para no romper dev, que sigue en `/`):
-1. **Frontend base-href** = `/appih/` — configuracion de build de `web` (Nx) o `baseHref` en
-   las options del executor `@angular-architects/native-federation:build`.
-2. **Quarkus root-path** = `/appih` — `-Dquarkus.http.root-path=/appih` en el build.
+Son **dos** cosas las que hay que hornear, y el perfil Maven `appih` las hace las dos de golpe
+(ADR-024). Esta aislado en un perfil opt-in para no romper dev, que sigue en `/`:
+
+1. **Quarkus root-path** = `/appih` — donde se montan la API y los endpoints de plataforma.
+2. **Frontend base-href** = `/appih/` — el perfil cambia el comando de build de Quinoa a
+   `run build:appih`, que es la configuracion `appih` de Nx.
+
+> **No basta con `-Dquarkus.http.root-path=/appih`**, que es lo que decia este README antes. Eso
+> mueve el backend pero deja el SPA compilado para `/`: el bundle pide sus assets a `/main-xxxx.js`,
+> detras del subpath esa ruta no existe y la aplicacion arranca en **pagina en blanco**. Es
+> exactamente el fallo que ADR-024 documenta. Usa `-Pnative,appih`.
 
 ```bash
-mvn -pl platform-app -am clean package -Dmaven.test.skip=true -Pnative \
-  -Dquarkus.native.container-build=true -Dquarkus.http.root-path=/appih
-# (+ base-href /appih/ en el frontend)
+mvn -B -pl platform-app -am clean package -Dmaven.test.skip=true -Pnative,appih \
+  -Dquarkus.native.container-build=true
 docker build -f ops/fase-7-deploy/dist/common/Dockerfile.native \
   --build-arg RUNNER=platform-app/target/platform-app-0.0.1-SNAPSHOT-runner \
   -t integration-hub:native-appih .
 ```
+
+Aqui `-am` **si** es correcto: los dos verticales son dependencias declaradas de `platform-app`, no
+modulos hermanos. (En `audit-consumer`, que es hermano, `-am` no lo arrastraria; por eso tiene su
+propio bloque abajo.)
+
+El script `run-native-build-appih.cmd` de la raiz ejecuta exactamente este comando. El build tarda
+~25 min y su exito se verifica por el **timestamp del runner**, no por el eco del script.
 
 ### 1b. audit-consumer NATIVO
 
