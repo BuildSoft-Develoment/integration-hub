@@ -70,11 +70,16 @@ Tabla `audit_record_event`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
+| `id` | bigserial | PK |
 | `event_id` | varchar(64) | idempotencia |
 | `trace_id` | varchar(120) | ejecucion/archivo |
 | `record_id` | varchar(64) | registro o mensaje |
 | `stage` | varchar(80) | etapa E2E |
 | `status` | varchar(30) | estado de etapa |
+| `process_execution_id` | bigint | ejecucion que emitio la trama; sin ella los conflictos de pago se emiten sin correlacion |
+| `task_definition_id` | bigint | tarea que emitio la trama |
+| `message` | text | descripcion legible |
+| `payload_json` | text | detalle serializado |
 | `standard` | varchar(20) | SWIFT/ISO20022/etc. |
 | `message_type` | varchar(30) | MT101/pain.001/etc. |
 | `source_file_name` | varchar(255) | archivo origen |
@@ -85,7 +90,18 @@ Tabla `audit_record_event`:
 | `transaction_reference` | varchar(40) | MT101 `:21:` |
 | `uetr` | varchar(36) | UETR |
 | `archive_id` | bigint | id interno de archivo de pago |
-| `gateway_reference` | varchar(120) | id banco/gateway |
+| `gateway_reference` | varchar(255) | id banco/gateway. En SFTP es la ruta completa del archivo depositado; por eso V104 la ensancho desde varchar(120) |
+| `event_ts` | timestamp | instante de emision |
+| `ingested_at` | timestamp | instante de escritura |
+
+Indices: `ux_audit_record_event_event_id` (`event_id`, UNIQUE — es la idempotencia),
+`ix_audit_record_event_record` (`record_id`, `event_ts`), `ix_audit_record_event_trace`
+(`trace_id`, `event_ts`), y los operacionales de V23 por clave de negocio:
+`ix_audit_record_event_file_row` (`source_file_hash`, `record_number`, `event_ts`),
+`ix_audit_record_event_payment_ref`, `ix_audit_record_event_tx_ref`,
+`ix_audit_record_event_uetr`, `ix_audit_record_event_archive`,
+`ix_audit_record_event_business_hash` (todos con `event_ts` como segunda columna), mas el parcial
+`ix_audit_record_event_gateway_reference` de V104.
 
 Tabla `audit_dead_letter_event`: conserva mensajes de auditoria no parseables con
 broker, topic, payload y error.
@@ -94,22 +110,27 @@ Tabla `audit_spool`:
 
 | Columna | Tipo | Notas |
 |---|---|---|
-| `event_id` | varchar | id del envelope |
-| `trace_id` | varchar | correlacion de ejecucion |
-| `topic` | varchar | destino MQ |
-| `partition_key` | varchar | clave estable de orden |
-| `spool_status` | varchar | `PENDING`/`IN_FLIGHT`/`SENT`/`DEAD` |
+| `id` | bigserial | PK |
+| `event_id` | varchar(64) | id del envelope |
+| `trace_id` | varchar(120) | correlacion de ejecucion |
+| `topic` | varchar(160) | destino MQ |
+| `partition_key` | varchar(120) | clave estable de orden |
+| `payload` | text | trama serializada pendiente de publicar |
+| `spool_status` | varchar(16) | `PENDING`/`IN_FLIGHT`/`SENT`/`DEAD` |
 | `attempts` | integer | reintentos acumulados |
 | `last_error` | text | ultimo error recuperable |
 | `locked_by` | varchar | relay que tomo lease |
 | `locked_at` | timestamp | inicio de lease |
 | `next_attempt_at` | timestamp | backoff |
+| `created_at` | timestamp | alta en el spool |
 | `sent_at` | timestamp | confirmacion de publish |
 | `dead_at` | timestamp | entrada a DLQ operacional |
 | `dead_reason` | text | error terminal |
 
-Indices operativos: `ix_audit_spool_due` (`spool_status`, `next_attempt_at`,
-`id`), `ix_audit_spool_locked`, `ix_audit_spool_dead`.
+Indices: `ux_audit_spool_event_id` (`event_id`, UNIQUE — es la idempotencia del spool),
+`ix_audit_spool_pending` (`spool_status`, `id`), y los operativos de V24:
+`ix_audit_spool_due` (`spool_status`, `next_attempt_at`, `id`), `ix_audit_spool_locked`
+(`spool_status`, `locked_at`) e `ix_audit_spool_dead` (`spool_status`, `dead_at`).
 
 ## Consideraciones tecnicas
 

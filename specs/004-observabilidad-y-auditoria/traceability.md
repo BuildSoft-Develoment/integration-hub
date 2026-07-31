@@ -27,7 +27,7 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-003 | - | - | - | GET /api/query/process-executions/{processExecutionId}/children | process_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | execution-lineage | execution-editor.store.spec.ts |
 | RF-004 | - | - | - | GET /api/query/overview-summary | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | overview-metric-card + overview-table-card | overview.store.spec.ts |
 | RF-005 | - | - | - | GET /api/query/audit-events | audit_event | AuditService | StreamingPipelineServiceTest | Implementado | tdd-evidence.md | execution-editor-summary, audit-editor | audit.store.spec.ts |
-| RF-006 | - | - | - | MQ audit-events | audit_spool, audit_event, audit_dead_letter_event | OutboxRelay | KafkaPublishIT | Implementado | tdd-evidence.md | audit-list | audit.store.spec.ts |
+| RF-006 | - | - | - | MQ audit-events | audit_spool | OutboxRelay | KafkaPublishIT | Implementado | tdd-evidence.md | audit-list | audit.store.spec.ts |
 | RF-007 | - | - | - | GET /api/query/record-lineage | audit_record_event | RecordLineageResource | PostgresColdStoreTest | Implementado | tdd-evidence.md | record-lineage | audit-api.service.ts |
 | RF-008 | - | - | - | GET/POST/DELETE /api/query/audit-spool/* | audit_spool | AuditSpoolResource | - | Implementado | tdd-evidence.md | audit-spool | web build |
 | RF-009 | - | - | - | GET /api/query/mt101-fragments/source-row | mt101_build_fragment | Mt101FragmentLookupResource | - | Implementado | tdd-evidence.md | mt101-fragment-lookup | web build |

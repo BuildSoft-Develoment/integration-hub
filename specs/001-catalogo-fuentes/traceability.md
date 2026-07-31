@@ -28,7 +28,7 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-004 | HU-01 | - | - | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | tdd-evidence.md | source-type-form (campos `${secret:...}`) | - |
 | RF-005 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | tdd-evidence.md | - (insumo backend de FILE_READ) | - |
 | RF-006 | HU-01 | - | - | POST /api/source-definitions | source_definition (`s3`/`gcs`/`azure-blob`) | S3SourceProvider | - | front+back (JVM); native/QA/gate pendiente | spec-tecnica.md (cloud) | source-{s3,gcs,azure-blob}-form (hecho) | - |
-| RF-007 | HU-01 | - | - | POST /api/source-definitions | configuration_json (`authMode`) | FileVaultSecretValueProvider | - | front+back (JVM); native/QA/gate pendiente | spec-tecnica.md (cloud) | source-{s3,gcs,azure-blob}-form (auth) | - |
+| RF-007 | HU-01 | - | - | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | - | front+back (JVM); native/QA/gate pendiente | spec-tecnica.md (cloud) | source-{s3,gcs,azure-blob}-form (auth) | - |
 | RF-008 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | SourcePayload | - | hecho (streaming); native/QA pendiente | spec-tecnica.md (cloud) | - (insumo backend de FILE_READ) | - |
 
 ## Trazabilidad UI por tipo de fuente (RF-001 / RF-003)

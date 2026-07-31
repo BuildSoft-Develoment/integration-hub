@@ -27,14 +27,14 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-003 | - | - | - | POST /api/process-definitions/{processDefinitionId}/activation/{active} | process_definition | ProcessSchedulerService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | process-toolbar, process-list | process-catalog.store.spec.ts |
 | RF-004 | - | - | - | POST /api/process-definitions | process_execution | StreamingPipelineService | StreamingPipelineServiceTest | Implementado | tdd-evidence.md | process-editor-actions (trigger) | process-flow-api.service.spec.ts |
 | RF-005 | - | - | - | GET /api/query/process-executions | process_execution | ProcessExecutionService | FileReadTaskFastPathTest | Implementado | tdd-evidence.md | - (insumo Observabilidad 004) | - |
-| RF-006 | - | - | - | POST /api/process-definitions | process_task_definition.configuration_json (`taskRef`) | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
-| RF-007 | - | - | - | POST /api/process-definitions | configuration_json (`input`/`sourceOutput`) | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-board | - |
-| RF-008 | - | - | - | POST /api/process-definitions | metadata runtime (transversal) | TaskOutputSupport | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-context.service | - |
-| RF-009 | - | - | - | POST /api/process-definitions | configuration_json (`executionMode`) | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
-| RF-010 | - | - | - | POST /api/process-definitions | configuration_json (`batchSize`/checkpoint) | TaskOutputRegistry | TaskOutputRegistryTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
-| RF-011 | - | - | - | POST /api/process-definitions | configuration_json (`inputs` fan-in) | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-flow-* | - |
-| RF-012 | - | - | - | POST /api/process-definitions | configuration_json (mapping comun) | TaskInputResolver | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-board | - |
-| RF-013 | - | - | - | POST /api/process-definitions | outputs materializados / cursor | StreamingPipelineService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | - | - |
+| RF-006 | - | - | - | POST /api/process-definitions | process_task_definition | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| RF-007 | - | - | - | POST /api/process-definitions | process_task_definition | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-board | - |
+| RF-008 | - | - | - | POST /api/process-definitions | - | TaskOutputSupport | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-context.service | - |
+| RF-009 | - | - | - | POST /api/process-definitions | process_task_definition | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| RF-010 | - | - | - | POST /api/process-definitions | process_task_definition | TaskOutputRegistry | TaskOutputRegistryTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| RF-011 | - | - | - | POST /api/process-definitions | process_task_definition | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-flow-* | - |
+| RF-012 | - | - | - | POST /api/process-definitions | process_task_definition | TaskInputResolver | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-board | - |
+| RF-013 | - | - | - | POST /api/process-definitions | - | StreamingPipelineService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | - | - |
 
 ## Trazabilidad UI por tipo de tarea (RF-002)
 

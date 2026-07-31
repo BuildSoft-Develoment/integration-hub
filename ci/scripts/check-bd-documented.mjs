@@ -128,14 +128,23 @@ function extractTypeWord(typeCell) {
 //   "REFERENCES usuario(id)"  -> {table:"usuario", column:"id"}
 //   "FK usuario.id"           -> {table:"usuario", column:"id"}
 //   "FK usuario"              -> {table:"usuario", column:null}
+//   "FK NULL -> usuario.id"   -> {table:"usuario", column:"id"}
+//
+// El modificador de nulabilidad va entre `FK` y el destino, y hay que SALTARLO. TYPE_MODIFIERS ya
+// declara arriba que `NULL` y `NOT` son modificadores aceptados, pero este extractor no los conocia:
+// ante `FK NULL -> process_execution.id` capturaba "NULL" como nombre de tabla y reportaba
+// "FKs que apuntan a tablas no documentadas: process_execution_id -> null". Y no es una forma
+// rebuscada: esa FK del camino del dinero es nullable con ON DELETE SET NULL a proposito, asi que
+// documentar la nulabilidad es justo lo correcto.
+const FK_NULLABILITY = "(?:NOT\\s+NULL|NULL)?\\s*";
 function extractFkTarget(cellText) {
   if (!cellText) return null;
   const s = String(cellText);
   const patterns = [
     { re: /apunta\s+a\s+`?([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)`?/i, hasCol: true },
     { re: /REFERENCES\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?\s*\(\s*`?([a-zA-Z_][a-zA-Z0-9_]*)`?\s*\)/i, hasCol: true },
-    { re: /(?:FK|REFERENCES)\s*(?:->)?\s*`?([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)`?/i, hasCol: true },
-    { re: /(?:FK|REFERENCES)\s*(?:->)?\s*`?([a-zA-Z_][a-zA-Z0-9_]*)`?/i, hasCol: false },
+    { re: new RegExp(`(?:FK|REFERENCES)\\s*${FK_NULLABILITY}(?:->)?\\s*\`?([a-zA-Z_][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)\`?`, "i"), hasCol: true },
+    { re: new RegExp(`(?:FK|REFERENCES)\\s*${FK_NULLABILITY}(?:->)?\\s*\`?([a-zA-Z_][a-zA-Z0-9_]*)\`?`, "i"), hasCol: false },
   ];
   for (const p of patterns) {
     const m = s.match(p.re);
@@ -286,10 +295,23 @@ for (const item of incomplete) {
   dedupIncomplete.push(item);
 }
 
+// Deduplicar missing por nombre, igual que incomplete. Sin esto el contador cuenta FILAS de
+// ai_trace_links, no tablas: un `configuration_json` mal puesto en diez filas de la matriz se
+// anunciaba como "18 tabla(s) sin documentar" cuando eran CINCO cadenas distintas -y ninguna era
+// una tabla-. Un numero inflado manda a buscar donde no hay nada.
+const dedupMissing = [];
+const seenMissing = new Set();
+for (const m of missing) {
+  if (seenMissing.has(m.name)) continue;
+  seenMissing.add(m.name);
+  dedupMissing.push(m);
+}
+
 let exitCode = 0;
-if (missing.length > 0) {
-  console.error(`BD SIN DOCUMENTAR: ${missing.length} tabla(s) sin marca canonica en spec-tecnica.md.`);
-  for (const m of missing) {
+if (dedupMissing.length > 0) {
+  const veces = dedupMissing.length === missing.length ? "" : ` (en ${missing.length} filas de la matriz)`;
+  console.error(`BD SIN DOCUMENTAR: ${dedupMissing.length} tabla(s) sin marca canonica en spec-tecnica.md${veces}.`);
+  for (const m of dedupMissing) {
     console.error(`  - "${m.name}" declarada por ${m.source_ref} en ${m.source_file}`);
   }
   console.error("");
