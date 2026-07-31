@@ -31,11 +31,20 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 
 ## Flujo principal (outbound MT101, sprint 1)
 
-1. Disenar proceso con la cadena `FILE_READ -> MT101_BUILD -> MT101_VALIDATE ->
-   MT101_ARCHIVE -> MT101_PAY -> MT101_STATUS -> NOTIFICATION` para archivos
-   pequenos/medianos, o `FILE_READ -> DB_WRITE(staging) -> MT101_BUILD_FROM_TABLE
-   -> MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION` para cargas
-   masivas.
+1. Disenar proceso con la cadena `FILE_READ -> DB_WRITE(staging) ->
+   MT101_BUILD_FROM_TABLE -> MT101_VALIDATE -> [MT101_ROUTE] -> MT101_ARCHIVE ->
+   MT101_PAY -> [MT101_STATUS] -> NOTIFICATION`. `MT101_ROUTE` solo si se despacha
+   por canales distintos segun el mensaje; `MT101_STATUS` si se concilia inline.
+
+   > **Correccion (2026-07-31).** Esta spec prescribia una segunda cadena "para archivos
+   > pequenos/medianos" basada en `MT101_BUILD`. **Ese task type ya no existe**: se des-registro
+   > por no escalar a alto volumen, y el propio codigo lo dice
+   > (`Mt101BuildTaskProvider`: *"Ya no es un task type registrado"*). La clase sobrevive como
+   > colaborador interno de `MT101_BUILD_FROM_TABLE`, pero **no implementa `TaskProvider`**, asi que
+   > el registry no la expone y no es seleccionable en el editor de procesos.
+   >
+   > Quien disenara un proceso siguiendo la cadena anterior obtenia un tipo inexistente. La unica
+   > ruta de construccion es la de tabla, que pagina desde `staging_record`.
 2. Configurar header MT101 (envelope, sequence A) y mappings de transacciones
    (sequence B) sobre los campos del reader.
 3. Ejecutar manual o programado.
@@ -55,9 +64,9 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 
 ### Catalogo de task types (sprint 1, sub-catalogo `swift/`)
 
-- RF-001 task type `MT101_BUILD` compone uno o varios mensajes MT101 a partir de
-  un header logico y N transacciones (records o table), en formato `JSON`, `XML` o
-  `FIN` configurable.
+- ~~RF-001 task type `MT101_BUILD`~~ **RETIRADO**: el tipo se des-registro. Su capacidad la cubre
+  RF-022 (`MT101_BUILD_FROM_TABLE`), que ademas pagina y por eso escala. La logica de composicion
+  sobrevive como colaborador interno, no como task type.
 - RF-002 task type `MT101_VALIDATE` aplica reglas de validacion del estandar
   (NVR SWIFT) como **catalogo parametrizable**, sin enumerar codigos especificos
   en este spec; clasifica issues por severidad (`ERROR`, `WARNING`, `INFO`).
@@ -141,7 +150,7 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - El campo `:50a:` Ordering Customer va en Sequence A xor en cada Sequence B,
   nunca en ambas (regla del estandar; implementada como una de las reglas del
   catalogo NVR).
-- `MT101_BUILD` declara `debitAccountMode`: `singleDebit` coloca `:50a:` en
+- La construccion (`MT101_BUILD_FROM_TABLE`) declara `debitAccountMode`: `singleDebit` coloca `:50a:` en
   Sequence A; `multipleDebit` y `subsidiary` obligan a mapear `:50a:` por cada
   transaccion en Sequence B.
 - Las referencias `:20:` y `:21:` no se truncan silenciosamente; si exceden 16
@@ -176,7 +185,7 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 
 ## Criterios de aceptacion
 
-- Existen task providers registrables `MT101_VALIDATE`, `MT101_BUILD`,
+- Existen task providers registrables `MT101_VALIDATE`, `MT101_BUILD_FROM_TABLE`,
   `MT101_ARCHIVE`, `MT101_PAY` (sprint 1) y los restantes en sus sprints.
 - El motor (spec 003) consume estos task types via SPI sin conocer su semantica.
 - Un proceso `FILE_READ -> MT101_BUILD -> MT101_VALIDATE -> MT101_ARCHIVE ->
