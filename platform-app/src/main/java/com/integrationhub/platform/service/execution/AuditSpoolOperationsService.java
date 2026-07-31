@@ -1,3 +1,4 @@
+// @trace RF-008 (observabilidad-y-auditoria: operaciones del spool)
 package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.entity.AuditSpool;

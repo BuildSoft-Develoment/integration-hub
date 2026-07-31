@@ -1,3 +1,4 @@
+// @trace RF-007 (observabilidad-y-auditoria: cold-store de auditoria)
 package com.integrationhub.auditconsumer.coldstore;
 
 import com.integrationhub.platform.audit.AuditEnvelope;

@@ -1,3 +1,4 @@
+// @trace RF-006 (observabilidad-y-auditoria: consumo de la trama de auditoria)
 package com.integrationhub.auditconsumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;

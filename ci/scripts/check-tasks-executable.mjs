@@ -71,7 +71,7 @@ if (existsSync(specsDir)) {
       blockers.push(`specs/${e.name}/spec-tareas.md:1: la tabla no tiene filas de datos (encabezado + separador + ≥1 fila)`);
       continue;
     }
-    // Header (linea 0), separador (linea 1), datos (lineas 2+).
+    // Header (linea 0), separador (linea 1), datos (el resto).
     const header = parseRow(lines[0]);
     if (!validHeader(header)) {
       blockers.push(`specs/${e.name}/spec-tareas.md:1: encabezado de tabla invalido. Esperado: ${COL_NAMES.join(" | ")}`);
@@ -80,7 +80,17 @@ if (existsSync(specsDir)) {
     const seenIds = new Set();
     const testIds = new Set();
     const rowsAll = [];
+    // Se saltan cabeceras y separadores DONDE SEA, no solo las dos primeras lineas.
+    //
+    // La seccion "Tabla ejecutable de tareas" puede contener varias sub-tablas -spec 008 tiene una
+    // por sprint, cada una bajo su `###`-, que es estructura legitima y util. Al aplanar de `##` a
+    // `##` y saltar solo dos lineas, las cabeceras de la segunda y la tercera sub-tabla entraban
+    // como filas de datos y producian 14 bloqueantes fantasma: id "id", id "---", estado "estado",
+    // rf "rf", id duplicado "id"... El documento estaba bien; el parser era fragil.
+    const isSeparator = (l) => /^\|[\s:|-]+\|?$/.test(l.trim());
+    const isHeader = (l) => /^\|\s*id\s*\|/i.test(l.trim());
     for (let i = 2; i < lines.length; i += 1) {
+      if (isSeparator(lines[i]) || isHeader(lines[i])) continue;
       const cells = parseRow(lines[i]);
       if (cells.length !== COL_NAMES.length) {
         blockers.push(`specs/${e.name}/spec-tareas.md:${i + 1}: fila tiene ${cells.length} columnas; esperado ${COL_NAMES.length}`);
@@ -94,8 +104,26 @@ if (existsSync(specsDir)) {
       if (seenIds.has(row.id)) blockers.push(`${rel}: id duplicado "${row.id}"`);
       seenIds.add(row.id);
       if (row.tipo === "test") testIds.add(row.id);
-      if (!/^(RF|RNF)-[A-Z0-9-]+$/.test(row.rf)) blockers.push(`${rel}: ${row.id} rf "${row.rf}" no matchea RF-XX o RNF-XX`);
-      else if (rfsInSpec.size > 0 && !rfsInSpec.has(row.rf)) blockers.push(`${rel}: ${row.id} rf "${row.rf}" no existe en spec-funcional.md`);
+      // La celda admite VARIOS requisitos separados por coma, y se valida cada uno.
+      //
+      // Antes exigia exactamente uno. Una tarea puede implementar varios requisitos y la spec del
+      // camino del dinero lo hace: el formulario de pagos cubre RF-001..RF-004, MT101_PAY cubre
+      // RF-004 y RF-016. Colapsar esas celdas a "el RF principal" para contentar al gate habria
+      // dejado SIN NINGUNA TAREA a RF-004 (MT101_PAY), RF-014, RF-016, RF-021 y RF-022
+      // (MT101_BUILD_FROM_TABLE) — medido. Es decir, habria borrado la trazabilidad de lo mas
+      // critico del producto a cambio de un semaforo verde.
+      //
+      // Lo que si se exige es que la celda sea una lista de identificadores, sin rangos en prosa
+      // ("RF-001 a RF-004", "RF-005..RF-008"): un rango no es verificable sin interpretar.
+      const rfTokens = row.rf.split(",").map((s) => s.trim()).filter(Boolean);
+      const rfShapeOk = rfTokens.length > 0 && rfTokens.every((t) => /^(RF|RNF)-[A-Z0-9-]+$/.test(t));
+      if (!rfShapeOk) {
+        blockers.push(`${rel}: ${row.id} rf "${row.rf}" no es una lista de RF-XX o RNF-XX separados por coma`);
+      } else if (rfsInSpec.size > 0) {
+        for (const t of rfTokens) {
+          if (!rfsInSpec.has(t)) blockers.push(`${rel}: ${row.id} rf "${t}" no existe en spec-funcional.md`);
+        }
+      }
       if (!VALID_TIPO.has(row.tipo)) blockers.push(`${rel}: ${row.id} tipo "${row.tipo}" no valido (esperado: ${[...VALID_TIPO].join("|")})`);
       if (!VALID_ESTADO.has(row.estado)) blockers.push(`${rel}: ${row.id} estado "${row.estado}" no valido (esperado: ${[...VALID_ESTADO].join("|")})`);
       // Strict cuando estado != pending: no se aceptan placeholders.

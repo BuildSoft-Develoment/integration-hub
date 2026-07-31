@@ -5621,15 +5621,21 @@ function harvestTraceFromSource(root, db) {
   // Limpiar links previos de tipo source (cosechados) antes de repoblar.
   // v12.22: tambien se identifican por origin='source-harvest' para futura limpieza.
   db.exec("DELETE FROM ai_trace_links WHERE source_type = 'source' OR origin = 'source-harvest'");
-  // v12.41: harvest siempre genera links de tipo 'codigo' (target HU/RF/RNF/ADR
-  // que son documentales). El display_status apropiado es 'documented' para los
-  // documentales (HU/RF/RNF/ADR). Se calcula por fila.
+  // El harvest genera links cuyo target es HU/RF/RNF/ADR. El comentario original ya decia que el
+  // display_status "se calcula por fila", pero el SQL lo tenia CABLEADO a 'documented' para todos.
+  //
+  // Para HU/RF/RNF acierta por casualidad -son DOCUMENTAL_TARGETS y su display es 'documented'-,
+  // pero 'adr' no esta en DOCUMENTAL_TARGETS ni en NON_CODE_TARGETS, asi que computeDisplayStatus
+  // devuelve el propio link_status: 'implemented'. Resultado: 91 filas con display 'documented' que
+  // check-status-coherence reclamaba, y el consejo del gate ("corre memory:sync") no las arreglaba
+  // nunca porque el sync vuelve a escribir el mismo literal. Ahora se calcula de verdad, con la
+  // misma funcion que usa el gate.
   const insert = db.prepare(`
     INSERT INTO ai_trace_links(
       source_type, source_ref, target_type, target_ref, relation,
       confidence, evidence_ref, link_status, origin, source_file, display_status
     )
-    VALUES ('source', ?, ?, ?, ?, ?, ?, 'implemented', 'source-harvest', ?, 'documented')
+    VALUES ('source', ?, ?, ?, ?, ?, ?, 'implemented', 'source-harvest', ?, ?)
   `);
   // Captura la palabra clave + UNA LISTA de codigos separados por coma:
   //   `@trace RF-001` y tambien `@trace RF-001, RF-002, RF-003`.
@@ -5667,7 +5673,8 @@ function harvestTraceFromSource(root, db) {
         const upTo = text.slice(0, m.index);
         const line = upTo.split("\n").length;
         const evidenceRef = `${rel}:${line} @${tag} ${target}`;
-        insert.run(rel, targetType, target, relation, 0.8, evidenceRef, rel);
+        insert.run(rel, targetType, target, relation, 0.8, evidenceRef, rel,
+          computeDisplayStatus("implemented", targetType));
         count += 1;
         }
       }
