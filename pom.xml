@@ -108,6 +108,14 @@
                 <!-- Ejecuta solo la matriz multi-motor: mvn -Pcompat-db-tests test. -->
                 <groups>compat-db</groups>
                 <test.excluded.groups>perf</test.excluded.groups>
+                <!-- Un solo fork, fijado AQUI y no solo en el workflow: con paralelismo los cuatro
+                     motores compiten por CPU y memoria y aparecen fallos que no son del codigo
+                     (timeouts de arranque, ORA-12514). Medido: -T1C daba 11 errores, forkCount=3
+                     daba 3, un unico fork cero. Coincide con el default global, pero atarlo al
+                     perfil hace que la garantia viaje con el carril: quien suba el default para
+                     acelerar el carril rapido no rompe la matriz sin darse cuenta, y un
+                     `mvn -Pcompat-db-tests test` local se comporta como el CI sin recordar el -D. -->
+                <test.fork.count>1</test.fork.count>
             </properties>
         </profile>
         <profile>

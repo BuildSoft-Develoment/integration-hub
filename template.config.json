@@ -47,8 +47,11 @@
     "codeScanDirs": [
       "platform-app/src/main/java",
       "platform-spi/src/main/java",
+      "platform-contract/src/main/java",
       "vertical-swift-mt101/src/main/java",
-      "vertical-iso20022/src/main/java"
+      "vertical-iso20022/src/main/java",
+      "audit-consumer/src/main/java",
+      "ejemplos/backend-plugin-sidecar/src/main/java"
     ]
   },
   "observability": {

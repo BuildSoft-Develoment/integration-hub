@@ -20,8 +20,10 @@ token es la URL publica y es consistente entre browser y app (nginx tiene el ali
 - **keycloak** — realm `integration-hub` en `/iam`, detras de proxy.
 - **postgres** — BD operacional (app + audit-consumer).
 - **kafka** — UNICO broker (async dispatch + backbone de auditoria).
-- **clickhouse** (+ `clickhouse-init`) — store FRIO de auditoria (`audit.cold-store=CLICKHOUSE`).
-- **audit-consumer** — NATIVO; consume de Kafka -> persiste en ClickHouse.
+- **audit-consumer** — NATIVO; consume de Kafka y persiste en **postgres**. El cold-store es
+  `audit.cold-store.type=POSTGRES`, que es el valor por defecto: **ClickHouse esta diferido y no hay
+  servicio `clickhouse` en el compose**. La dependencia `clickhouse-jdbc` sigue en el classpath, por
+  eso el aviso de reflexion nativa de mas abajo continua vigente.
 - **minio** (+init de buckets) — S3 (staging de plugins + fuentes).
 - **sftp-source** / **ftp-source** — `SftpSourceProvider` / `FtpSourceProvider`.
 - **sftp-bank** — inbox del "banco" para el money-path **PAY** (FIN MT101 upload-with-rename) + STATUS.
@@ -100,13 +102,21 @@ Navegar `http://app.buildsoft.com.pe/appih` -> login por `/iam` -> app.
 | FTP source  | Igual con `ftp-source` (user `ihftp`). |
 | S3 source   | MinIO (`minio:9000`, bucket `ih-source-inbox`). |
 | PAY money-path | Proceso MT101 PAY -> entrega el FIN al `sftp-bank` (`inbox/`), STATUS lo relee. |
-| Auditoria   | `audit-consumer` (nativo) consume de Kafka -> ClickHouse (`audit_record_event`, ReplacingMergeTree). |
+| Auditoria   | `audit-consumer` (nativo) consume de Kafka -> **postgres** (`audit_record_event`). El esquema ClickHouse existe en el repo pero su servicio no se levanta aqui. |
 
 ### Smoke rapido de INFRA en `/` (sin la imagen /appih)
 
 Valida el wiring de containers con la imagen por defecto `integration-hub:native` (sirve en
 `/`, no `/appih`), usando `smoke/` (nginx-root + realm-root, puerto 8080). Util antes de
 invertir en el build `/appih`:
+
+> **`smoke/realm-root.json` es un realm REDUCIDO a proposito**: define cinco roles y cuatro
+> usuarios, sin `pay-conflict-maker` ni `pay-conflict-checker`. Es coherente con lo que este carril
+> valida —que los contenedores levantan y se hablan— y con que corra antes de gastar 25 minutos en
+> el build nativo. La consecuencia hay que tenerla presente: **el four-eyes del camino del dinero no
+> se puede ejercitar aqui**, porque no hay forma de asignar el rol que el backend exige. Para eso, el
+> stack completo con `int/keycloak/integration-hub-realm.json`, que trae los siete roles y los
+> usuarios `pay-maker` / `pay-checker`.
 
 ```bash
 cd ops/fase-7-deploy/dist/onprem
@@ -125,7 +135,7 @@ apuntando los `proxy_pass` a los upstreams reales. Los `X-Forwarded-*` son los m
 
 ## Notas
 
-- La imagen `quarkus-micro-image` no trae `curl` -> sin healthcheck HTTP en Compose (en K8s
+- La imagen `ubi9-quarkus-micro-image` no trae `curl` -> sin healthcheck HTTP en Compose (en K8s
   lo hace el kubelet). Ver `../../common/Dockerfile.native`.
 - Realm de integracion: `keycloak/integration-hub-realm.json` (redirects al URL publico
   `/appih`). El de dev (`/keycloak/integration-hub-realm.json`, localhost:8080) queda intacto.

@@ -12,7 +12,9 @@
  *     documentado, y que NINGUN rol documentado haya desaparecido del codigo.
  *
  * Generico/portable:
- *   - Dirs de codigo de template.config.json (api.codeScanDirs); default platform-app/src/main/java.
+ *   - Dirs de codigo de template.config.json (api.codeScanDirs); si no estan, TODOS los modulos Java
+ *     del reactor (JAVA_MODULES).
+ *   - Roles documentados: el bloque `rbac-roles` del ADR si existe; si no, heuristica de backticks.
  *   - ADR: docs/fase-3-arquitectura/adr/ADR-003-rbac-endpoint-rol.md (override --adr).
  *   - Si no hay backend o no hay ADR -> N/A, exit 0 (p.ej. el template).
  *
@@ -25,6 +27,8 @@ process.removeAllListeners("warning");
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+
+import { JAVA_MODULES } from "./_lib/source-roots.mjs";
 import process from "node:process";
 
 const argv = process.argv.slice(2);
@@ -41,7 +45,11 @@ function readScanDirs() {
       if (dirs && dirs.length) return dirs;
     } catch { /* ignora */ }
   }
-  return ["platform-app/src/main/java"];
+  // Fallback derivado del reactor, no cableado a un solo modulo: si `template.config.json` no
+  // declara los dirs, se escanean TODOS los modulos Java. Con la lista fija en `platform-app` un
+  // @RolesAllowed en cualquier otro modulo era invisible y el gate salia en verde, que es el mismo
+  // verde falso por el que existe `_lib/source-roots.mjs`.
+  return JAVA_MODULES.map((m) => `${m}/src/main/java`);
 }
 
 const scanDirs = readScanDirs().map((d) => join(root, d)).filter((d) => existsSync(d));
