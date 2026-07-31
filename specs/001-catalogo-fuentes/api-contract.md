@@ -22,6 +22,9 @@
 ### POST /api/source-definitions/{sourceDefinitionId}/activation/{active}
 **Trace**: `RF-002` · **Auth**: platform-admin, integration-admin · Activa o desactiva una fuente.
 
+### GET /api/source-types
+**Trace**: `RF-001` · **Auth**: platform-admin, integration-admin, auditor · Lista el catalogo de source types locales y aportados por plugins con type, origin, provider, pluginId, pluginVersion, transport, status y reason, espejo de reader-types, para poblar el selector de tipos de fuente y marcar los no confiables.
+
 ## Paths OpenAPI
 
 ```yaml
@@ -89,6 +92,13 @@ paths:
     get:
       summary: Lista (query) las fuentes con filtros (q, type, status) y paginacion
       operationId: querySourceDefinitions
+      responses:
+        '200':
+          description: OK
+  /api/source-types:
+    get:
+      summary: Lista el catalogo de source types locales y aportados por plugins con type, origin, provider, pluginId, plugin
+      operationId: listSourceTypes
       responses:
         '200':
           description: OK

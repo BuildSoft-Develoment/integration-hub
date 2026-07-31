@@ -60,7 +60,14 @@ if (scanDirs.length === 0 || !existsSync(openapiPath)) {
 }
 
 // ── Extraer endpoints reales del codigo (JAX-RS / Quarkus) ───────────────────
-const HTTP_VERBS = "GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS";
+//
+// OPTIONS y HEAD quedan FUERA: no son superficie de negocio sino comportamiento de transporte.
+// OPTIONS es el preflight que emite el navegador antes de una peticion con CORS, y OpenAPI 3 no lo
+// modela -se deriva de la configuracion CORS, no del contrato-. Medido: en todo el backend hay UN
+// solo @OPTIONS, `BrandingResource.preflight()`, cuyo propio javadoc dice "Preflight CORS (por si el
+// navegador lo emite)". Exigir que se contrate obligaria a documentar como endpoint algo que ningun
+// cliente invoca a proposito, y sentaria el precedente para cada preflight futuro.
+const HTTP_VERBS = "GET|POST|PUT|DELETE|PATCH";
 function listJavaFiles(dir, out) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, e.name);

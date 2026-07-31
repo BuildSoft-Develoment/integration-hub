@@ -6,7 +6,7 @@ info:
     Este archivo es generado automaticamente desde los api-contract.md
     de cada specs/<feature>/. NO editar a mano — perdera los cambios al
     proximo `npm run generate:openapi`.
-    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria, 005-catalogo-conexiones, 006-programacion-procesos, 007-tema-del-sistema
+    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria, 005-catalogo-conexiones, 006-programacion-procesos, 007-tema-del-sistema, 008-mensajeria-pagos
 servers:
   - url: /
 paths:
@@ -80,6 +80,14 @@ paths:
       operationId: querySourceDefinitions
       responses:
         '200':
+          description: OK
+      x-source-feature: "001-catalogo-fuentes"
+  /api/source-types:
+    get:
+      summary: Lista el catalogo de source types locales y aportados por plugins con type, origin, provider, pluginId, plugin
+      operationId: listSourceTypes
+      responses:
+        '200':
 
       x-source-feature: "001-catalogo-fuentes"
   /api/reader-definitions:
@@ -136,6 +144,14 @@ paths:
     get:
       summary: Lista (query) los readers con filtros (q, type, status) y paginacion
       operationId: queryReaderDefinitions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "002-catalogo-readers"
+  /api/reader-types:
+    get:
+      summary: Lista el catalogo de reader types locales y aportados por plugins con type, origin, provider, pluginId, plugin
+      operationId: listReaderTypes
       responses:
         '200':
 
@@ -209,6 +225,165 @@ paths:
           application/json:
             schema:
               type: object
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins:
+    get:
+      summary: "Diagnostico del catalogo de plugins backend: descriptores activos con sus tipos de tarea/fuente/reader aportad"
+      operationId: pluginDiagnostics
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/canary/metrics:
+    get:
+      summary: Evalua cada version instalada contra la ventana canary (muestras, fallos, failureRatio, umbrales min-samples/m
+      operationId: pluginCanaryMetrics
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/reload:
+    post:
+      summary: Recarga en memoria el catalogo de plugins instalados desde la BD (revalida trust policy y reindexa los tipos p
+      operationId: reloadPlugins
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/install:
+    post:
+      summary: Instala declarativamente un plugin backend (id, version, spiVersion, providedTypes/SourceTypes/ReaderTypes, tr
+      operationId: installPlugin
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/marketplace/install:
+    post:
+      summary: Resuelve un plugin desde un catalogo marketplace remoto (catalogUrl + pluginId, con pinnedVersion/channel) y l
+      operationId: installPluginFromMarketplace
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/marketplace/preview:
+    post:
+      summary: "Dry-run del alta desde marketplace: baja la entrada del catalogo remoto, valida la trust policy y devuelve el"
+      operationId: previewMarketplacePlugin
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/{id}/activate:
+    post:
+      summary: Activa el plugin indicado -sus tipos vuelven a ser resolubles por el motor- previo assertPromotable del gate c
+      operationId: activatePlugin
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/{id}/versions/{version}/activate:
+    post:
+      summary: Promueve una version concreta ya instalada a version activa del plugin (sirve tambien de rollback a una versio
+      operationId: activatePluginVersion
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/{id}/versions/{version}/canary-weight:
+    post:
+      summary: Fija el porcentaje de trafico (0-100, recortado a ese rango
+      operationId: setPluginCanaryWeight
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/{id}/canary/route:
+    get:
+      summary: Resuelve, para una clave de enrutamiento dada (query param key), si ese segmento cae en la version canary o en
+      operationId: pluginCanaryRoute
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/{id}/versions/{version}/canary/metrics:
+    post:
+      summary: Registra una muestra de invocacion de esa version de plugin (taskType, transporte, success, outcome, duracion
+      operationId: recordPluginCanaryMetric
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/{id}/deactivate:
+    post:
+      summary: "Apaga el plugin sin borrarlo: sus tipos dejan de estar disponibles para el motor en la siguiente recarga, pero"
+      operationId: deactivatePlugin
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/{id}:
+    delete:
+      summary: "Desinstala de verdad el plugin: borra el descriptor y TODAS sus versiones registradas y recarga el catalogo pa"
+      operationId: uninstallPlugin
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/ui-catalog:
+    get:
+      summary: Devuelve los manifiestos de plugins de frontend registrados en runtime (navegacion, rutas, workspaces, accione
+      operationId: uiPluginCatalog
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+    post:
+      summary: Alta o reemplazo (upsert por el campo id del manifiesto) de un plugin de frontend en el catalogo runtime
+      operationId: upsertUiPluginCatalogEntry
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/ui-catalog/{id}:
+    delete:
+      summary: Quita un plugin de frontend del catalogo runtime por su id, devolviendo el catalogo restante
+      operationId: removeUiPluginCatalogEntry
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/plugins/config-schema/{type}:
+    get:
+      summary: Devuelve el schema de configuracion de un tipo buscando en los registries de task, luego source y luego reader
+      operationId: pluginConfigSchema
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/task-types:
+    get:
+      summary: Lista el catalogo de task types soportados por el motor (locales y de plugin) con origin, provider, pluginId,
+      operationId: listTaskTypes
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/query/process-executions/{processExecutionId}/progress:
+    get:
+      summary: "Progreso agregado y en vivo de una ejecucion: por tarea scatter devuelve slices completados/fallidos, total (n"
+      operationId: processExecutionProgress
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/process-executions/resume/{token}:
+    post:
+      summary: "Callback del camino del dinero: reanuda una tarea suspendida entregandole como externalEvent el push del gatew"
+      operationId: resumeSuspendedProcessExecution
       responses:
         '200':
 
@@ -305,6 +480,70 @@ paths:
     get:
       summary: Fragmentos MT101 por fila origen
       operationId: mt101FragmentsBySourceRow
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/query/tasks-dlq/summary:
+    get:
+      summary: "Contadores de la DLQ del backbone async (ADR-015): filas DEAD del outbox de despacho de tareas y filas DEAD y"
+      operationId: tasksDlqSummary
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/query/tasks-dlq/dead:
+    get:
+      summary: Lista las filas muertas del inbox del consumer (DEAD/POISON), mas recientes primero y hasta `limit` (default 1
+      operationId: tasksDlqDead
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/query/tasks-dlq/stalled:
+    get:
+      summary: Lista scatters en streaming estancados (sin progreso por mas de `minutes`, default 5) con slices completadas/f
+      operationId: tasksDlqStalled
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/query/tasks-dlq/outbox/redrive:
+    post:
+      summary: "Reencola trabajo async muerto: pasa hasta `limit` filas DEAD del outbox de despacho a PENDING para que el rela"
+      operationId: redriveTasksDlqOutbox
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/query/tasks-dlq/suspensions/{processExecutionId}/{taskDefinitionId}/requeue:
+    post:
+      summary: "Reencola el work-item de una tarea async todavia suspendida: reconstruye el envelope desde la configuracion de"
+      operationId: requeueTasksDlqSuspension
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/query/audit-spool/dead-letters:
+    delete:
+      summary: "Purga por retencion los poison messages persistidos por el consumer en `audit_dead_letter_event`: borra los ma"
+      operationId: cleanupAuditSpoolDeadLetters
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/messaging/transports:
+    get:
+      summary: Devuelve los tipos de broker registrados en el MessageBrokerRegistry (Kafka por defecto, JMS/RabbitMQ/Redis si
+      operationId: messagingTransports
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "004-observabilidad-y-auditoria"
+  /api/messaging/async-status:
+    get:
+      summary: "Estado compuesto de disponibilidad del despacho async (DISABLED/DEGRADED/READY) con los flags que lo derivan:"
+      operationId: messagingAsyncStatus
       responses:
         '200':
 
@@ -472,8 +711,374 @@ paths:
               $ref: "#/components/schemas/SystemThemeSetting"
       responses:
         '200':
+          description: OK
+      x-source-feature: "007-tema-del-sistema"
+  /api/branding:
+    get:
+      summary: Devuelve el branding publico (brandName, brandMark, logoDataUri, primaryColor) leido del singleton SystemTheme
+      operationId: publicBranding
+      responses:
+        '200':
 
       x-source-feature: "007-tema-del-sistema"
+  /api/query/mt101-quarantine/staging-row:
+    patch:
+      summary: Corrige el payload de una fila de pago en staging aplicando un JSON Merge Patch, con locking optimista obligat
+      operationId: mt101QuarantineCorrectRow
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+    get:
+      summary: Devuelve el payload actual de una fila en cuarentena identificada por stagingId/recordNumber y su version como
+      operationId: mt101QuarantineStagingRow
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/lote:
+    get:
+      summary: Cabecera del lote MT101 (fragmentSetId, processExecutionId, archivo origen, hash y conteos de fragmentos por e
+      operationId: mt101QuarantineLote
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/build:
+    post:
+      summary: Encola en cuarentena las filas fallidas de un fragment set leyendo paginadamente la tabla de issues de validac
+      operationId: mt101QuarantineBuild
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine:
+    get:
+      summary: Lista paginada por afterId de las filas de pago en cuarentena de un set, con su identidad de origen (archivo,
+      operationId: mt101QuarantineList
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/summary-by-rule:
+    get:
+      summary: Agrupa la cuarentena por causa (ruleCode, ruleSet, severidad) con conteo y rango de numeros de registro afecta
+      operationId: mt101QuarantineSummaryByRule
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/correction-sheet:
+    get:
+      summary: Descarga en XLSX (streaming, Content-Disposition attachment) la planilla de correccion de las filas en cuarent
+      operationId: mt101QuarantineCorrectionSheet
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/correction-sheet/preview:
+    post:
+      summary: "Dry-run del import de la planilla XLSX de correccion: clasifica cada fila en a corregir, sin cambios o en conf"
+      operationId: mt101QuarantinePreviewCorrectionSheet
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/correction-sheet/apply:
+    post:
+      summary: Aplica masivamente la planilla XLSX y muta el payload de las filas de pago marcadas como a corregir reusando e
+      operationId: mt101QuarantineApplyCorrectionSheet
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/request:
+    post:
+      summary: El maker solicita un rebuild correctivo de las filas en cuarentena de un set
+      operationId: mt101RequestRebuildRun
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/request-child:
+    post:
+      summary: Solicita un correctivo hijo a partir de un rebuild run padre cuyo correctivo fue rechazado, encadenando el rep
+      operationId: mt101RequestChildCorrective
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs:
+    get:
+      summary: Lista los ultimos rebuild runs correctivos de un set con su estado del ciclo maker-checker (REQUESTED/APPROVED
+      operationId: mt101ListRebuildRuns
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/detail:
+    get:
+      summary: "Detalle de un rebuild run correctivo por rebuildRunId: set original, correctiveSetId, estado, conteos y metada"
+      operationId: mt101RebuildRunDetail
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/approve:
+    post:
+      summary: "El checker aprueba un rebuild run correctivo con segregacion de funciones dura: rechaza la aprobacion si el ap"
+      operationId: mt101ApproveRebuildRun
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/execute:
+    post:
+      summary: Ejecuta el rebuild aprobado disparando MT101_BUILD_FROM_TABLE sobre el set correctivo
+      operationId: mt101ExecuteRebuildRun
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/advance-corrective:
+    post:
+      summary: Avanza el correctivo BUILT -> VALIDATED -> ARCHIVED encadenando MT101_REPAIR (opcional), MT101_VALIDATE, MT101
+      operationId: mt101AdvanceCorrective
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/request-pay:
+    post:
+      summary: El maker solicita el envio al banco (PAY) del correctivo ya ARCHIVED
+      operationId: mt101RequestCorrectivePay
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/approve-pay:
+    post:
+      summary: "El checker (distinto del maker) aprueba y EJECUTA el envio del correctivo: dispara el despacho SWIFT real al b"
+      operationId: mt101ApproveCorrectivePay
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/resolve-uncertain-pay:
+    post:
+      summary: Resuelve un correctivo en PAY_UNCERTAIN consultando MT101_STATUS al gateway
+      operationId: mt101ResolveUncertainCorrectivePay
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/resolve-uncertain-normal-pay:
+    post:
+      summary: Resuelve el estado durable UNCERTAIN/DISPATCHING del PAY normal (no correctivo) de un fragment set consultando
+      operationId: mt101ResolveUncertainNormalPay
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/process-executions/close-reconciled:
+    post:
+      summary: "Cierra una ejecucion marcada NEEDS_RECONCILIATION tras conciliar sus fragmentos: solo cierra si TODOS estan en"
+      operationId: mt101CloseReconciledExecution
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-quarantine/rebuild-runs/pay-actions:
+    get:
+      summary: Historial append-only de todas las acciones PAY de un rebuild run (solicitud, aprobacion, envio, resoluciones
+      operationId: mt101ListCorrectivePayActions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/summary:
+    get:
+      summary: "Resumen de un set de fragmentos: total, conteo por estado y numero de fragmentos marcados pay_conflict, para e"
+      operationId: mt101FragmentsSummary
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/by-physical-line:
+    get:
+      summary: "Busqueda inversa archivo+linea fisica: devuelve un lineage por ejecucion (reprocesos visibles) enriquecido con"
+      operationId: mt101FragmentsByPhysicalLine
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/by-sheet-row:
+    get:
+      summary: "Espejo Excel de by-physical-line: archivo+hoja+fila resuelve a los registros de cada ejecucion con su detalle"
+      operationId: mt101FragmentsBySheetRow
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/pay-conflicts:
+    get:
+      summary: Fragmentos del set en conflicto de pago (contradiccion entre el terminal que dejo el worker PAY y el que confi
+      operationId: mt101PayConflicts
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/pay-conflicts/open:
+    get:
+      summary: Inbox transversal paginado por cursor de los conflictos de pago ABIERTOS de todos los sets y ejecuciones, mas
+      operationId: mt101OpenPayConflicts
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/pay-conflicts/confirmations:
+    get:
+      summary: "Confirmaciones del banco (gatewayReference y ultimo STATUS confirmado) de un :20: dentro de una ejecucion conc"
+      operationId: mt101PayConflictConfirmations
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/pay-conflicts/acknowledge:
+    post:
+      summary: "Reconocimiento single-actor de un conflicto de pago: limpia el flag pay_conflict y emite la trama append-only"
+      operationId: acknowledgeMt101PayConflict
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/pay-conflicts/settings:
+    get:
+      summary: Devuelve si el maker-checker de reconocimiento esta activo, para que la UI ofrezca el flujo de dos pasos o el
+      operationId: mt101PayConflictSettings
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/pay-conflicts/request-acknowledge:
+    post:
+      summary: "Paso 1 del four-eyes bancario: el MAKER solicita reconocer el conflicto con reason y ticketRef pero NO apaga l"
+      operationId: requestAcknowledgeMt101PayConflict
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/pay-conflicts/approve-acknowledge:
+    post:
+      summary: "Paso 2 del four-eyes bancario: el CHECKER aprueba la solicitud PENDING, limpia pay_conflict y emite PAY_CONFLI"
+      operationId: approveAcknowledgeMt101PayConflict
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/row-timeline:
+    get:
+      summary: Linea de tiempo operacional (hitos) de una fila reconstruida en caliente desde staging, fragmento y cuarentena
+      operationId: mt101RowTimeline
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/reprocess/status:
+    post:
+      summary: Transiciona en bloque los fragmentos de un set de fromStatus a toStatus (p
+      operationId: reprocessMt101FragmentsByStatus
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/reprocess/source-rows:
+    post:
+      summary: "Reproceso quirurgico: lleva a toStatus (BUILT por defecto) solo los fragmentos cuyo rango de filas solapa [rec"
+      operationId: reprocessMt101FragmentsBySourceRows
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-fragments/reprocess/reopen-rejected:
+    post:
+      summary: Reabre una fila cuyo rebuild correctivo fue rechazado (REBUILD_REJECTED a QUARANTINED) para corregirla y recon
+      operationId: reopenRejectedMt101Rebuild
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-pay-dispatch-intents/summary:
+    get:
+      summary: "Resumen del ledger de intencion de dispatch del PAY directo por lista: total, conteo por estado y cuantas inte"
+      operationId: mt101PayDispatchIntentSummary
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-pay-dispatch-intents/stuck:
+    get:
+      summary: Lista las intenciones de dispatch atascadas (UNCERTAIN o DISPATCHING colgado por un crash), mas antiguas prime
+      operationId: mt101StuckPayDispatchIntents
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/query/mt101-pay-dispatch-intents/reconcile:
+    post:
+      summary: Concilia una intencion atascada por dispatchKey leyendo el terminal ya clasificado en mt101_archive que dejo S
+      operationId: reconcileMt101PayDispatchIntent
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/payment-validation-rules:
+    get:
+      summary: Lista paginada del catalogo de reglas de validacion de pagos con filtros por ruleSet, texto libre sobre code/r
+      operationId: listPaymentValidationRules
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+    post:
+      summary: "Alta de una regla de validacion que despues aplica MT101_VALIDATE sobre el camino del dinero: valida y normali"
+      operationId: createPaymentValidationRule
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/payment-validation-rules/export:
+    get:
+      summary: Exporta completo (sin paginar) el perfil de reglas de un banco identificado por ruleSet, para portarlo entre a
+      operationId: exportPaymentValidationRuleSet
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/payment-validation-rules/{ruleId}:
+    put:
+      summary: Reescribe por completo una regla existente (falla si el ruleId no existe) reaplicando las mismas validaciones
+      operationId: updatePaymentValidationRule
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/payment-validation-rules/{ruleId}/activation/{active}:
+    post:
+      summary: "Activa o desactiva una regla via el flag booleano de la ruta: apagar una regla de severidad E deja pasar pagos"
+      operationId: setPaymentValidationRuleActive
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
+  /api/payment-validation-rules/import:
+    post:
+      summary: Importa en bloque un perfil de reglas de banco forzando el ruleSet del request sobre cada item
+      operationId: importPaymentValidationRules
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "008-mensajeria-pagos"
 
 components:
   schemas:

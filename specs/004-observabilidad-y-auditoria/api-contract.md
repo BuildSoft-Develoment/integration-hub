@@ -39,6 +39,30 @@
 ### GET /api/query/mt101-fragments/source-row
 **Trace**: `RF-009` · **Auth**: roles de lectura · Ubica fragmentos MT101 por fila origen/rango.
 
+### GET /api/query/tasks-dlq/summary
+**Trace**: `RF-006` · **Auth**: platform-admin, integration-admin, operator, payments-operator, auditor · Contadores de la DLQ del backbone async (ADR-015): filas DEAD del outbox de despacho de tareas y filas DEAD y POISON del inbox del consumer.
+
+### GET /api/query/tasks-dlq/dead
+**Trace**: `RF-006` · **Auth**: platform-admin, integration-admin, operator, payments-operator, auditor · Lista las filas muertas del inbox del consumer (DEAD/POISON), mas recientes primero y hasta `limit` (default 100), con idempotencyKey, taskType, processExecutionId, taskDefinitionId y el error que las mato.
+
+### GET /api/query/tasks-dlq/stalled
+**Trace**: `RF-006` · **Auth**: platform-admin, integration-admin, operator, payments-operator, auditor · Lista scatters en streaming estancados (sin progreso por mas de `minutes`, default 5) con slices completadas/fallidas, ultima pagina despachada y ultimo progreso: son los candidatos a re-inyeccion de la cadena de paginas.
+
+### POST /api/query/tasks-dlq/outbox/redrive
+**Trace**: `RF-006` · **Auth**: platform-admin, integration-admin · Reencola trabajo async muerto: pasa hasta `limit` filas DEAD del outbox de despacho a PENDING para que el relay reintente publicarlas al broker, y devuelve cuantas reencolo; el reintento cubre cualquier tarea despachada con async:true, incluidas las de pago MT101, y la seguridad depende de la idempotencia aguas abajo por idempotencyKey.
+
+### POST /api/query/tasks-dlq/suspensions/{processExecutionId}/{taskDefinitionId}/requeue
+**Trace**: `RF-006` · **Auth**: platform-admin, integration-admin · Reencola el work-item de una tarea async todavia suspendida: reconstruye el envelope desde la configuracion de la tarea (con los ${secret:} sin resolver), borra el dedup de outbox e inbox por idempotencyKey y lo encola; si la tarea es un scatter en streaming re-inyecta su ultima pagina para que la cadena reanude, y responde requeued=false si no hay suspension activa o si el scatter es materializado. Reejecuta trabajo real, de pago incluido si la tarea suspendida es MT101_PAY.
+
+### DELETE /api/query/audit-spool/dead-letters
+**Trace**: `RF-008` · **Auth**: platform-admin, integration-admin · Purga por retencion los poison messages persistidos por el consumer en `audit_dead_letter_event`: borra los mas viejos que `retentionDays` (default 30) hasta `limit` filas (default 10000, tope 100000) y devuelve cuantas elimino; no toca los DEAD del relay, que se conservan aparte.
+
+### GET /api/messaging/transports
+**Trace**: `RF-006` · **Auth**: integration-admin, platform-admin, operator · Devuelve los tipos de broker registrados en el MessageBrokerRegistry (Kafka por defecto, JMS/RabbitMQ/Redis si estan), que alimentan el selector de transporte async del disenador de tareas.
+
+### GET /api/messaging/async-status
+**Trace**: `RF-006` · **Auth**: integration-admin, platform-admin, operator · Estado compuesto de disponibilidad del despacho async (DISABLED/DEGRADED/READY) con los flags que lo derivan: offload de ejecucion, relay outbox-broker, consumer habilitado, readiness EN VIVO de los canales tasks-in y audit-out, y si hay broker registrado; la UI lo usa para avisar que async:true no correria end-to-end.
+
 ## Paths OpenAPI
 
 ```yaml
@@ -124,6 +148,62 @@ paths:
     get:
       summary: Fragmentos MT101 por fila origen
       operationId: mt101FragmentsBySourceRow
+      responses:
+        '200':
+          description: OK
+  /api/query/tasks-dlq/summary:
+    get:
+      summary: Contadores de la DLQ del backbone async (ADR-015): filas DEAD del outbox de despacho de tareas y filas DEAD y 
+      operationId: tasksDlqSummary
+      responses:
+        '200':
+          description: OK
+  /api/query/tasks-dlq/dead:
+    get:
+      summary: Lista las filas muertas del inbox del consumer (DEAD/POISON), mas recientes primero y hasta `limit` (default 1
+      operationId: tasksDlqDead
+      responses:
+        '200':
+          description: OK
+  /api/query/tasks-dlq/stalled:
+    get:
+      summary: Lista scatters en streaming estancados (sin progreso por mas de `minutes`, default 5) con slices completadas/f
+      operationId: tasksDlqStalled
+      responses:
+        '200':
+          description: OK
+  /api/query/tasks-dlq/outbox/redrive:
+    post:
+      summary: Reencola trabajo async muerto: pasa hasta `limit` filas DEAD del outbox de despacho a PENDING para que el rela
+      operationId: redriveTasksDlqOutbox
+      responses:
+        '200':
+          description: OK
+  /api/query/tasks-dlq/suspensions/{processExecutionId}/{taskDefinitionId}/requeue:
+    post:
+      summary: Reencola el work-item de una tarea async todavia suspendida: reconstruye el envelope desde la configuracion de
+      operationId: requeueTasksDlqSuspension
+      responses:
+        '200':
+          description: OK
+  /api/query/audit-spool/dead-letters:
+    delete:
+      summary: Purga por retencion los poison messages persistidos por el consumer en `audit_dead_letter_event`: borra los ma
+      operationId: cleanupAuditSpoolDeadLetters
+      responses:
+        '200':
+          description: OK
+  /api/messaging/transports:
+    get:
+      summary: Devuelve los tipos de broker registrados en el MessageBrokerRegistry (Kafka por defecto, JMS/RabbitMQ/Redis si
+      operationId: messagingTransports
+      responses:
+        '200':
+          description: OK
+  /api/messaging/async-status:
+    get:
+      summary: Estado compuesto de disponibilidad del despacho async (DISABLED/DEGRADED/READY) con los flags que lo derivan: 
+      operationId: messagingAsyncStatus
       responses:
         '200':
           description: OK

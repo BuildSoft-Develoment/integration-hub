@@ -18,6 +18,9 @@
 ### POST /api/reader-definitions/{readerDefinitionId}/activation/{active}
 **Trace**: `RF-004` · **Auth**: platform-admin, integration-admin · Activa o desactiva un reader.
 
+### GET /api/reader-types
+**Trace**: `RF-001` · **Auth**: platform-admin, integration-admin, auditor · Lista el catalogo de reader types locales y aportados por plugins con type, origin, provider, pluginId, pluginVersion, transport, status y reason, para que el disenador puebla el selector de readers y distinga los tipos habilitados de los no confiables.
+
 ## Paths OpenAPI
 
 ```yaml
@@ -72,6 +75,13 @@ paths:
     get:
       summary: Lista (query) los readers con filtros (q, type, status) y paginacion
       operationId: queryReaderDefinitions
+      responses:
+        '200':
+          description: OK
+  /api/reader-types:
+    get:
+      summary: Lista el catalogo de reader types locales y aportados por plugins con type, origin, provider, pluginId, plugin
+      operationId: listReaderTypes
       responses:
         '200':
           description: OK
