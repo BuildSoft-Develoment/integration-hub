@@ -23,10 +23,15 @@ Product Design -> SPDD -> Prototipo HTML5 -> SDD -> Construccion -> QA
 > automaticamente `planned` vs `implemented` y `check-trace-drift` no reporta
 > falsos positivos.
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
-| RF-NN | HU-NN | spdd-frontend.md | prototype-html5/index.html | GET /api/<entidad> | <entidad> | - | - | Spec inicial generada | spec-funcional.md |
-| RNF-NN | HU-NN | spdd-frontend.md | prototype-html5/index.html | GET /api/<entidad> | - | - | - | Pendiente prototipo | prototype.md |
+> v12.145: `Frontend` = componente(s) Angular que implementan el RF; `Front-test` =
+> su `.spec.ts`. Anotar `@trace RF-XX` en el componente y `@covers RF-XX` en su spec
+> para que `sync-memory` los recoja (el harvest ya escanea `frontend/`). `-` si la
+> feature no tiene UI (servicio puro).
+
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF-NN | HU-NN | spdd-frontend.md | prototype-html5/index.html | GET /api/<entidad> | <entidad> | - | - | Spec inicial generada | spec-funcional.md | - | - |
+| RNF-NN | HU-NN | spdd-frontend.md | prototype-html5/index.html | GET /api/<entidad> | - | - | - | Pendiente prototipo | prototype.md | - | - |
 
 ## Gates
 | Gate | Estado | Aprobador | Fecha | Evidencia |

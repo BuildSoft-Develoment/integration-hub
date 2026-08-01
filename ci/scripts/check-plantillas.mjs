@@ -54,12 +54,18 @@ for (const abs of mdFiles) {
 }
 
 // ── 2) SYNC fase-4 (fuente unica) ─────────────────────────────────────
+// Se comparan los CONTENIDOS, no los bytes: el emisor genera con \n y el working tree en Windows
+// es CRLF (core.autocrlf=true, sin .gitattributes), asi que una comparacion exacta marcaba como
+// desincronizada CADA plantilla, siempre. Medido antes del arreglo: de las 11, DIEZ diferian
+// unicamente en el salto de linea y una sola (traceability.md) diferia de verdad. Un gate que
+// grita 11 cuando el problema es 1 se aprende a ignorar, y con el se ignora el que si importa.
+const normalizar = (t) => String(t).replace(/\r\n?/g, "\n");
 const emitted = emitFase4Plantillas();
 const drift = [];
 for (const [name, content] of Object.entries(emitted)) {
   const p = join(root, "plantillas", "fase-4-sdd", name);
   const current = existsSync(p) ? readFileSync(p, "utf8") : null;
-  if (current !== content) drift.push(name);
+  if (current === null || normalizar(current) !== normalizar(content)) drift.push(name);
 }
 if (drift.length > 0) {
   blockers.push({ kind: "fase4-desincronizada", message: `plantillas/fase-4-sdd desincronizada con la fuente unica (${drift.join(", ")}). Fix: npm run plantillas:sync` });

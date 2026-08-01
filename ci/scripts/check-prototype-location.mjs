@@ -45,6 +45,16 @@ const CANONICAL_PATTERNS = [
   /^ejemplos\/fase-2-ux-ui\/prototype-html5-anti-ejemplo\//,
 ];
 
+// PUNTOS DE ENTRADA DE APLICACION: no son prototipos extraviados, son el `index.html` que arranca
+// una app del workspace Nx. Hay que nombrarlos porque el discriminador de este validador es debil:
+// solo mira nombre de fichero y tamano. El comentario de mas abajo prometia comprobar "<!DOCTYPE" y
+// el codigo nunca lo hacia — y aunque lo hiciera NO discriminaria, porque el index.html de Angular
+// tambien lo lleva. Sin esta lista, el gate marcaba frontend/apps/web/src/index.html, que es la
+// consola en produccion, como prototipo fuera de sitio.
+const APP_ENTRY_PATTERNS = [
+  /^frontend\/apps\/[a-z0-9-]+\/src\/index\.html$/,
+];
+
 function walk(dir) {
   let entries;
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -56,12 +66,14 @@ function walk(dir) {
       walk(abs);
       continue;
     }
-    // Buscar index.html que sean candidatos a prototipo (>500 bytes, contiene "<!DOCTYPE").
+    // Candidato a prototipo: index.html de mas de 500 bytes que no esta en ubicacion canonica
+    // NI es el punto de entrada de una app del workspace.
     if (e.name !== "index.html") continue;
     let size = 0;
     try { size = statSync(abs).size; } catch { continue; }
     if (size < 500) continue;
     if (CANONICAL_PATTERNS.some((re) => re.test(rel))) continue;
+    if (APP_ENTRY_PATTERNS.some((re) => re.test(rel))) continue;
     // Es un index.html que NO esta en locacion canonica.
     offending.push(rel);
   }
