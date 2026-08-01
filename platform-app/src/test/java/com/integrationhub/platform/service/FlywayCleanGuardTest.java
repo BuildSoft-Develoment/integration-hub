@@ -24,27 +24,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FlywayCleanGuardTest {
 
     /** Misma condicion que aplica la guarda cuando NO es dev/test. */
-    private static boolean abortaEnProduccion(boolean cleanDisabled, boolean cleanAtStart) {
-        return cleanAtStart || !cleanDisabled;
+    private static boolean abortaEnProduccion(
+            boolean cleanDisabled, boolean cleanAtStart, boolean cleanOnValidationError) {
+        return cleanAtStart || cleanOnValidationError || !cleanDisabled;
     }
 
     @Test
-    @DisplayName("clean-at-start=true aborta: borraria el ledger de pagos al arrancar")
+    @DisplayName("clean-at-start=true aborta: es la primera ruta a clean() en doStartActions")
     void abortaConCleanAtStart() {
-        assertTrue(abortaEnProduccion(true, true));
-        assertTrue(abortaEnProduccion(false, true));
+        assertTrue(abortaEnProduccion(true, true, false));
+        assertTrue(abortaEnProduccion(false, true, false));
     }
 
     @Test
-    @DisplayName("clean-disabled=false aborta aunque clean-at-start sea false: deja la puerta abierta")
+    @DisplayName("clean-on-validation-error=true aborta: es la SEGUNDA ruta a clean(), la del despliegue malo")
+    void abortaConCleanOnValidationError() {
+        // Leido del bytecode de FlywayRecorder.doStartActions: isValidateAtStart() &&
+        // isCleanOnValidationError() && !validationSuccessful -> Flyway.clean(). Un checksum que no
+        // cuadra borra la base. No se comprueba validate-at-start: en produccion esta combinacion no
+        // es defendible ni siquiera latente.
+        assertTrue(abortaEnProduccion(true, false, true));
+        assertTrue(abortaEnProduccion(false, false, true));
+    }
+
+    @Test
+    @DisplayName("clean-disabled=false aborta sin ninguna ruta activa: deja la puerta abierta")
     void abortaConCleanHabilitado() {
-        assertTrue(abortaEnProduccion(false, false));
+        assertTrue(abortaEnProduccion(false, false, false));
     }
 
     @Test
-    @DisplayName("la unica combinacion que arranca es clean deshabilitado y sin clean al inicio")
+    @DisplayName("la unica combinacion que arranca es clean deshabilitado y ninguna ruta de limpieza")
     void arrancaSoloConCleanCerrado() {
-        assertFalse(abortaEnProduccion(true, false));
+        assertFalse(abortaEnProduccion(true, false, false));
     }
 
     @Test
@@ -54,7 +66,7 @@ class FlywayCleanGuardTest {
         // NORMAL, no TEST. La guarda se activa, que es lo correcto en el camino del dinero: ante la
         // duda sobre el entorno, se bloquea. Este test fija esa propiedad para que nadie la
         // "arregle" haciendo que la guarda se salte cuando no reconoce el modo.
-        var guard = new FlywayCleanGuard(false, true);
+        var guard = new FlywayCleanGuard(false, true, false);
         var error = assertThrows(IllegalStateException.class, () -> guard.validate(null));
         assertTrue(error.getMessage().contains("mt101_pay_dispatch_intent"),
                 "el mensaje debe nombrar QUE se pierde, no solo la propiedad: " + error.getMessage());
@@ -63,7 +75,7 @@ class FlywayCleanGuardTest {
     @Test
     @DisplayName("con la configuracion segura arranca sin ruido")
     void arrancaConConfiguracionSegura() {
-        var guard = new FlywayCleanGuard(true, false);
+        var guard = new FlywayCleanGuard(true, false, false);
         assertDoesNotThrow(() -> guard.validate(null));
     }
 }
