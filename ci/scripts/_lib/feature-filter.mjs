@@ -139,12 +139,26 @@ export function isReengineering(slug, specsRoot) {
 /**
  * Parser minimalista de frontmatter YAML.
  * Soporta scalars (string, number, boolean) — no listas ni objetos anidados.
+ *
+ * NORMALIZA CRLF ANTES DE NADA, y no es cosmetico. Sin esto, en un checkout Windows la
+ * ULTIMA clave del bloque se pierde SIEMPRE, en silencio:
+ *
+ *   - la captura `([\s\S]*?)\n---` deja el `\r` final dentro del grupo ("origin: reingenieria\r")
+ *   - `split(/\r?\n/)` solo limpia el `\r` de las lineas que van SEGUIDAS de `\n`; la ultima no lo esta
+ *   - la regex de clave/valor termina en `(.+)$`, y en JS `.` no matchea `\r` (es terminador de
+ *     linea) ni `$` -sin flag `m`- matchea antes de el => el match da null y la clave desaparece
+ *
+ * Medido antes del arreglo: 8 de 8 ficheros con frontmatter en specs/ perdian su unica clave.
+ * `origin: reingenieria` estaba declarado en 7 features y `getFeatureOrigin` devolvia "nuevo"
+ * para todas, de modo que el roadmap les exigia los 4 artefactos de Fase 2 de los que la
+ * reingenieria esta exenta: 8 bloqueadores fantasma. El gate no fallaba, no miraba.
  */
-function parseFrontmatter(text) {
-  const m = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+export function parseFrontmatter(text) {
+  const normalized = String(text).replace(/\r\n?/g, "\n");
+  const m = normalized.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
   if (!m) return null;
   const fm = {};
-  for (const line of m[1].split(/\r?\n/)) {
+  for (const line of m[1].split("\n")) {
     const kv = line.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.+)$/);
     if (!kv) continue;
     let value = kv[2].trim();
