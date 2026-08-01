@@ -7,23 +7,35 @@ import jakarta.enterprise.event.Observes;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * Fail-fast: la aplicacion no arranca fuera de dev/test si `flyway.clean()` esta habilitado.
+ * Fail-fast: la aplicacion no arranca fuera de dev/test si `flyway.clean()` quedo habilitado.
  *
- * <p>POR QUE EXISTE. `flyway.clean()` borra todos los objetos de los schemas configurados. Quarkus
- * 3.37.2 lo deja habilitado por defecto -{@code cleanDisabled} lleva {@code @WithDefault("false")},
- * verificado en el bytecode- e invierte asi el default seguro de Flyway 10. Peor: el bytecode de
- * {@code FlywayRecorder} llama a {@code Flyway.clean()} comprobando UNICAMENTE
- * {@code isCleanAtStart()}, sin ninguna guarda por modo de arranque. Ambas son configuracion de
- * RUNTIME, de modo que en el binario nativo una sola variable de entorno
- * ({@code QUARKUS_FLYWAY_CLEAN_AT_START=true}) vacia la base al arrancar.
+ * <p>ESTA GUARDA NO IMPIDE EL BORRADO. Leelo antes de confiar en ella. Observa
+ * {@code StartupEvent}, y ese evento llega DESPUES de que Flyway haya hecho su trabajo: en Quarkus
+ * 3.37.2 el build step que lo dispara ({@code LifecycleEventsBuildStep.startupEvent}) CONSUME
+ * {@code List<ServiceStartBuildItem>}, y {@code FlywayProcessor} PRODUCE ese item desde el mismo
+ * paso que llama a {@code FlywayRecorder.doStartActions()}. Verificado en el bytecode de ambos
+ * artefactos. Si un {@code clean-at-start} llegara a ejecutarse, para cuando esta guarda lanza la
+ * base ya no esta.
  *
- * <p>En este producto eso no es "perder datos de una demo": se lleva por delante
- * {@code mt101_pay_dispatch_intent}, que es el ledger que impide reenviar un pago ya despachado, y
- * {@code flyway_schema_history}. Un arranque despues, el sistema no sabe que pagos salieron.
+ * <p>QUIEN SI LO IMPIDE: {@link FlywayCleanVetoCallback}, que corre en {@code Event.BEFORE_CLEAN},
+ * dentro de la propia operacion y antes de {@code CleanExecutor.clean(...)}. Esa es la puerta. Esta
+ * clase es la segunda linea.
+ *
+ * <p>QUE APORTA ENTONCES. Cubre el caso que el callback no ve porque no llega a haber clean:
+ * {@code clean-disabled=false} sin {@code clean-at-start}. Ahi no se borra nada al arrancar, pero el
+ * proceso queda corriendo con la operacion destructiva disponible. La guarda lee el valor EFECTIVO
+ * -no lo que dice el fichero- y se niega a arrancar asi. Tambien cubre la rama
+ * {@code clean-at-start=true} por defensa en profundidad: hoy es inalcanzable (el callback aborta
+ * antes), y debe seguir estando por si alguien quita la declaracion de
+ * {@code quarkus.flyway.callbacks}.
+ *
+ * <p>QUE SE PROTEGE. No son datos de una demo: {@code mt101_pay_dispatch_intent} es el ledger que
+ * impide reenviar un pago ya despachado. Junto con {@code flyway_schema_history} desaparece la
+ * respuesta a "que pagos salieron".
  *
  * <p>POR QUE NO BASTA CON PONERLO EN application.properties. Una variable de entorno tiene ordinal
  * 300 y el fichero 250: el env GANA. Fijar la propiedad sube el liston -hacen falta dos variables en
- * vez de una- pero no cierra la puerta. Esta guarda lee el valor EFECTIVO y aborta.
+ * vez de una- pero no cierra la puerta.
  *
  * <p>Se permite en dev y test porque ahi recrear la base es parte del ciclo normal.
  *
@@ -52,18 +64,20 @@ public class FlywayCleanGuard {
         }
         if (cleanAtStart) {
             throw new IllegalStateException(
-                    "quarkus.flyway.clean-at-start=true fuera de dev/test: al arrancar se ejecutaria "
-                            + "flyway.clean() y se borraria la base entera, incluido el ledger de pagos "
-                            + "mt101_pay_dispatch_intent. Quitar la variable de entorno "
-                            + "QUARKUS_FLYWAY_CLEAN_AT_START antes de arrancar.");
+                    "quarkus.flyway.clean-at-start=true fuera de dev/test. Llegar hasta aqui con este "
+                            + "valor significa que el veto de FlywayCleanVetoCallback NO se ejecuto: o "
+                            + "se quito la declaracion quarkus.flyway.callbacks, o la limpieza ya ocurrio "
+                            + "y se perdio el ledger de pagos mt101_pay_dispatch_intent. Revisar el "
+                            + "estado de la base ANTES de reintentar, y quitar la variable de entorno "
+                            + "QUARKUS_FLYWAY_CLEAN_AT_START.");
         }
         if (!cleanDisabled) {
             throw new IllegalStateException(
-                    "quarkus.flyway.clean-disabled=false fuera de dev/test: flyway.clean() queda "
-                            + "habilitado y una sola variable de entorno mas "
-                            + "(QUARKUS_FLYWAY_CLEAN_AT_START=true) vaciaria la base. Esta plataforma lo "
+                    "quarkus.flyway.clean-disabled=false fuera de dev/test: el proceso quedaria "
+                            + "corriendo con flyway.clean() disponible sobre la base de produccion, que "
+                            + "incluye el ledger de pagos mt101_pay_dispatch_intent. Esta plataforma lo "
                             + "fija en true; si llega en false es porque alguien lo sobreescribio por "
-                            + "entorno.");
+                            + "entorno (el env gana al fichero).");
         }
     }
 }
