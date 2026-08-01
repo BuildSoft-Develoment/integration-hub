@@ -25,6 +25,14 @@ import static com.integrationhub.platform.spi.security.PlatformRoles.AUDITOR;
 import static com.integrationhub.platform.spi.security.PlatformRoles.INTEGRATION_ADMIN;
 import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_ADMIN;
 
+/**
+ * API del catalogo de reglas de pago.
+ *
+ * @trace spec 008-mensajeria-pagos RF-023 (las seis operaciones que exige el requisito estan aqui:
+ *     listar {@code GET /}, exportar {@code GET /export}, crear {@code POST /}, editar
+ *     {@code PUT /{ruleId}}, activar/desactivar {@code POST /{ruleId}/activation/{active}} e
+ *     importar {@code POST /import}. Las reglas reales viven como datos del ambiente, no aqui.)
+ */
 @Path("/api/payment-validation-rules")
 @Produces(MediaType.APPLICATION_JSON)
 public class PaymentValidationRuleResource {

@@ -5597,6 +5597,12 @@ function diffSince(root, db, ref) {
 // Fuente unica: ci/scripts/_lib/source-roots.mjs (antes solo llegaba a "platform-app": las @trace de
 // los verticales, el SPI y el audit-consumer no se cosechaban y el gate daba verde sin haberlas visto).
 const HARVEST_SOURCE_DIRS = SOURCE_ROOTS;
+// `.sql` NO es opcional aqui: por ADR-023 cada modulo versiona su propio DDL, asi que para un
+// requisito de modelo de datos la migracion ES la implementacion — no hay clase Java que
+// certificar. Sin esta extension, el cosechador no podia ver 18 anotaciones ya escritas en 16
+// migraciones (RF-013 llevaba `-- @trace spec 008-mensajeria-pagos RF-013` en la primera linea de
+// V12__payments_mt101_schema.sql desde siempre) y el roadmap las reportaba como "sin @trace".
+// El trabajo estaba hecho; el gate no miraba donde vive.
 const HARVEST_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".mjs", ".cjs",
   ".java", ".kt",
@@ -5604,6 +5610,7 @@ const HARVEST_EXTENSIONS = new Set([
   ".go",
   ".rs",
   ".cs",
+  ".sql",
 ]);
 
 function harvestTraceFromSource(root, db) {

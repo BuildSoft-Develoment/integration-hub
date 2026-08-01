@@ -36,7 +36,7 @@
  *   --root <path>  raiz del proyecto.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { listIncludedFeatures, getFeatureOrigin, parseFrontmatter } from "./_lib/feature-filter.mjs";
 import { resolveStrict } from "./_lib/strict-mode.mjs";
@@ -78,9 +78,68 @@ function partirClaveValor(linea) {
   return { clave, valor };
 }
 
-const features = listIncludedFeatures(root).filter((s) => !featureFilter || s.startsWith(featureFilter));
+const specsRoot = join(root, "specs");
 const hallazgos = [];
 const resumen = [];
+
+// N/A legitimo: repo sin specs/ (por ejemplo el repo del framework).
+if (!existsSync(specsRoot)) {
+  console.log(`check-feature-origin (${VERSION})`);
+  console.log("N/A: no hay directorio specs/ en este repo.");
+  process.exit(0);
+}
+
+// ORACULO SOBRE EL PROPIO CENSO. `listIncludedFeatures` sale de la MISMA libreria que este gate
+// audita, asi que no se puede usar como unica fuente de verdad sobre cuantas features hay: si esa
+// funcion se queda ciega y devuelve una lista corta -o vacia-, el gate certificaria la nada en
+// verde. Ese fallo es real, no teorico: la primera version de este validador pasaba con
+// "Features analizadas: 0". Se cuentan los directorios en disco y se comparan.
+const enDisco = readdirSync(specsRoot, { withFileTypes: true })
+  .filter((e) => e.isDirectory() && /^[0-9]{3}-/.test(e.name) && !e.name.startsWith("000-"))
+  .map((e) => e.name)
+  .sort();
+const segunLibreria = listIncludedFeatures(root);
+const ignorables = new Set(segunLibreria);
+const noVistas = enDisco.filter((s) => !ignorables.has(s));
+
+const features = segunLibreria.filter((s) => !featureFilter || s.startsWith(featureFilter));
+
+if (featureFilter && features.length === 0) {
+  console.error(`check-feature-origin (${VERSION})`);
+  console.error(`\n--feature '${featureFilter}' no coincide con ninguna feature. En disco hay: ${enDisco.join(", ") || "(ninguna)"}`);
+  process.exit(1);
+}
+if (!featureFilter && enDisco.length > 0 && segunLibreria.length === 0) {
+  // Fallar aqui es correcto en los dos casos -no se esta validando nada-, pero la CAUSA es
+  // distinta y el mensaje no puede inventarsela. Se comprueba con el lector directo si cada
+  // exclusion esta declarada de verdad; acusar a la libreria de ciega cuando el repo pidio
+  // ignorar sus features es la clase de mensaje que enseña a ignorar el gate.
+  const declaranIgnore = enDisco.filter((slug) => {
+    const p = join(specsRoot, slug, "spec-funcional.md");
+    if (!existsSync(p)) return false;
+    const cuerpo = leerFrontmatterDirecto(readFileSync(p, "utf8"));
+    if (!cuerpo) return false;
+    return cuerpo.some((l) => {
+      const kv = partirClaveValor(l);
+      return kv && kv.clave === "roadmap" && kv.valor.trim().toLowerCase() === "ignore";
+    });
+  });
+
+  console.error(`check-feature-origin (${VERSION})`);
+  if (declaranIgnore.length === enDisco.length) {
+    console.error(`\nNADA QUE VALIDAR: las ${enDisco.length} feature(s) de specs/ declaran 'roadmap: ignore'.`);
+    console.error(`La exclusion es explicita y legitima, pero el resultado es que ningun validador`);
+    console.error(`de features esta comprobando nada. Si es intencional, quita este gate del pipeline;`);
+    console.error(`si no, revisa que feature deberia estar incluida.`);
+  } else {
+    console.error(`\nCENSO VACIO: hay ${enDisco.length} directorio(s) de feature en specs/ y solo`);
+    console.error(`${declaranIgnore.length} declara(n) 'roadmap: ignore', pero listIncludedFeatures() no`);
+    console.error(`devolvio ninguna. La libreria que decide que features existen esta ciega; ningun`);
+    console.error(`validador que dependa de ella esta comprobando nada.`);
+  }
+  console.error(`  en disco: ${enDisco.join(", ")}`);
+  process.exit(1);
+}
 
 for (const slug of features) {
   const p = join(root, "specs", slug, "spec-funcional.md");
@@ -167,6 +226,12 @@ console.log(`check-feature-origin (${VERSION})`);
 const reing = resumen.filter((r) => r.origin === "reingenieria").length;
 const nuevos = resumen.filter((r) => r.origin === "nuevo").length;
 console.log(`Features analizadas: ${features.length} · reingenieria: ${reing} · nuevo: ${nuevos}`);
+if (noVistas.length > 0) {
+  // Exclusion legitima (`roadmap: ignore`) o sintoma de censo incompleto. Se imprime SIEMPRE:
+  // una feature que desaparece del analisis sin dejar rastro es indistinguible de una que nadie
+  // valida. Que se vea, y que quien lea decida.
+  console.log(`Excluidas del censo (${noVistas.length}): ${noVistas.join(", ")} — revisa que sea por 'roadmap: ignore' y no por un filtro roto.`);
+}
 
 if (hallazgos.length === 0) {
   console.log("OK. Cada feature declara su origin y la libreria lee exactamente lo que hay en disco.");

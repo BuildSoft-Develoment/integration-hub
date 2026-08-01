@@ -1,4 +1,6 @@
-// @covers spec 008-mensajeria-pagos RF-013 (el ledger de pagos no puede desaparecer por configuracion)
+// @covers spec 008-mensajeria-pagos RF-004 (la idempotencia de MT101_PAY se apoya en el ledger
+// mt101_pay_dispatch_intent; esto certifica que ninguna configuracion puede borrarlo, no el
+// despacho en si)
 package com.integrationhub.platform.service;
 
 import org.junit.jupiter.api.DisplayName;

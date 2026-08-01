@@ -52,6 +52,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * B2': orquestacion del ciclo bancario del set correctivo. VALIDATE/ARCHIVE automaticos;
  * PAY con maker-checker propio (el aprobador del envio != el solicitante).
+ *
+ * @covers spec 008-mensajeria-pagos RF-024 (el reproceso correctivo gobierna el PAY con
+ *     maker-checker; el aprobador del envio no puede ser el solicitante)
  */
 @Testcontainers
 class Mt101CorrectiveLifecycleServiceTest {
