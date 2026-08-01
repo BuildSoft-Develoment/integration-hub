@@ -87,9 +87,18 @@ Fijarlo en la base lo hereda toda sesion nueva: aplicacion, pools por `connectio
 que entran por `psql` y consultas manuales de operacion.
 
 `ALTER DATABASE ... SET` **exige ser dueno de la base** (comprobado: un rol no-dueno responde
-`must be owner of database`). `V12` lo verifica antes y falla nombrando la sentencia exacta que debe
-ejecutar un administrador, en vez de degradar a `alter role current_user`, que solo cubriria a ese
-usuario y dejaria fuera precisamente los pools con otras credenciales.
+`must be owner of database`). `V12` comprueba primero **si el `search_path` ya esta fijado**; si lo
+esta, no pide ningun privilegio. Solo cuando tiene que fijarlo el mismo exige la propiedad, y
+entonces aborta nombrando las dos salidas: `ALTER DATABASE ... SET search_path` ejecutado por un
+administrador, o `GRANT <rol_dueno> TO <rol_app>`. No degrada a `alter role current_user`, que solo
+cubriria a ese usuario y dejaria fuera precisamente los pools con otras credenciales.
+
+> **Correccion (2026-07-31).** El guard original solo preguntaba por el privilegio, nunca por el
+> estado, y su hint no desbloqueaba: verificado contra Postgres 16 que tras ejecutar el
+> `ALTER DATABASE` recomendado el reintento fallaba **identico**, porque el rol seguia sin ser dueno.
+> Para el escenario que motiva esta seccion -una instalacion bancaria donde el cliente no cede la
+> propiedad de la base- eso era un bucle sin salida. Verificado tambien el arreglo, con rol no-dueno
+> real: con el `search_path` ya puesto, la migracion pasa.
 
 ### 4. Las entidades JPA declaran su schema explicitamente
 

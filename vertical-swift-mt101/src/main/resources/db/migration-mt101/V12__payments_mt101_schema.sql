@@ -3,7 +3,22 @@
 -- ADR-009 vertical de mensajeria de pagos
 
 create schema if not exists vertical_mt101;
-comment on schema vertical_mt101 is 'ADR-023: objetos del vertical SWIFT MT101. El motor no escribe aqui.';
+
+-- El comentario del esquema es metadata cosmetica, pero `comment on schema` exige ser DUENO DEL
+-- ESQUEMA (verificado: un rol con USAGE+CREATE recibe "must be owner of schema vertical_mt101",
+-- aunque en ese mismo esquema si puede crear tablas). Eso ocurre justo en el patron de minimo
+-- privilegio que un banco impone: el DBA precrea `vertical_mt101` y concede USAGE/CREATE al rol de
+-- la aplicacion. Sin esta guarda, la instalacion se caia por una linea decorativa.
+do $$
+begin
+    if pg_catalog.pg_has_role(current_user,
+                              (select nspowner from pg_catalog.pg_namespace where nspname = 'vertical_mt101'),
+                              'USAGE') then
+        execute 'comment on schema vertical_mt101 is '
+                || quote_literal('ADR-023: objetos del vertical SWIFT MT101. El motor no escribe aqui.');
+    end if;
+end
+$$;
 
 -- ---------------------------------------------------------------------------------------------------
 -- ADR-023: search_path A NIVEL DE BASE DE DATOS, no solo del datasource de la aplicacion.
@@ -20,22 +35,53 @@ comment on schema vertical_mt101 is 'ADR-023: objetos del vertical SWIFT MT101. 
 --
 -- `public` va primero: ahi viven el motor, staging_record y flyway_schema_history.
 --
--- Requiere ser DUENO de la base (comprobado: un rol no-dueno responde "must be owner of database"). Se
--- verifica antes y se falla nombrando la sentencia exacta que debe ejecutar un administrador, en vez de
--- degradar a `alter role current_user`, que solo cubriria a este usuario y dejaria fuera precisamente
--- los pools configurados con otras credenciales.
+-- Fijar el search_path en la BASE exige ser su DUENO (un rol no-dueno responde "must be owner of
+-- database"). No se degrada a `alter role current_user`, que solo cubriria a este usuario y dejaria
+-- fuera precisamente los pools configurados con otras credenciales.
+--
+-- LO QUE SE COMPRUEBA ES EL ESTADO ALCANZADO, NO EL PRIVILEGIO.
+--
+-- La version anterior preguntaba solo "¿soy dueno?" y, si no, fallaba con un hint que decia
+-- "ejecutalo como administrador y reintenta". Ese hint era un CALLEJON SIN SALIDA: el administrador
+-- ejecutaba el ALTER DATABASE, se reintentaba la migracion, y volvia a fallar exactamente igual,
+-- porque el rol de la aplicacion seguia sin ser dueno y el guard nunca miraba si el search_path ya
+-- estaba puesto. En una instalacion bancaria real -donde el banco no concede la propiedad de la
+-- base, que es justo el escenario para el que se escribio el hint- el arranque quedaba en un bucle
+-- del que no se sale sin editar esta migracion.
+--
+-- Ahora: si el search_path de la base ya incluye el esquema del vertical, la migracion sigue sin
+-- pedir ningun privilegio (el DBA ya hizo su parte). Solo se exige ser dueno cuando hay que fijarlo.
 -- ---------------------------------------------------------------------------------------------------
 do $$
+declare
+    v_config text;
 begin
+    -- Ajustes fijados a nivel de BASE (setrole = 0 => aplican a toda sesion, no a un rol concreto).
+    select coalesce(array_to_string(s.setconfig, ','), '')
+      into v_config
+      from pg_catalog.pg_db_role_setting s
+     where s.setdatabase = (select oid from pg_catalog.pg_database where datname = current_database())
+       and s.setrole = 0;
+
+    if coalesce(v_config, '') like '%vertical_mt101%' then
+        -- Ya esta puesto por un administrador. No hace falta ser dueno.
+        return;
+    end if;
+
     if not pg_catalog.pg_has_role(current_user, (select datdba from pg_database
                                                  where datname = current_database()), 'USAGE') then
         raise exception using
             message = 'ADR-023: se necesita ser dueno de la base para fijar el search_path',
-            detail  = format('El usuario %I no es dueno de %I.', current_user, current_database()),
-            hint    = format('Ejecutalo como administrador y reintenta la migracion: '
-                             'ALTER DATABASE %I SET search_path = public, vertical_mt101;',
-                             current_database());
+            detail  = format('El usuario %I no es dueno de %I y la base no tiene el search_path fijado.',
+                             current_user, current_database()),
+            hint    = format('Un administrador debe ejecutar UNA de estas dos, y despues se reintenta '
+                             'la migracion sin mas cambios: '
+                             '(1) ALTER DATABASE %I SET search_path = public, vertical_mt101;  '
+                             '-- esta migracion detecta que ya esta puesto y no vuelve a pedir el privilegio.  '
+                             '(2) GRANT <rol_dueno_de_la_base> TO %I;  -- concede la propiedad efectiva al rol de la aplicacion.',
+                             current_database(), current_user);
     end if;
+
     execute format('alter database %I set search_path = public, vertical_mt101', current_database());
 end
 $$;
