@@ -215,6 +215,17 @@ paths:
     post:
       summary: El maker solicita un rebuild correctivo de las filas en cuarentena de un set
       operationId: mt101RequestRebuildRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectionRef: {}
+                fragmentSetId: {}
+                reason: {}
+                ticketRef: {}
       responses:
         '200':
           description: OK
@@ -250,6 +261,15 @@ paths:
     post:
       summary: Ejecuta el rebuild aprobado disparando MT101_BUILD_FROM_TABLE sobre el set correctivo
       operationId: mt101ExecuteRebuildRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectionRef: {}
+                rebuildRunId: {}
       responses:
         '200':
           description: OK
@@ -271,6 +291,17 @@ paths:
     post:
       summary: El checker (distinto del maker) aprueba y EJECUTA el envio del correctivo: dispara el despacho SWIFT real al b
       operationId: mt101ApproveCorrectivePay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectionRef: {}
+                rebuildRunId: {}
+                reason: {}
+                ticketRef: {}
       responses:
         '200':
           description: OK
@@ -292,6 +323,16 @@ paths:
     post:
       summary: Cierra una ejecucion marcada NEEDS_RECONCILIATION tras conciliar sus fragmentos: solo cierra si TODOS estan en
       operationId: mt101CloseReconciledExecution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectionRef: {}
+                processExecutionId: {}
+                reason: {}
       responses:
         '200':
           description: OK
@@ -397,6 +438,16 @@ paths:
     post:
       summary: Reabre una fila cuyo rebuild correctivo fue rechazado (REBUILD_REJECTED a QUARANTINED) para corregirla y recon
       operationId: reopenRejectedMt101Rebuild
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectionRef: {}
+                fragmentSetId: {}
+                reason: {}
       responses:
         '200':
           description: OK
@@ -431,6 +482,18 @@ paths:
     post:
       summary: Alta de una regla de validacion que despues aplica MT101_VALIDATE sobre el camino del dinero: valida y normali
       operationId: createPaymentValidationRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ruleCode: {}
+                ruleSet: {}
+                severity: {}
+                expression: {}
+                active: {}
       responses:
         '200':
           description: OK
@@ -459,6 +522,14 @@ paths:
     post:
       summary: Importa en bloque un perfil de reglas de banco forzando el ruleSet del request sobre cada item
       operationId: importPaymentValidationRules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rules: {}
       responses:
         '200':
           description: OK

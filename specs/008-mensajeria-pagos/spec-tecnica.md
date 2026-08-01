@@ -687,6 +687,11 @@ INDEX `(amount_currency)`.
 | `raw_payload` | text | mensaje de confirmacion crudo |
 | `received_at` | timestamp | |
 
+Restricciones: `PRIMARY KEY (id)`; FK `archive_id` -> `mt101_archive(id)` ON DELETE CASCADE.
+
+Indices: `ix_mt101_confirmation_archive (archive_id)` — el acceso natural es "que confirmaciones
+llegaron para este archivo".
+
 ### Tabla `mt101_reconciliation_exception`
 
 | Columna | Tipo | Notas |
@@ -714,6 +719,11 @@ INDEX `(amount_currency)`.
 | `active` | boolean | default true |
 
 UNIQUE `(rule_set, code, applies_to)`.
+
+Restricciones: `PRIMARY KEY (id)`; UNIQUE `(rule_set, code, applies_to)`.
+
+Indices: `ux_payment_rule (rule_set, code, applies_to)` UNIQUE — es la que impide dos reglas con el
+mismo codigo para el mismo estandar y set.
 
 ### API `payment_validation_rule`
 
@@ -783,6 +793,14 @@ Columnas relevantes para PAY correctivo:
 | `parent_corrective_set_id` | varchar(80) | set correctivo padre usado como origen |
 | `corrective_generation` | integer | generacion del correctivo, default 1 |
 
+Restricciones: `PRIMARY KEY (id)`; UNIQUE sobre el set correctivo, que es lo que impide que dos
+rebuild runs reclamen el mismo `corrective_set_id`.
+
+Indices: `ux_mt101_rebuild_run_corrective` (UNIQUE), `ix_mt101_rebuild_run_original_status`,
+`ix_mt101_rebuild_run_pay_status`, `ix_mt101_rebuild_run_parent` y
+`ix_mt101_rebuild_run_parent_set` — los tres ultimos sostienen el encadenamiento de correctivos
+hijos y la consulta del semaforo de PAY.
+
 ### Tabla `mt101_corrective_pay_fragment`
 
 Detalle auditable del PAY correctivo por fragmento:
@@ -836,6 +854,85 @@ Contrato correctivo:
   incertidumbre con `MT101_STATUS`, sin reenviar pagos; y
   `POST /api/query/mt101-quarantine/rebuild-runs/request-child` crea un run hijo desde
   los fragmentos rechazados de un padre `PARTIALLY_SENT`.
+
+### Tabla `mt101_pay_dispatch_intent`
+
+Ledger de **intencion** de despacho para el camino de lista en memoria
+(`MT101_BUILD`/`MT101_SPLIT` → `MT101_PAY`), que de otro modo llamaria `transport.send()` sin claim
+ni durabilidad. Le da al camino de lista la misma re-request-safety que el camino persistido ya tiene
+via `mt101_build_fragment`: antes de enviar se **reclama** la clave de despacho, y un re-request del
+mismo pago encuentra la fila y **no reenvia**.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigserial | PK |
+| `dispatch_key` | varchar(512) | NOT NULL. Clave de idempotencia del banco, determinista por pago |
+| `process_execution_id` | bigint | ejecucion que origino el despacho |
+| `senders_reference` | varchar(35) | `:20:` del mensaje |
+| `status` | varchar(20) | NOT NULL. DISPATCHING / SENT / REJECTED / UNCERTAIN |
+| `gateway_reference` | varchar(140) | referencia devuelta por el gateway |
+| `attempts` | integer | NOT NULL default 0 |
+| `error_message` | text | motivo del ultimo fallo |
+| `created_at` | timestamp | NOT NULL default current_timestamp |
+| `updated_at` | timestamp | NOT NULL default current_timestamp |
+
+Restricciones: `PRIMARY KEY (id)`; `ux_mt101_pay_dispatch_intent_key UNIQUE (dispatch_key)` — es lo
+que hace el claim **atomico** (`INSERT ... ON CONFLICT`); `SENT`, `UNCERTAIN` y `DISPATCHING`
+bloquean el reenvio, y solo `REJECTED` pre-despacho lo permite.
+
+Indices: `ix_mt101_pay_dispatch_intent_exec (process_execution_id)` para trazabilidad y conciliacion.
+
+### Tabla `inbound_routed_transaction`
+
+Resultado de `MT101_ROUTE`: cada transaccion entrante clasificada por reglas de negocio
+(book-transfer interna, MT103 saliente, clearing domestico).
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigserial | PK |
+| `inbound_set_id` | varchar(80) | NOT NULL. Set de entrada al que pertenece |
+| `process_execution_id` | bigint | ejecucion que la enruto |
+| `senders_reference` | varchar(16) | `:20:` |
+| `transaction_reference` | varchar(35) | `:21:` |
+| `account` | varchar(40) | cuenta implicada |
+| `beneficiary_name` | varchar(140) | beneficiario |
+| `amount_currency` | varchar(3) | divisa ISO |
+| `amount_value` | numeric(18,2) | importe |
+| `uetr` | varchar(36) | `{121:}` del block 3 cuando el mensaje lo trae |
+| `routed_as` | varchar(40) | clasificacion resultante |
+| `created_at` | timestamp | NOT NULL default current_timestamp |
+
+Restricciones: `PRIMARY KEY (id)`.
+
+Indices: `ix_inbound_routed_transaction_set (inbound_set_id)`.
+
+### Tabla `mt101_failed_record`
+
+Cuarentena por fila: cada registro que no paso validacion, con **identidad estricta de origen** para
+poder volver a la fila exacta del archivo (ADR-020). Es lo que alimenta la consola de cuarentena y la
+planilla de correccion.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigserial | PK |
+| `fragment_set_id` | varchar(80) | NOT NULL. Set de fragmentos al que pertenece |
+| `senders_reference` | varchar(16) | `:20:` del fragmento que la contenia |
+| `transaction_reference` | varchar(35) | `:21:` de la transaccion fallida |
+| `source_file_hash` | varchar(64) | SHA-256 del archivo de origen |
+| `source_record_number` | bigint | fila exacta del archivo (1-based) |
+| `rule_code` | varchar(80) | regla que fallo |
+| `rule_set` | varchar(50) | catalogo de la regla |
+| `severity` | char(1) | ERROR / WARNING / INFO |
+| `message` | text | detalle del fallo |
+| `status` | varchar(20) | NOT NULL default `QUARANTINED`; ampliado a varchar(40) en `V38` para el ciclo correctivo |
+| `created_at` | timestamp | NOT NULL default current_timestamp |
+| `resolved_at` | timestamp | cuando se resolvio |
+
+Restricciones: `PRIMARY KEY (id)`. La identidad de origen es la terna
+`source_file_hash` + `source_record_number` + `staging_id`: sin ella, un reproceso correctivo no
+puede garantizar que corrige la fila que fallo y no otra.
+
+Indices: los del set y la identidad de origen, declarados en `V32` y ampliados en `V38`.
 
 ## Variables de entorno y secretos
 
