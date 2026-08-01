@@ -52,10 +52,13 @@ El patron favorece providers y managers en infraestructura, stores y command ser
 ## Extension modular frontend
 
 - El shell registra modulos mediante manifests declarativos de plugin.
-- Las contribuciones soportadas hoy son `navigation`, `routes` y `workspaces`.
-- El catalogo externo `apps/web/public/plugins/catalog.json` es metadata-only:
-  puede apuntar a rutas ya instaladas, pero no declarar rutas Angular ni codigo
-  remoto.
+- Las contribuciones que admite el catalogo son `navigation`, `workspaces`, `actions`,
+  `i18nNamespaces` y `remote`. **`routes` NO**: es justo la unica vetada (`maxItems: 0`), porque
+  declarar rutas Angular desde un JSON de runtime es lo que el contrato no permite.
+- El catalogo externo `apps/web/public/plugins/catalog.json` aporta metadata hacia rutas ya
+  instaladas y, opcionalmente, un bloque `remote` de Native Federation. Ese bloque **si** carga
+  codigo, pero solo tras verificar firma ECDSA P-256, integridad SRI del remoteEntry y allowlist de
+  origen (ADR-013); si algo falla, el plugin queda `degraded` en vez de montarse.
 - El contrato para proveedores vive en
   `apps/web/public/plugins/catalog.schema.json` y el catalogo real lo referencia
   con `$schema`.

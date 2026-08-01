@@ -10,14 +10,27 @@
 
 ## Objetivo
 
-Definir como instalar contribuciones externas de frontend sin ejecutar codigo
-remoto y sin modificar el shell Angular.
+Definir como instalar contribuciones externas de frontend sin modificar el shell Angular.
 
 ## Alcance
 
-Este mecanismo acepta solo metadata para rutas ya instaladas por la plataforma.
-No habilita `loadChildren`, `loadComponent`, componentes remotos ni dependencias
-externas en runtime.
+Dos canales, no uno:
+
+1. **Metadata** hacia rutas que la plataforma ya monta: navegacion, workspaces y acciones. Este
+   canal no ejecuta nada.
+2. **`remote`** (ADR-013): un plugin que aporta codigo Angular por Native Federation. **No es
+   carga libre**: los cuatro campos `url`, `exposedModule`, `integrity` y `signature` son
+   obligatorios, y antes de montar nada el runtime descarga el remoteEntry, recomputa su SRI, lo
+   compara y verifica la firma **ECDSA P-256** contra la clave de confianza de su `keyId`, ademas
+   de exigir que el origen este en la allowlist. Si algo de eso falla, el plugin queda `degraded`,
+   no cargado.
+
+Lo que sigue prohibido —y esa prohibicion si es coherente en todo el contrato— es **declarar rutas
+Angular desde el catalogo**: `routes` esta en `maxItems: 0`.
+
+> Este documento decia antes que el catalogo "no ejecuta codigo remoto" y que no habilita
+> `loadChildren`/`loadComponent`. Era cierto cuando se escribio (ADR-012) y dejo de serlo con
+> ADR-013, que anadio el bloque `remote` al mismo `catalog.schema.json` sin retirar la frase.
 
 ## Archivos canonicos
 
@@ -159,14 +172,16 @@ del contrato, el archivo no se actualiza.
 - Las capabilities deben pertenecer al conjunto publicado en el schema.
 - Las acciones `navigation` deben apuntar a rutas conocidas del shell.
 - Las acciones `external-link` solo aceptan `https://`.
-- Las acciones `command` publican identificadores simbolicos; el catalogo JSON
-  no ejecuta handlers ni codigo remoto.
+- Las acciones `command` publican identificadores simbolicos; el catalogo JSON no ejecuta
+  handlers. (El bloque `remote` si carga codigo, pero por Native Federation y solo tras firma,
+  SRI y allowlist de origen: son canales distintos.)
 - Los comandos se resuelven solo si la aplicacion instala un handler estatico
   con `provideAppActionCommandHandlers(...)`.
 - No se aceptan campos fuera del contrato publico.
 - `routes` debe omitirse o estar vacio.
-- Un plugin con codigo Angular debe entrar por provider estatico y build
-  controlado, no por catalogo JSON runtime.
+- Un plugin con codigo Angular entra por una de dos vias: provider estatico y build controlado, o
+  el bloque `remote` de ADR-013 con firma, SRI y allowlist de origen. Lo que no puede en ninguna de
+  las dos es declarar rutas Angular desde el catalogo.
 - Instalar un plugin existente requiere `--replace`.
 - Operaciones de prueba deben usar `--dry-run`.
 

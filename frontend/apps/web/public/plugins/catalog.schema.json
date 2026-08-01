@@ -2,10 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "/plugins/catalog.schema.json",
   "title": "Integration Hub frontend plugin catalog",
-  "description": "Metadata-only catalog for externally installed frontend plugin contributions. JSON catalogs cannot declare Angular routes or execute remote code.",
+  "description": "Catalogo de contribuciones de frontend instalables desde fuera. Aporta metadata hacia rutas que el shell YA monta (navigation, workspaces, actions, i18nNamespaces) y, opcionalmente, un bloque `remote` de Native Federation que si carga codigo Angular: solo se monta tras verificar la firma ECDSA P-256, recomputar la integridad SRI del remoteEntry y comprobar que su origen esta en la allowlist (ADR-013); si alguna falla el plugin queda degraded. La url debe ser https, salvo loopback en desarrollo. Lo que un catalogo JSON NO puede es declarar rutas Angular: `routes` esta en maxItems 0.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["manifests"],
+  "required": [
+    "manifests"
+  ],
   "properties": {
     "$schema": {
       "type": "string"
@@ -32,25 +34,38 @@
     "knownShellRoute": {
       "type": "string",
       "enum": [
-        "/overview",
-        "/sources",
-        "/connections",
-        "/readers",
-        "/processes",
-        "/payment-rules",
-        "/executions",
-        "/schedules",
         "/audit",
+        "/audit/events",
         "/audit/record-lineage",
-        "/audit/mt101-fragments",
         "/audit/spool",
-        "/audit/mt101-quarantine"
-      ]
+        "/connections",
+        "/executions",
+        "/executions/async-dlq",
+        "/overview",
+        "/payment-rules",
+        "/plugins",
+        "/processes",
+        "/readers",
+        "/schedules",
+        "/sources",
+        "/swift-mt101",
+        "/swift-mt101/fragments",
+        "/swift-mt101/pay-conflicts",
+        "/swift-mt101/pay-dispatch",
+        "/swift-mt101/quarantine",
+        "/ui-kit"
+      ],
+      "description": "Rutas que el shell monta de verdad. Es el mismo conjunto con el que app-plugin-runtime.registry.ts construye knownStaticRoutes y decide la cuarentena: una ruta que este aqui pero no en el shell hace que el plugin pase el gate y muera en runtime. Lo mantiene alineado ci/scripts/check-shell-routes-sync.mjs."
     },
     "pluginManifest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "version", "platformVersion", "displayName"],
+      "required": [
+        "id",
+        "version",
+        "platformVersion",
+        "displayName"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -115,7 +130,12 @@
     "pluginRemote": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url", "exposedModule", "integrity", "signature"],
+      "required": [
+        "url",
+        "exposedModule",
+        "integrity",
+        "signature"
+      ],
       "properties": {
         "url": {
           "type": "string",
@@ -146,7 +166,11 @@
     "navigationContribution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "route", "labelKey"],
+      "required": [
+        "id",
+        "route",
+        "labelKey"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -178,7 +202,11 @@
     "workspaceContribution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "route", "labelKey"],
+      "required": [
+        "id",
+        "route",
+        "labelKey"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -205,7 +233,11 @@
         },
         "mode": {
           "type": "string",
-          "enum": ["query", "operation", "configuration"]
+          "enum": [
+            "query",
+            "operation",
+            "configuration"
+          ]
         },
         "order": {
           "type": "number"
@@ -217,11 +249,20 @@
     },
     "actionKind": {
       "type": "string",
-      "enum": ["command", "navigation", "external-link"]
+      "enum": [
+        "command",
+        "navigation",
+        "external-link"
+      ]
     },
     "actionPlacement": {
       "type": "string",
-      "enum": ["global", "workspace", "record", "toolbar"]
+      "enum": [
+        "global",
+        "workspace",
+        "record",
+        "toolbar"
+      ]
     },
     "actionConfirmation": {
       "type": "object",
@@ -233,14 +274,20 @@
         },
         "severity": {
           "type": "string",
-          "enum": ["danger", "warning"]
+          "enum": [
+            "danger",
+            "warning"
+          ]
         }
       }
     },
     "actionContribution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "labelKey"],
+      "required": [
+        "id",
+        "labelKey"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -297,10 +344,14 @@
                 "const": "navigation"
               }
             },
-            "required": ["kind"]
+            "required": [
+              "kind"
+            ]
           },
           "then": {
-            "required": ["route"]
+            "required": [
+              "route"
+            ]
           }
         },
         {
@@ -310,10 +361,14 @@
                 "const": "external-link"
               }
             },
-            "required": ["kind"]
+            "required": [
+              "kind"
+            ]
           },
           "then": {
-            "required": ["href"]
+            "required": [
+              "href"
+            ]
           }
         },
         {
@@ -323,10 +378,14 @@
                 "const": "command"
               }
             },
-            "required": ["kind"]
+            "required": [
+              "kind"
+            ]
           },
           "then": {
-            "required": ["command"]
+            "required": [
+              "command"
+            ]
           }
         }
       ]

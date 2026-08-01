@@ -67,19 +67,26 @@ const ACTION_KINDS = new Set(['command', 'navigation', 'external-link']);
 const ACTION_PLACEMENTS = new Set(['global', 'workspace', 'record', 'toolbar']);
 
 const KNOWN_SHELL_ROUTES = new Set([
-  '/overview',
-  '/sources',
-  '/connections',
-  '/readers',
-  '/processes',
-  '/payment-rules',
-  '/executions',
-  '/schedules',
   '/audit',
+  '/audit/events',
   '/audit/record-lineage',
-  '/audit/mt101-fragments',
   '/audit/spool',
-  '/audit/mt101-quarantine',
+  '/connections',
+  '/executions',
+  '/executions/async-dlq',
+  '/overview',
+  '/payment-rules',
+  '/plugins',
+  '/processes',
+  '/readers',
+  '/schedules',
+  '/sources',
+  '/swift-mt101',
+  '/swift-mt101/fragments',
+  '/swift-mt101/pay-conflicts',
+  '/swift-mt101/pay-dispatch',
+  '/swift-mt101/quarantine',
+  '/ui-kit',
 ]);
 
 const KNOWN_CAPABILITIES = new Set([

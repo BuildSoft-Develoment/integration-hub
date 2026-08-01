@@ -127,6 +127,16 @@ La primera implementacion real aplica al shell de navegacion:
   establece la base de SPI frontend, runtime registry metadata-only y los
   primeros puntos de extension.
 
+> **Superado en parte por [ADR-013](ADR-013-frontend-module-federation-remote-plugins.md).** Los dos
+> puntos de arriba —"manifests JSON externos limitados a metadata" y "la instalacion remota aun no
+> queda implementada"— describian el estado de esta decision y dejaron de ser ciertos: ADR-013
+> anadio el canal `remote` por Native Federation, con firma ECDSA P-256, verificacion de integridad
+> SRI y allowlist de origen, y esta implementado y en verde. Lo que sigue vigente de esta ADR es la
+> prohibicion de declarar **rutas Angular** desde el catalogo (`routes` en `maxItems: 0`).
+>
+> No se reescribe el cuerpo: una ADR es un registro fechado de lo que se decidio entonces. Lo que se
+> anota es la supersesion.
+
 ## Reglas
 
 - Toda extension debe declarar `id`, `version`, `platformVersion` y `source`.
@@ -167,6 +177,10 @@ La primera implementacion real aplica al shell de navegacion:
 Este flujo no habilita carga remota de codigo. Un plugin con componentes,
 rutas Angular o dependencias propias debe entrar como artefacto de build
 controlado y provider estatico, con ADR o ampliacion explicita del contrato.
+
+> Esa ampliacion explicita **ocurrio**: es [ADR-013](ADR-013-frontend-module-federation-remote-plugins.md),
+> que abrio el canal `remote` gobernado. Este parrafo se conserva porque describe la puerta que
+> ADR-012 dejo abierta a proposito, no una prohibicion vigente.
 
 ## Evidencia
 
