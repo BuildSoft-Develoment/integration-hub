@@ -13,7 +13,7 @@ public enum ExecutionStatus {
      * cuando llega un POST {@code /api/process-executions/resume/{token}} o
      * un scheduler periodico re-invoca al provider.
      *
-     * @trace spec 003 T-017, ADR-009, spec 008-mensajeria-pagos RF-019
+     * @trace spec 003-diseno-y-ejecucion-procesos T-017, ADR-009, spec 008-mensajeria-pagos RF-019
      */
     SUSPENDED,
 
