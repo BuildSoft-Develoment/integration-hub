@@ -24,6 +24,25 @@ Concentrar la verificacion minima que acompana la construccion antes de pasar a 
 - `npm run build` dentro de `frontend/`
 - `npm run test -- --watch=false` dentro de `frontend/`
 
+## Trazabilidad: cosechar ANTES de mirar el panel
+
+El contrato de esta fase (`ci/scripts/_lib/phase-contracts.mjs`, fase 5 `debeValidar`) exige estos
+cuatro pasos, y el orden importa:
+
+1. `npm run memory:harvest-trace` — lee las anotaciones `@trace` / `@covers` del codigo
+2. `npm run memory:sync` — vuelca `TRACEABILITY_MATRIX.md` y las `traceability.md` a la memoria
+3. `npm run check:trace-coverage`
+4. `npm run check:trace-drift`
+
+**Sin (1) el panel miente**, y miente hacia el lado peligroso: muestra el resultado de la ultima
+cosecha, asi que una anotacion recien escrita no aparece y se lee como "requisito sin cubrir" —
+o, peor, una que se borro sigue certificando. Los pasos 3 y 4 validan lo que la memoria tiene, no
+lo que hay en disco.
+
+`npm run check:trace-scope` informa ademas cuantas anotaciones siguen SIN cualificar con
+`spec <slug>`. Una anotacion desnuda (`@covers RF-006`) no dice de cual de las ocho features es,
+porque los RF se numeran por spec: certifica las ocho a la vez, que es como no certificar ninguna.
+
 ## Trazabilidad esperada
 
 - la implementacion debe apuntar a una feature de `specs/`
