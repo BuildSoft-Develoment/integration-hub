@@ -1,4 +1,4 @@
-// @trace RF-001, RF-003 (catalogo-fuentes: UI de configuracion para fuente tipo sftp)
+// @trace spec 001-catalogo-fuentes RF-001, RF-003 (catalogo-fuentes: UI de configuracion para fuente tipo sftp)
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';

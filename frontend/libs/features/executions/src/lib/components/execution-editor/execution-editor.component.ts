@@ -1,4 +1,4 @@
-// @trace RF-002 (observabilidad: detalle por tarea y por archivo procesado)
+// @trace spec 004-observabilidad-y-auditoria RF-002 (observabilidad: detalle por tarea y por archivo procesado)
 import { CommonModule } from '@angular/common';
 import { Component, effect, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';

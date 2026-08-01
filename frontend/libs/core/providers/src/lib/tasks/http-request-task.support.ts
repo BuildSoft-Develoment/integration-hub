@@ -1,4 +1,4 @@
-// @trace RF-002 (procesos: contrato HTTP comun REST_CALL + webhook NOTIFICATION) ADR-005
+// @trace spec 003-diseno-y-ejecucion-procesos RF-002 (procesos: contrato HTTP comun REST_CALL + webhook NOTIFICATION) ADR-005
 import { HttpRequestDraft, ProcessTaskBodyFieldBindingDraft } from './process-task-binding.models';
 
 /**

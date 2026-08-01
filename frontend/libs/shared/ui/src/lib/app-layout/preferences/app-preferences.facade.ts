@@ -1,4 +1,4 @@
-// @trace RF-002 (tema: actualizar preset/locale/colores desde la UI de preferencias)
+// @trace spec 007-tema-del-sistema RF-002 (tema: actualizar preset/locale/colores desde la UI de preferencias)
 import { Injectable, inject, signal } from '@angular/core';
 import {
   I18nService,

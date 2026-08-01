@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-// @covers RF-004 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 002-catalogo-readers RF-004 (reingenieria: prueba que cubre el/los RF en produccion)
 class ExcelReaderProviderTest {
 
     private final XlsReaderProvider xlsReaderProvider = new XlsReaderProvider();

@@ -1,4 +1,4 @@
-// @covers RF-007 (reingenieria: prueba que cubre el/los RF en produccion — observabilidad-y-auditoria: cold-store de auditoria)
+// @covers spec 004-observabilidad-y-auditoria RF-007 (reingenieria: prueba que cubre el/los RF en produccion — observabilidad-y-auditoria: cold-store de auditoria)
 package com.integrationhub.auditconsumer.coldstore;
 
 import com.fasterxml.jackson.databind.ObjectMapper;

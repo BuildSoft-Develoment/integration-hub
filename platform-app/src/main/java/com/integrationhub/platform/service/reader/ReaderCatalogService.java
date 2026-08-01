@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.reader;
 
-// @trace RF-002 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 002-catalogo-readers RF-002 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.entity.ReaderDefinition;
 import com.integrationhub.platform.repository.ReaderDefinitionRepository;

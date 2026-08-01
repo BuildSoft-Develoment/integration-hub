@@ -1,4 +1,4 @@
-// @trace RF-003 (procesos: activar/desactivar proceso para habilitar ejecucion)
+// @trace spec 003-diseno-y-ejecucion-procesos RF-003 (procesos: activar/desactivar proceso para habilitar ejecucion)
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';

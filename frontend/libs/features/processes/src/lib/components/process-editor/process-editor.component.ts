@@ -1,4 +1,4 @@
-// @trace RF-001 (procesos: editor de definicion de proceso con tareas ordenadas)
+// @trace spec 003-diseno-y-ejecucion-procesos RF-001 (procesos: editor de definicion de proceso con tareas ordenadas)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { ProcessTemplateRegistration } from '@integration-hub/core/providers';

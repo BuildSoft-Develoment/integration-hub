@@ -1,4 +1,4 @@
-// @trace RF-004 (observabilidad: resumen operativo agregado / overview-summary)
+// @trace spec 004-observabilidad-y-auditoria RF-004 (observabilidad: resumen operativo agregado / overview-summary)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';

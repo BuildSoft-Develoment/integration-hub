@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.reader;
 
-// @trace RF-001 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 002-catalogo-readers RF-001 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.spi.reader.ReadBatch;
 import com.integrationhub.platform.spi.reader.ReadBatchConsumer;

@@ -1,4 +1,4 @@
-// @trace RF-003 (conexiones: contrato configuration_json JDBC + secretos ${secret:...}) motor SQLSERVER
+// @trace spec 005-catalogo-conexiones RF-003 (conexiones: contrato configuration_json JDBC + secretos ${secret:...}) motor SQLSERVER
 import { Injectable } from '@angular/core';
 import { ConnectionDraft, ConnectionProvider } from '../../connections/connection-provider.abstract';
 

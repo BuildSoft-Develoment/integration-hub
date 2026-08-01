@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.secret;
 
-// @trace RF-004 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 001-catalogo-fuentes RF-004 (reingenieria: clase que implementa el/los RF en produccion)
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

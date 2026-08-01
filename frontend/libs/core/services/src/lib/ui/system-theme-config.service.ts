@@ -1,4 +1,4 @@
-// @trace RF-001, RF-003 (tema: consultar/persistir configuracion singleton via /api/system/theme)
+// @trace spec 007-tema-del-sistema RF-001, RF-003 (tema: consultar/persistir configuracion singleton via /api/system/theme)
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';

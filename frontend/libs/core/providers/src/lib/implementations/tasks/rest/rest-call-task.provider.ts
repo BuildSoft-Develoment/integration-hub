@@ -1,4 +1,4 @@
-// @trace RF-002 (procesos: contrato configuration_json de tarea tipo REST_CALL)
+// @trace spec 003-diseno-y-ejecucion-procesos RF-002 (procesos: contrato configuration_json de tarea tipo REST_CALL)
 import { Injectable } from '@angular/core';
 import { HttpRequestDraft, ProcessTaskBodyFieldBindingDraft, ProcessTaskExecutionMode, ProcessTaskRuntimeDraft } from '../../../tasks/process-task-binding.models';
 import {

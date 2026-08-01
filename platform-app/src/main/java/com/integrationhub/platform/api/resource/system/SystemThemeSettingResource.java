@@ -1,6 +1,6 @@
 package com.integrationhub.platform.api.resource.system;
 
-// @trace RF-002 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 007-tema-del-sistema RF-002 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.api.request.system.SystemThemeSettingRequest;
 import com.integrationhub.platform.api.response.system.SystemThemeSettingResponse;

@@ -1,4 +1,4 @@
-// @trace RF-001 (conexiones: UI de configuracion para motores JDBC (ORACLE/POSTGRESQL/SQLSERVER/MYSQL))
+// @trace spec 005-catalogo-conexiones RF-001 (conexiones: UI de configuracion para motores JDBC (ORACLE/POSTGRESQL/SQLSERVER/MYSQL))
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';

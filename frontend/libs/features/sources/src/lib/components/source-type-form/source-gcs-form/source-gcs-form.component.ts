@@ -1,4 +1,4 @@
-// @trace RF-006, RF-007 (catalogo-fuentes: UI de configuracion para fuente cloud GCS) ADR-006
+// @trace spec 001-catalogo-fuentes RF-006, RF-007 (catalogo-fuentes: UI de configuracion para fuente cloud GCS) ADR-006
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';

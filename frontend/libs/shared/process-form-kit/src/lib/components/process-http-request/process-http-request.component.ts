@@ -1,4 +1,4 @@
-// @trace RF-002, RF-012 (procesos: configuracion HTTP comun REST_CALL + webhook NOTIFICATION) ADR-005
+// @trace spec 003-diseno-y-ejecucion-procesos RF-002, RF-012 (procesos: configuracion HTTP comun REST_CALL + webhook NOTIFICATION) ADR-005
 import { CommonModule } from '@angular/common';
 import { Component, computed, effect, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';

@@ -1,4 +1,4 @@
-// @trace RF-006, RF-007, RF-008 (catalogo-fuentes: fuente cloud Google Cloud Storage) ADR-006
+// @trace spec 001-catalogo-fuentes RF-006, RF-007, RF-008 (catalogo-fuentes: fuente cloud Google Cloud Storage) ADR-006
 package com.integrationhub.platform.provider.source;
 
 import com.google.auth.oauth2.GoogleCredentials;

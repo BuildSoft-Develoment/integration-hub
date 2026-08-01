@@ -1,4 +1,4 @@
-// @trace RF-003 (programacion: consultar las programaciones vigentes)
+// @trace spec 006-programacion-procesos RF-003 (programacion: consultar las programaciones vigentes)
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';

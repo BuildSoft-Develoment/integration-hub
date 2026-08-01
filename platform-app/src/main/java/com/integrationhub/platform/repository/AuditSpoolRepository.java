@@ -1,4 +1,4 @@
-// @trace RF-008 (observabilidad-y-auditoria: persistencia del spool)
+// @trace spec 004-observabilidad-y-auditoria RF-008 (observabilidad-y-auditoria: persistencia del spool)
 package com.integrationhub.platform.repository;
 
 import com.integrationhub.platform.entity.AuditSpool;

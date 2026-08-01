@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.source;
 
-// @trace RF-001, RF-002 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 001-catalogo-fuentes RF-001, RF-002 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.api.response.source.SourceTestResponse;
 import com.integrationhub.platform.entity.SourceDefinition;

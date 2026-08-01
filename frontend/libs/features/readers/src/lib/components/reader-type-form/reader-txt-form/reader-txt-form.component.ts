@@ -1,4 +1,4 @@
-// @trace RF-001, RF-002 (catalogo-readers: UI de configuracion para reader formato TXT)
+// @trace spec 002-catalogo-readers RF-001, RF-002 (catalogo-readers: UI de configuracion para reader formato TXT)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';

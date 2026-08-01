@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-004 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 001-catalogo-fuentes RF-004 (reingenieria: prueba que cubre el/los RF en produccion)
 class FileVaultSecretValueProviderTest {
 
     @AfterEach

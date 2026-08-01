@@ -1,4 +1,4 @@
-// @trace RF-002 (tema: aplicar scheme/preset/colores/locale en el cliente)
+// @trace spec 007-tema-del-sistema RF-002 (tema: aplicar scheme/preset/colores/locale en el cliente)
 import { DOCUMENT } from '@angular/common';
 import { effect, inject, Injectable, signal } from '@angular/core';
 

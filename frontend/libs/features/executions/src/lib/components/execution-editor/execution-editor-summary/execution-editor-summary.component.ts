@@ -1,4 +1,4 @@
-// @trace RF-005 (observabilidad: correlacion de evidencia tecnica/funcional por processExecutionId)
+// @trace spec 004-observabilidad-y-auditoria RF-005 (observabilidad: correlacion de evidencia tecnica/funcional por processExecutionId)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';

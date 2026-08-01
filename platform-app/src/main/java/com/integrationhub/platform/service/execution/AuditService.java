@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.execution;
 
-// @trace RF-005 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 004-observabilidad-y-auditoria RF-005 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.audit.AuditEnvelope;

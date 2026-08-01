@@ -1,4 +1,4 @@
-// @trace RF-006, RF-007 (catalogo-fuentes: fuente cloud Google Cloud Storage) ADR-006
+// @trace spec 001-catalogo-fuentes RF-006, RF-007 (catalogo-fuentes: fuente cloud Google Cloud Storage) ADR-006
 import { Injectable } from '@angular/core';
 import { SourceDraft, SourceProvider } from '../../sources/source-provider.abstract';
 

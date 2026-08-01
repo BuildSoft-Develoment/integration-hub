@@ -1,4 +1,4 @@
-// @trace RF-003 (observabilidad: navegar a ejecuciones relacionadas (hijas/reproceso))
+// @trace spec 004-observabilidad-y-auditoria RF-003 (observabilidad: navegar a ejecuciones relacionadas (hijas/reproceso))
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';

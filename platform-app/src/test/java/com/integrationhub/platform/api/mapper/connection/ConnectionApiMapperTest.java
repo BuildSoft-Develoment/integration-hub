@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-003 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 005-catalogo-conexiones RF-003 (reingenieria: prueba que cubre el/los RF en produccion)
 class ConnectionApiMapperTest {
 
     private final ConnectionApiMapper mapper = new ConnectionApiMapper();

@@ -1,4 +1,4 @@
-// @trace RF-001 (observabilidad: consultar eventos de auditoria por filtros)
+// @trace spec 004-observabilidad-y-auditoria RF-001 (observabilidad: consultar eventos de auditoria por filtros)
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { PageEvent } from '@angular/material/paginator';

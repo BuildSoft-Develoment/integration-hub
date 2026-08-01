@@ -1,6 +1,6 @@
 package com.integrationhub.platform.api.resource.process;
 
-// @trace RF-001 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 003-diseno-y-ejecucion-procesos RF-001 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.api.request.process.ProcessDefinitionRequest;
 import com.integrationhub.platform.api.response.process.ProcessDefinitionResponse;

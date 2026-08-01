@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-// @covers RF-003 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 007-tema-del-sistema RF-003 (reingenieria: prueba que cubre el/los RF en produccion)
 class SystemThemeSettingApiMapperTest {
 
     private final SystemThemeSettingApiMapper mapper = new SystemThemeSettingApiMapper();

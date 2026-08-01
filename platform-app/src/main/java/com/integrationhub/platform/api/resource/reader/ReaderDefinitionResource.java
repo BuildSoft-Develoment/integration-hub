@@ -1,6 +1,6 @@
 package com.integrationhub.platform.api.resource.reader;
 
-// @trace RF-001, RF-005 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 002-catalogo-readers RF-001, RF-005 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.api.mapper.reader.ReaderApiMapper;
 import com.integrationhub.platform.api.request.reader.ReaderDefinitionRequest;

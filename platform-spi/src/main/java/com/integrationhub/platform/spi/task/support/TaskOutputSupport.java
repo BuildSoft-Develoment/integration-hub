@@ -1,3 +1,4 @@
+// @trace spec 003-diseno-y-ejecucion-procesos RF-008 (metadata de runtime entre tareas; la matriz de 003 declara esta clase)
 package com.integrationhub.platform.spi.task.support;
 
 import com.integrationhub.platform.spi.task.TaskContext;

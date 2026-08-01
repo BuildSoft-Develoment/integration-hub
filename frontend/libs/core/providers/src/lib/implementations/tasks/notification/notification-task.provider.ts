@@ -1,4 +1,4 @@
-// @trace RF-002 (procesos: contrato configuration_json de tarea tipo NOTIFICATION)
+// @trace spec 003-diseno-y-ejecucion-procesos RF-002 (procesos: contrato configuration_json de tarea tipo NOTIFICATION)
 import { Injectable } from '@angular/core';
 import { I18nService } from '@integration-hub/core/i18n';
 import { HttpRequestDraft, ProcessTaskRuntimeDraft } from '../../../tasks/process-task-binding.models';

@@ -1,4 +1,4 @@
-// @trace RF-002 (conexiones: probar conectividad + activar/desactivar)
+// @trace spec 005-catalogo-conexiones RF-002 (conexiones: probar conectividad + activar/desactivar)
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';

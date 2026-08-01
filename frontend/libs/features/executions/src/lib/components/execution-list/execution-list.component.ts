@@ -1,4 +1,4 @@
-// @trace RF-001 (observabilidad: consultar ejecuciones por filtros)
+// @trace spec 004-observabilidad-y-auditoria RF-001 (observabilidad: consultar ejecuciones por filtros)
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';

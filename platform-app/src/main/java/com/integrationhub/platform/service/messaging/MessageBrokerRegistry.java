@@ -1,4 +1,4 @@
-// @trace RF-006 (observabilidad-y-auditoria: registro de brokers del backbone asincrono)
+// @trace spec 004-observabilidad-y-auditoria RF-006 (observabilidad-y-auditoria: registro de brokers del backbone asincrono)
 package com.integrationhub.platform.service.messaging;
 
 import com.integrationhub.platform.spi.messaging.MessageBrokerProvider;

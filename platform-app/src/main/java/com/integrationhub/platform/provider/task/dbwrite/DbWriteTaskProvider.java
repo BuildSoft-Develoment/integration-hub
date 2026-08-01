@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.dbwrite;
 
-// @trace RF-002 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 003-diseno-y-ejecucion-procesos RF-002 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;

@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.execution;
 
-// @trace RF-002, RF-003 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 004-observabilidad-y-auditoria RF-002, RF-003 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.api.mapper.execution.ExecutionApiMapper;
 import com.integrationhub.platform.spi.api.PageResponse;

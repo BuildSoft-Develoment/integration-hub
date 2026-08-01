@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-002 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 002-catalogo-readers RF-002 (reingenieria: prueba que cubre el/los RF en produccion)
 class ReaderFieldSupportTest {
 
     @Test

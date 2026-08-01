@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 003-diseno-y-ejecucion-procesos RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
 class FileReadTaskFastPathTest {
 
     @Test

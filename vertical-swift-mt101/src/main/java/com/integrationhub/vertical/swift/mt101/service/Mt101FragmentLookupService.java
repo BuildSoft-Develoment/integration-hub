@@ -1,4 +1,4 @@
-// @trace RF-009 (observabilidad-y-auditoria: consulta de fragmentos MT101)
+// @trace spec 004-observabilidad-y-auditoria RF-009 (observabilidad-y-auditoria: consulta de fragmentos MT101)
 package com.integrationhub.vertical.swift.mt101.service;
 
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;

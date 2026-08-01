@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service;
 
-// @trace RF-003 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 001-catalogo-fuentes RF-003 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.spi.engine.ConfigurationMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;

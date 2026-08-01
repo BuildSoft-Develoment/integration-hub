@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.source;
 
-// @trace RF-006, RF-007, RF-008 (catalogo-fuentes: fuente cloud OCI Object Storage) ADR-006
+// @trace spec 001-catalogo-fuentes RF-006, RF-007, RF-008 (catalogo-fuentes: fuente cloud OCI Object Storage) ADR-006
 
 import com.integrationhub.platform.spi.config.PluginConfigField;
 import com.integrationhub.platform.spi.config.PluginConfigOption;

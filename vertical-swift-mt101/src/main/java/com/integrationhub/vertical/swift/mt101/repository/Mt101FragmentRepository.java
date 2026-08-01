@@ -1,4 +1,4 @@
-// @trace RF-009 (observabilidad-y-auditoria: persistencia de fragmentos MT101)
+// @trace spec 004-observabilidad-y-auditoria RF-009 (observabilidad-y-auditoria: persistencia de fragmentos MT101)
 package com.integrationhub.vertical.swift.mt101.repository;
 
 import jakarta.enterprise.context.ApplicationScoped;
