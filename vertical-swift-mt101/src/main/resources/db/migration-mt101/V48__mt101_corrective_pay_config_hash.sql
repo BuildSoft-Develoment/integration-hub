@@ -1,4 +1,4 @@
--- @trace spec 008-mensajeria-pagos RF-004, RF-024
+-- @trace specs/008-mensajeria-pagos RF-004, RF-024
 -- El maker aprueba no solo el payload archivado sino tambien la configuracion
 -- efectiva de MT101_PAY (transporte/rutas/destinos/correlacion). El checker
 -- solo puede ejecutar si ambos hashes siguen iguales.

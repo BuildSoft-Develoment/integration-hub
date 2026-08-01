@@ -44,6 +44,8 @@ import java.util.Map;
  * <p>El estado del run lo deriva {@link Mt101RebuildService#synchronizeLifecycle} de los
  * estados de los fragmentos correctivos; aqui solo se ejecutan las tareas y se sincroniza.
  * Es reanudable: cada etapa se salta si el run ya la paso.</p>
+ *
+ * @trace spec 008-mensajeria-pagos RF-024 (reproceso correctivo con maker-checker en el PAY)
  */
 @ApplicationScoped
 public class Mt101CorrectiveLifecycleService {

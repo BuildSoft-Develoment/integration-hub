@@ -1,4 +1,4 @@
--- @trace spec 008-mensajeria-pagos RF-022, RF-024
+-- @trace specs/008-mensajeria-pagos RF-022, RF-024
 -- Resolucion gobernada de PAY incierto y correctivos hijos para pagos parciales.
 
 alter table vertical_mt101.mt101_rebuild_run

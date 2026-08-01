@@ -1,0 +1,114 @@
+# Checksums de Flyway (CRC32, int32 con signo) de cada migracion PUBLICADA.
+# Generado por: npm run check:migration-immutability -- --update
+#
+# Editar una migracion ya aplicada rompe el arranque de toda instalacion que la aplico:
+# validateOnMigrate=true compara este checksum contra flyway_schema_history. Si una linea de este
+# fichero cambia sin que la migracion sea nueva, el diff lo esta gritando: pregunta por que.
+#
+# El checksum ignora CRLF vs LF (verificado sobre las 104 migraciones), asi que este fichero es
+# identico en Windows y en el CI de Linux.
+
+1995864755  platform-app/src/main/resources/db/migration/V1__initial_schema.sql
+-395883178  platform-app/src/main/resources/db/migration/V10__system_theme_setting_locale_sidebar.sql
+206019795  platform-app/src/main/resources/db/migration/V100__source_definition_direction.sql
+-626824182  platform-app/src/main/resources/db/migration/V101__system_theme_setting_drop_density_sidebar.sql
+832813390  platform-app/src/main/resources/db/migration/V102__task_execution_moves_money.sql
+-250136797  platform-app/src/main/resources/db/migration/V103__source_definition_money_critical.sql
+-741357203  platform-app/src/main/resources/db/migration/V104__audit_record_event_gateway_reference_width.sql
+-1145117046  platform-app/src/main/resources/db/migration/V11__process_execution_async_request_payload.sql
+-1353625134  platform-app/src/main/resources/db/migration/V13__process_task_suspension.sql
+339653798  platform-app/src/main/resources/db/migration/V15__staging_record_index_mt101_scale.sql
+-691534994  platform-app/src/main/resources/db/migration/V16__process_task_suspension_continuation.sql
+1614798167  platform-app/src/main/resources/db/migration/V2__process_schedule.sql
+1164939943  platform-app/src/main/resources/db/migration/V20__audit_spool.sql
+-249710227  platform-app/src/main/resources/db/migration/V21__audit_event_event_id.sql
+-612429630  platform-app/src/main/resources/db/migration/V22__audit_record_event.sql
+-144662305  platform-app/src/main/resources/db/migration/V23__audit_record_operational_keys.sql
+102948610  platform-app/src/main/resources/db/migration/V24__audit_spool_hardening.sql
+-111284500  platform-app/src/main/resources/db/migration/V26__audit_record_id_widen_and_dlq_dedup.sql
+1811334515  platform-app/src/main/resources/db/migration/V27__audit_record_hash_varchar.sql
+-1554107602  platform-app/src/main/resources/db/migration/V3__connection_definition.sql
+380357516  platform-app/src/main/resources/db/migration/V31__record_traceability_source_row.sql
+268214815  platform-app/src/main/resources/db/migration/V34__staging_record_optimistic_lock.sql
+-607841108  platform-app/src/main/resources/db/migration/V4__process_task_definition_active.sql
+-2104255140  platform-app/src/main/resources/db/migration/V5__process_task_execution_timing.sql
+652143836  platform-app/src/main/resources/db/migration/V6__processed_source_file.sql
+971725312  platform-app/src/main/resources/db/migration/V7__process_execution_retry_lineage.sql
+55537678  platform-app/src/main/resources/db/migration/V70__backend_plugin_descriptor.sql
+-2120830648  platform-app/src/main/resources/db/migration/V71__plugin_descriptor_capabilities_and_pinning.sql
+386972938  platform-app/src/main/resources/db/migration/V72__plugin_marketplace_catalog_cache.sql
+-507989797  platform-app/src/main/resources/db/migration/V73__plugin_descriptor_version.sql
+-183381117  platform-app/src/main/resources/db/migration/V74__plugin_invocation_metric.sql
+-1767019167  platform-app/src/main/resources/db/migration/V75__ui_plugin_catalog_entry.sql
+-539297240  platform-app/src/main/resources/db/migration/V76__plugin_canary_weight.sql
+-1533999372  platform-app/src/main/resources/db/migration/V77__plugin_descriptor_config_schemas.sql
+826868530  platform-app/src/main/resources/db/migration/V78__task_dispatch_outbox.sql
+-1550741085  platform-app/src/main/resources/db/migration/V79__task_inbox.sql
+90340115  platform-app/src/main/resources/db/migration/V8__process_definition_flow_layout.sql
+-250137674  platform-app/src/main/resources/db/migration/V80__task_execution_active_suspension_index.sql
+-345397318  platform-app/src/main/resources/db/migration/V81__task_async_dispatch.sql
+417183625  platform-app/src/main/resources/db/migration/V82__task_async_dispatch_streaming.sql
+1735031236  platform-app/src/main/resources/db/migration/V83__task_async_dispatch_page_recovery.sql
+345163595  platform-app/src/main/resources/db/migration/V84__task_async_dispatch_progress_at.sql
+-828404344  platform-app/src/main/resources/db/migration/V85__task_sync_progress.sql
+202534082  platform-app/src/main/resources/db/migration/V86__process_execution_distributed_claim.sql
+-172321747  platform-app/src/main/resources/db/migration/V88__task_inbox_claim.sql
+-845281039  platform-app/src/main/resources/db/migration/V9__system_theme_setting.sql
+-237090844  platform-app/src/main/resources/db/migration/V90__staging_record_physical_position.sql
+-312763146  platform-app/src/main/resources/db/migration/V92__task_inbox_claim_token.sql
+-222301611  platform-app/src/main/resources/db/migration/V93__staging_record_sheet_row_index.sql
+-524610294  platform-app/src/main/resources/db/migration/V96__plugin_descriptor_version_config_schemas.sql
+1693305782  platform-app/src/main/resources/db/migration/V97__system_theme_setting_branding.sql
+598736224  vertical-swift-mt101/src/main/resources/db/migration-mt101/V12__payments_mt101_schema.sql
+-1263650121  vertical-swift-mt101/src/main/resources/db/migration-mt101/V14__mt101_massive_fragments.sql
+1190716205  vertical-swift-mt101/src/main/resources/db/migration-mt101/V17__mt101_archive_status_sync.sql
+-1148396758  vertical-swift-mt101/src/main/resources/db/migration-mt101/V18__mt101_idempotency_and_issue_lineage.sql
+394315839  vertical-swift-mt101/src/main/resources/db/migration-mt101/V19__mt101_archive_idempotency_guard.sql
+1938798715  vertical-swift-mt101/src/main/resources/db/migration-mt101/V25__mt101_fragment_source_row_lookup.sql
+-1683255849  vertical-swift-mt101/src/main/resources/db/migration-mt101/V28__payment_validation_rule_severity_varchar.sql
+-1345822620  vertical-swift-mt101/src/main/resources/db/migration-mt101/V29__swift_inbound_message.sql
+394799173  vertical-swift-mt101/src/main/resources/db/migration-mt101/V30__inbound_routed_transaction.sql
+-1229827600  vertical-swift-mt101/src/main/resources/db/migration-mt101/V32__mt101_failed_record_quarantine.sql
+-213753614  vertical-swift-mt101/src/main/resources/db/migration-mt101/V33__mt101_rebuild_run_and_fragment_record.sql
+1393839310  vertical-swift-mt101/src/main/resources/db/migration-mt101/V35__mt101_rebuild_reference_sequence.sql
+-2074832155  vertical-swift-mt101/src/main/resources/db/migration-mt101/V36__mt101_fragment_record_status_drop_and_archive_scope.sql
+1424742587  vertical-swift-mt101/src/main/resources/db/migration-mt101/V37__mt101_rebuild_execution_actor.sql
+-591217883  vertical-swift-mt101/src/main/resources/db/migration-mt101/V38__mt101_rebuild_resolution_and_correction_audit.sql
+926980857  vertical-swift-mt101/src/main/resources/db/migration-mt101/V39__mt101_rebuild_selection_approval_snapshot.sql
+1035300005  vertical-swift-mt101/src/main/resources/db/migration-mt101/V40__mt101_rebuild_run_connection_ref.sql
+63920826  vertical-swift-mt101/src/main/resources/db/migration-mt101/V41__mt101_rebuild_corrective_pay_governance.sql
+2107277696  vertical-swift-mt101/src/main/resources/db/migration-mt101/V42__mt101_lineage_source_instance_identity.sql
+1883939228  vertical-swift-mt101/src/main/resources/db/migration-mt101/V43__mt101_corrective_no_fallback_identity_and_pay_claim.sql
+-856185957  vertical-swift-mt101/src/main/resources/db/migration-mt101/V44__mt101_corrective_pay_hash_uncertain_partial.sql
+-445810708  vertical-swift-mt101/src/main/resources/db/migration-mt101/V45__mt101_corrective_route_and_pay_intent.sql
+186686457  vertical-swift-mt101/src/main/resources/db/migration-mt101/V46__mt101_uncertain_resolution_and_child_corrective.sql
+-1304008425  vertical-swift-mt101/src/main/resources/db/migration-mt101/V47__mt101_corrective_post_pay_sync_status.sql
+-1010026312  vertical-swift-mt101/src/main/resources/db/migration-mt101/V48__mt101_corrective_pay_config_hash.sql
+1282111706  vertical-swift-mt101/src/main/resources/db/migration-mt101/V49__mt101_corrective_pay_resolution_audit.sql
+467937909  vertical-swift-mt101/src/main/resources/db/migration-mt101/V50__mt101_corrective_pay_request_reason.sql
+1141957160  vertical-swift-mt101/src/main/resources/db/migration-mt101/V51__mt101_corrective_pay_action_log.sql
+-2092545476  vertical-swift-mt101/src/main/resources/db/migration-mt101/V52__mt101_corrective_pay_status_config_snapshot.sql
+1676711995  vertical-swift-mt101/src/main/resources/db/migration-mt101/V53__mt101_corrective_pay_action_append_only.sql
+-1607543784  vertical-swift-mt101/src/main/resources/db/migration-mt101/V54__mt101_corrective_pay_fragment_approved_route.sql
+-1764389306  vertical-swift-mt101/src/main/resources/db/migration-mt101/V55__mt101_corrective_pay_fragment_dispatch_plan.sql
+-1541569157  vertical-swift-mt101/src/main/resources/db/migration-mt101/V56__mt101_corrective_pay_action_hash_chain.sql
+-2144848206  vertical-swift-mt101/src/main/resources/db/migration-mt101/V57__mt101_corrective_pay_reconcile_snapshot.sql
+-1778226730  vertical-swift-mt101/src/main/resources/db/migration-mt101/V58__mt101_corrective_pay_fragment_conflict.sql
+256553087  vertical-swift-mt101/src/main/resources/db/migration-mt101/V59__mt101_corrective_pay_fragment_dispatch_spec.sql
+1952502410  vertical-swift-mt101/src/main/resources/db/migration-mt101/V60__mt101_rebuild_run_pay_plan_set.sql
+1178629451  vertical-swift-mt101/src/main/resources/db/migration-mt101/V61__mt101_rebuild_run_pay_plan_reservation.sql
+1074975730  vertical-swift-mt101/src/main/resources/db/migration-mt101/V62__mt101_corrective_pay_plan_revisions.sql
+-1706719954  vertical-swift-mt101/src/main/resources/db/migration-mt101/V63__mt101_rebuild_run_pay_plan_reservation_owner.sql
+1439592525  vertical-swift-mt101/src/main/resources/db/migration-mt101/V64__mt101_rebuild_run_pay_plan_previous_status.sql
+706634784  vertical-swift-mt101/src/main/resources/db/migration-mt101/V65__mt101_corrective_pay_plan_immutability_triggers.sql
+115111437  vertical-swift-mt101/src/main/resources/db/migration-mt101/V66__mt101_corrective_pay_plan_insert_immutability.sql
+-2115103166  vertical-swift-mt101/src/main/resources/db/migration-mt101/V67__mt101_corrective_pay_plan_header_integrity.sql
+12938542  vertical-swift-mt101/src/main/resources/db/migration-mt101/V68__mt101_corrective_pay_plan_referential_integrity.sql
+-488158668  vertical-swift-mt101/src/main/resources/db/migration-mt101/V69__mt101_corrective_pay_plan_validate_and_sanitize.sql
+-1110643742  vertical-swift-mt101/src/main/resources/db/migration-mt101/V87__mt101_pay_dispatch_intent.sql
+1375371877  vertical-swift-mt101/src/main/resources/db/migration-mt101/V89__mt101_pay_normal_fragment_conflict.sql
+-794346769  vertical-swift-mt101/src/main/resources/db/migration-mt101/V91__mt101_pay_dispatch_intent_payload_identity.sql
+-1255422131  vertical-swift-mt101/src/main/resources/db/migration-mt101/V94__mt101_build_fragment_pay_conflict_open_index.sql
+-1402768678  vertical-swift-mt101/src/main/resources/db/migration-mt101/V95__mt101_corrective_pay_fragment_conflict_open_index.sql
+1688555148  vertical-swift-mt101/src/main/resources/db/migration-mt101/V98__mt101_pay_conflict_acknowledge.sql
+-1512218891  vertical-swift-mt101/src/main/resources/db/migration-mt101/V99__mt101_pay_conflict_ack_maker_checker.sql

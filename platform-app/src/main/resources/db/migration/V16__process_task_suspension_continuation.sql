@@ -1,4 +1,4 @@
--- @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2.1 continuacion downstream post-resume), ADR-009
+-- @trace spec 003 T-017 (M-2.1 continuacion downstream post-resume), ADR-009
 --
 -- Envelope JSON {taskOutputs, executionVariables, triggerSource} capturado al
 -- suspender. Permite que, al completar un resume con tareas downstream, el
