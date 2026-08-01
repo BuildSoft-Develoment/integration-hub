@@ -20,7 +20,7 @@ v0.4.0
 - Resumen en una linea: plataforma Quarkus operativa (194 archivos Java) con motor de ejecucion de tareas multi-provider (REST, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, NOTIFICATION) sobre fuentes filesystem/ftp/sftp/rest y readers txt/csv/xls/xlsx/json/xml; se esta instanciando la capa de gobernanza (memoria viva, trazabilidad RF->codigo->test, gates con firma humana) sin perder lo que ya corre.
 - Ultima actualizacion (auto):
 <!-- auto:start name=ultima-actualizacion -->
-2026-06-02 04:22
+2026-08-01 04:56
 <!-- auto:end -->
 
 ## Features y su estado
@@ -37,52 +37,58 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 | 005-catalogo-conexiones | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 | 006-programacion-procesos | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 | 007-tema-del-sistema | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
+| 008-mensajeria-pagos | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending |
 <!-- auto:end -->
 
 ## Gates pendientes
 <!-- auto:start name=gates-pendientes -->
-- `gate-build-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-deploy-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-operations-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-qa-passed` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-sdd-approved` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-spdd-approved` en `specs/001-catalogo-fuentes` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-build-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-deploy-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-operations-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-qa-passed` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-sdd-approved` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-spdd-approved` en `specs/002-catalogo-readers` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-build-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-deploy-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-operations-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-qa-passed` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-sdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-spdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-build-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-deploy-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-operations-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-qa-passed` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-sdd-approved` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-spdd-approved` en `specs/004-observabilidad-y-auditoria` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-build-ready` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-deploy-ready` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-operations-ready` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-qa-passed` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-sdd-approved` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-spdd-approved` en `specs/005-catalogo-conexiones` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-build-ready` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-deploy-ready` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-operations-ready` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-qa-passed` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-sdd-approved` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-spdd-approved` en `specs/006-programacion-procesos` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-build-ready` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-deploy-ready` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-operations-ready` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-qa-passed` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-sdd-approved` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-01)
-- `gate-spdd-approved` en `specs/007-tema-del-sistema` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-06-01)
+- `gate-build-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-deploy-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-operations-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-qa-passed` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-sdd-approved` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-spdd-approved` en `specs/001-catalogo-fuentes` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-build-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-deploy-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-operations-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-qa-passed` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-sdd-approved` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-spdd-approved` en `specs/002-catalogo-readers` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-build-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-deploy-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-operations-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-qa-passed` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-sdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-spdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-build-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-deploy-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-operations-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-qa-passed` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-sdd-approved` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-spdd-approved` en `specs/004-observabilidad-y-auditoria` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-build-ready` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-deploy-ready` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-operations-ready` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-qa-passed` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-sdd-approved` en `specs/005-catalogo-conexiones` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-spdd-approved` en `specs/005-catalogo-conexiones` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-build-ready` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-deploy-ready` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-operations-ready` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-qa-passed` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-sdd-approved` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-spdd-approved` en `specs/006-programacion-procesos` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-build-ready` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-deploy-ready` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-operations-ready` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-qa-passed` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-sdd-approved` en `specs/007-tema-del-sistema` — pending (ultimo: Natan Angel Davila Lopez, 2026-06-03)
+- `gate-spdd-approved` en `specs/007-tema-del-sistema` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-build-ready` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-deploy-ready` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-operations-ready` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-qa-passed` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-sdd-approved` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
 <!-- auto:end -->
 
 ## Sesiones recientes
@@ -92,11 +98,11 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 
 ## Decisiones recientes
 <!-- auto:start name=decisiones-recientes -->
+- Vertical SWIFT MT101 como modulo Maven propio, dentro del monolito modular (ADR-021). _(registrada)_ — [ver](specs/008-mensajeria-pagos/traceability.md)
+- Unificar la peticion HTTP de `REST_CALL` y el canal `webhook` de `NOTIFICATION` en una pieza _(registrada)_ — [ver](specs/003-diseno-y-ejecucion-procesos/traceability.md)
+- Segregacion de funciones sobre el cierre de conflictos de pago: `pay-conflict-maker` y _(registrada)_ — [ver](specs/008-mensajeria-pagos/traceability.md)
 - Secretos referenciados con el contrato `${secret:...}`, nunca persistidos en claro (ADR-002). _(registrada)_ — [ver](specs/001-catalogo-fuentes/traceability.md)
 - Secretos de conexion referenciados con `${secret:...}` (ADR-002). _(registrada)_ — [ver](specs/005-catalogo-conexiones/traceability.md)
-- Patron providers + registries para fuentes (ADR-001). _(registrada)_ — [ver](specs/001-catalogo-fuentes/traceability.md)
-- Motor providers + registries para tipos de tarea (DbWrite, StoredProcedure, etc.) (ADR-001). _(registrada)_ — [ver](specs/003-diseno-y-ejecucion-procesos/traceability.md)
-- Metadata JDBC introspeccionada en vivo (no persistida) via `ConnectionMetadataService`. _(registrada)_ — [ver](specs/005-catalogo-conexiones/traceability.md)
 <!-- auto:end -->
 
 ## Proximos pasos
