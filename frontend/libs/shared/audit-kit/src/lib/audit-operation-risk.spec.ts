@@ -1,3 +1,4 @@
+// @covers RF-010 (reingenieria: prueba que cubre el/los RF en produccion — observabilidad-y-auditoria: riesgo operacional de acciones auditables)
 import { auditEvidenceLabelKey, auditOperationRisk, registerAuditOperationRisks } from './audit-operation-risk';
 
 describe('auditOperationRisk', () => {

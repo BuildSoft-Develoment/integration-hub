@@ -7,9 +7,20 @@ import { ExecutionApiService, ExecutionModeFilter } from '../api/execution-api.s
 import { ExecutionDetailStore } from '../details/execution-detail.store';
 import { ProcessExecutionRecord } from '../models/execution.models';
 
+// Los siete valores de ExecutionStatus, no cuatro.
+//
+// Faltaban PENDING, SUSPENDED y sobre todo NEEDS_RECONCILIATION, que es el estado en el que queda
+// una ejecucion del camino del dinero cuando un pago se intento despachar y NO se pudo demostrar que
+// el banco no lo recibio. Es decir: el unico estado que significa "hay dinero en el limbo" era el
+// unico que el operador no podia filtrar. El backend siempre lo acepto -`ExecutionQueryService`
+// hace `ExecutionStatus.valueOf(status)`- y las etiquetas i18n de los siete ya existian en es/en;
+// lo unico que faltaba era ofrecerlos.
 export type ExecutionStatusFilter =
   | 'ALL'
+  | 'PENDING'
   | 'RUNNING'
+  | 'SUSPENDED'
+  | 'NEEDS_RECONCILIATION'
   | 'COMPLETED'
   | 'FAILED'
   | 'COMPLETED_WITH_ERRORS';

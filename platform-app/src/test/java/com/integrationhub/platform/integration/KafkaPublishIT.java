@@ -1,3 +1,4 @@
+// @covers RF-006 (reingenieria: prueba que cubre el/los RF en produccion — observabilidad-y-auditoria: publicacion al backbone de auditoria)
 package com.integrationhub.platform.integration;
 
 import com.integrationhub.platform.service.messaging.MessageBrokerRegistry;

@@ -6,6 +6,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { ExecutionModeFilter } from '../api/execution-api.service';
 import { ExecutionCatalogCommandService } from './execution-catalog-command.service';
 import { ExecutionCatalogQueryStore } from './execution-catalog-query.store';
+import type { ExecutionStatusFilter } from './execution-catalog-query.store';
 import { ExecutionCatalogStore } from './execution-catalog.store';
 import { ExecutionDetailLoaderService } from '../details/execution-detail-loader.service';
 import { ExecutionDetailStore } from '../details/execution-detail.store';
@@ -91,9 +92,9 @@ export class ExecutionCatalogPageComponent implements OnInit {
     this.store.updateModeFilter(value);
   }
 
-  updateStatusFilter(
-    value: 'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'COMPLETED_WITH_ERRORS'
-  ): void {
+  // Tipo importado, no una CUARTA copia de la union. Habia tres -store, toolbar y esta- y por eso
+  // pudieron divergir sin que nadie lo notara.
+  updateStatusFilter(value: ExecutionStatusFilter): void {
     this.store.updateStatusFilter(value);
   }
 

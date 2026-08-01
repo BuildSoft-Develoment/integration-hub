@@ -1,3 +1,4 @@
+// @covers RF-010 (reingenieria: prueba que cubre el/los RF en produccion — diseno-y-ejecucion-procesos: registro de outputs por lote)
 package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.vertical.swift.mt101.provider.task.Mt101MessageInputResolver;

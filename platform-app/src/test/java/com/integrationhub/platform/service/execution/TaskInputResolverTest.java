@@ -1,3 +1,4 @@
+// @covers RF-007, RF-011 (reingenieria: prueba que cubre el/los RF en produccion — diseno-y-ejecucion-procesos: resolucion de inputs y fan-in)
 package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.repository.TaskInputRepository;

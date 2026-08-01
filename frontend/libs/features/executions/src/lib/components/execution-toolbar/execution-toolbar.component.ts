@@ -8,7 +8,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { RouterLink } from '@angular/router';
 import { I18nService } from '@integration-hub/core/services';
 
-type ExecutionStatusFilter = 'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'COMPLETED_WITH_ERRORS';
+// El tipo se IMPORTA del store en vez de redeclararse. Existian dos copias de la misma union y por
+// eso pudieron divergir en silencio: la del store y esta. Con `import type` no hay import en tiempo
+// de ejecucion -se borra al compilar-, asi que no se introduce ciclo con la pagina de catalogo.
+import type { ExecutionStatusFilter } from '../../catalog/execution-catalog-query.store';
+
 type ExecutionModeFilter = 'ALL' | 'MANUAL' | 'SCHEDULED';
 
 @Component({

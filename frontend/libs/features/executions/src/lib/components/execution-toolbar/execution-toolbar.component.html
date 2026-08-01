@@ -26,7 +26,10 @@
       <mat-label>{{ i18n.t('common.status') }}</mat-label>
       <mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilterChange.emit($event)">
         <mat-option value="ALL">{{ i18n.t('sources.allStatuses') }}</mat-option>
+        <mat-option value="PENDING">{{ i18n.t('executionStatus.PENDING') }}</mat-option>
         <mat-option value="RUNNING">{{ i18n.t('executionStatus.RUNNING') }}</mat-option>
+        <mat-option value="SUSPENDED">{{ i18n.t('executionStatus.SUSPENDED') }}</mat-option>
+        <mat-option value="NEEDS_RECONCILIATION">{{ i18n.t('executionStatus.NEEDS_RECONCILIATION') }}</mat-option>
         <mat-option value="COMPLETED">{{ i18n.t('executionStatus.COMPLETED') }}</mat-option>
         <mat-option value="FAILED">{{ i18n.t('executionStatus.FAILED') }}</mat-option>
         <mat-option value="COMPLETED_WITH_ERRORS">{{ i18n.t('executionStatus.COMPLETED_WITH_ERRORS') }}</mat-option>
