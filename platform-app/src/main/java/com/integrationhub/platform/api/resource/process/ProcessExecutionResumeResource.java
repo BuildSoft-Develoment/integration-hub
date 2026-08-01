@@ -41,7 +41,7 @@ import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_AD
  * El token es de un solo uso, asi que el replay de un request capturado
  * produce 404.</p>
  *
- * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  * @trace spec 008-mensajeria-pagos RF-019
  */
 @Path("/api/process-executions/resume")

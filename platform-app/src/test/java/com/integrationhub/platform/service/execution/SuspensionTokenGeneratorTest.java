@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * @covers spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @covers spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  */
 class SuspensionTokenGeneratorTest {
 

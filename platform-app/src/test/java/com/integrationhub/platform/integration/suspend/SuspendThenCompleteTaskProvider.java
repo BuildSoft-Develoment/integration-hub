@@ -16,7 +16,7 @@ import java.util.Map;
  * {@code {attempt: 1}}; el resume completa con outputs que reflejan el
  * {@code externalEvent} recibido del callback + el state previo.</p>
  *
- * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  */
 @ApplicationScoped
 public class SuspendThenCompleteTaskProvider implements SuspendableTaskProvider {

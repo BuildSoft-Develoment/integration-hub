@@ -24,7 +24,7 @@ import java.util.Map;
  * un fallo en una suspension no detiene el barrido de las demas. Si el provider
  * re-suspende con nuevo vencimiento, el ciclo continua en el siguiente tick.</p>
  *
- * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  * @trace spec 008-mensajeria-pagos RF-019
  */
 @ApplicationScoped

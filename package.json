@@ -33,6 +33,7 @@
     "check:docs": "node ci/scripts/check-docs.mjs",
     "check:trace-drift": "node ci/scripts/check-trace-drift.mjs",
     "check:trace-coverage": "node ci/scripts/check-trace-coverage.mjs",
+    "check:trace-scope": "node ci/scripts/check-trace-scope.mjs",
     "check:prototype-hub": "node ci/scripts/check-prototype-hub.mjs",
     "check:prototype-html5": "node ci/scripts/check-html5-prototype-quality.mjs",
     "check:ai-artifacts": "node ci/scripts/check-ai-artifacts.mjs",

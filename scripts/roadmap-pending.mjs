@@ -92,11 +92,43 @@ function loadGateStatus(features) {
   return map;
 }
 
+/**
+ * Codigos certificados por una anotacion del CODIGO, con la feature en la clave.
+ *
+ * Los RF se numeran por spec, asi que `RF-006` designa cosas distintas en siete features a la vez.
+ * Con un Set de solo `target_ref`, un `@covers RF-006` en cualquier fichero del repositorio daba por
+ * cubierto el RF-006 de las OCHO specs: un verde que no significaba nada. Ahora la clave es
+ * `<feature>|<RF>` para las anotaciones cualificadas (`@covers spec 004-... RF-006`).
+ *
+ * Las anotaciones sin cualificar se siguen aceptando en su forma antigua -clave `|<RF>`- para no
+ * volver rojo de golpe todo lo que aun no se ha migrado, pero NO certifican ninguna feature
+ * concreta: `certifica()` decide, y lo hace explicito.
+ */
 function tracedCodes(relation) {
   if (!db) return new Set();
   try {
-    return new Set(db.prepare("SELECT DISTINCT target_ref FROM ai_trace_links WHERE origin = 'source-harvest' AND relation = ?").all(relation).map((r) => r.target_ref));
+    return new Set(
+      db.prepare(
+        "SELECT DISTINCT target_ref, target_scope FROM ai_trace_links WHERE origin = 'source-harvest' AND relation = ?",
+      ).all(relation).map((r) => `${r.target_scope || ""}|${r.target_ref}`),
+    );
   } catch { return new Set(); }
+}
+
+/**
+ * Que certifica a este (feature, RF):
+ *   "scope"  — hay una anotacion CUALIFICADA de esa feature. Es la unica prueba de verdad.
+ *   "ambigua" — solo hay una anotacion sin `spec <slug>`. Certifica el codigo, no la feature: el
+ *               mismo `RF-006` existe en siete specs y esa anotacion vale para cualquiera.
+ *   null      — no hay ninguna.
+ *
+ * Se distinguen los dos primeros a proposito, en vez de tratar la ambigua como prueba. Antes el
+ * panel no podia distinguirlos y salia verde entero; ese verde no significaba nada.
+ */
+function certifica(set, feature, rf) {
+  if (set.has(`${feature}|${rf}`)) return "scope";
+  if (set.has(`|${rf}`)) return "ambigua";
+  return null;
 }
 
 // RFs declarados con codigo/test en la matriz, por feature.
@@ -154,13 +186,17 @@ for (const c of getAllPhaseContracts()) {
     if (c.id === 5) {
       for (const { rf, feature } of declaredRf("codigo")) {
         if (onlyFeature && !feature.startsWith(onlyFeature)) continue;
-        if (!tracedTrace.has(rf)) items.push({ kind: "rf", severity: "blocker", item: `${rf} (${feature})`, detail: "declarado con Codigo pero sin @trace en codigo" });
+        const cTrace = certifica(tracedTrace, feature, rf);
+        if (cTrace === null) items.push({ kind: "rf", severity: "blocker", item: `${rf} (${feature})`, detail: "declarado con Codigo pero sin @trace en codigo" });
+        else if (cTrace === "ambigua") items.push({ kind: "rf", severity: "info", item: `${rf} (${feature})`, detail: "certificado por un @trace sin cualificar: no prueba que sea de ESTA feature" });
       }
     }
     if (c.id === 6) {
       for (const { rf, feature } of declaredRf("test")) {
         if (onlyFeature && !feature.startsWith(onlyFeature)) continue;
-        if (!tracedCovers.has(rf)) items.push({ kind: "rf", severity: "blocker", item: `${rf} (${feature})`, detail: "declarado con Test pero sin @covers en tests" });
+        const cCov = certifica(tracedCovers, feature, rf);
+        if (cCov === null) items.push({ kind: "rf", severity: "blocker", item: `${rf} (${feature})`, detail: "declarado con Test pero sin @covers en tests" });
+        else if (cCov === "ambigua") items.push({ kind: "rf", severity: "info", item: `${rf} (${feature})`, detail: "certificado por un @covers sin cualificar: no prueba que sea de ESTA feature" });
       }
     }
   }

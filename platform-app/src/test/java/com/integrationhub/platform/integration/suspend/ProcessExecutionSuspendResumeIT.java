@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * resume_token persistido, invoca el resume service, verifica que el proceso
  * cierra como COMPLETED.
  *
- * @covers spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @covers spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  * @covers spec 008-mensajeria-pagos RF-019
  */
 @QuarkusTest

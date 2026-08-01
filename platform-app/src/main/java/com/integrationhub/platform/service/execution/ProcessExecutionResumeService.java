@@ -27,7 +27,7 @@ import java.util.Map;
  * existe (suspensiones pre-V16) o no fue serializable, degrada a
  * {@code COMPLETED_NEEDS_REDRIVE}.</p>
  *
- * @trace spec 003 T-017 (M-2 / M-2.1), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 / M-2.1), ADR-009
  * @trace spec 008-mensajeria-pagos RF-019
  */
 @ApplicationScoped

@@ -42,7 +42,7 @@ public class ProcessTaskDefinitionRepository implements PanacheRepository<Proces
      * para decidir si el proceso queda COMPLETED (sin mas tareas) o RUNNING
      * (con tareas downstream pendientes que necesitan re-drive).
      *
-     * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+     * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
      */
     public long countDownstreamTasks(ProcessDefinition processDefinition, int taskOrder) {
         return count("processDefinition = ?1 and active = true and taskOrder > ?2",

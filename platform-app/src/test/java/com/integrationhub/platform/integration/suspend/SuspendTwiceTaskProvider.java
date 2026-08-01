@@ -14,7 +14,7 @@ import java.util.Map;
  * ser ubicable — regresion del bug donde {@code resumed_at} no se limpiaba
  * al re-suspender y el segundo token quedaba muerto).
  *
- * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  */
 @ApplicationScoped
 public class SuspendTwiceTaskProvider implements SuspendableTaskProvider {

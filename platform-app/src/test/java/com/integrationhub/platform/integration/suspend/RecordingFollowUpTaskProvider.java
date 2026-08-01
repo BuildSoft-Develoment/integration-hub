@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * cuantas veces se ejecuto y que {@code taskOutputs} de la tarea suspendida
  * (rehidratados del envelope) le llegaron.
  *
- * @trace spec 003 T-017 (M-2.1), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2.1), ADR-009
  */
 @ApplicationScoped
 public class RecordingFollowUpTaskProvider implements TaskProvider {

@@ -85,7 +85,7 @@ import java.util.UUID;
  * archiveId, ...) necesario para re-templear la URL o casar el callback.</p>
  *
  * @trace spec 008-mensajeria-pagos RF-005, RF-019, T-013
- * @trace spec 003 T-017 (M-2), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2), ADR-009
  */
 @ApplicationScoped
 public class Mt101StatusTaskProvider implements SuspendableTaskProvider {

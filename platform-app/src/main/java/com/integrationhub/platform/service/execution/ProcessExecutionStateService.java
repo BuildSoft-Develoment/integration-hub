@@ -240,7 +240,7 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
      * Suspende una tarea (y su proceso contenedor) hasta que llegue un resume.
      * Persiste el state JSON-serializado y un token opaco para callbacks.
      *
-     * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+     * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void suspendTask(Long processExecutionId,

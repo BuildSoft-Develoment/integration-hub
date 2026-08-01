@@ -1,4 +1,4 @@
--- @trace specs/008-mensajeria-pagos RF-007, RF-024
+-- @trace spec 008-mensajeria-pagos RF-007, RF-024
 -- Ruta persistida del correctivo y ledger PREPARED antes de invocar gateways.
 
 alter table vertical_mt101.mt101_build_fragment

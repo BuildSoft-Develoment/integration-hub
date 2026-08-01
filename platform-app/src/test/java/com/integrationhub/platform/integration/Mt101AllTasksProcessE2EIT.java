@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * la unica ruta de construccion es la paginada {@code MT101_BUILD_FROM_TABLE}, que
  * lee de {@code staging_record} y absorbe el split por bytes/transacciones.</p>
  *
- * @covers spec 003-procesos RF-003, RF-004
+ * @covers spec 003-diseno-y-ejecucion-procesos RF-003, RF-004
  * @covers spec 008-mensajeria-pagos RF-001, RF-005, RF-006, RF-007, RF-008
  */
 @QuarkusTest

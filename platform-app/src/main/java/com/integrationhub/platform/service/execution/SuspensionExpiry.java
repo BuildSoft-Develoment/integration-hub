@@ -12,7 +12,7 @@ import java.util.Map;
  * <p>Sin la clave, la suspension espera indefinidamente un callback externo
  * (modo push puro).</p>
  *
- * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  */
 public final class SuspensionExpiry {
 

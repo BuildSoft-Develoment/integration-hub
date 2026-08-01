@@ -16,7 +16,7 @@ public class ProcessTaskExecutionRepository implements PanacheRepository<Process
      * Lookup por {@code resume_token} para el endpoint de callback de M-2.
      * Devuelve {@code null} si no existe o ya fue reanudado.
      *
-     * @trace spec 003 T-017, ADR-009
+     * @trace spec 003-diseno-y-ejecucion-procesos T-017, ADR-009
      */
     public ProcessTaskExecution findActiveByResumeToken(String resumeToken) {
         if (resumeToken == null || resumeToken.isBlank()) {
@@ -61,7 +61,7 @@ public class ProcessTaskExecutionRepository implements PanacheRepository<Process
      * Soportado por el indice parcial {@code ix_process_task_execution_suspend_expires_at}
      * (V13).
      *
-     * @trace spec 003 T-017, ADR-009
+     * @trace spec 003-diseno-y-ejecucion-procesos T-017, ADR-009
      */
     public java.util.List<ProcessTaskExecution> findExpiredSuspensions(java.time.LocalDateTime now, int limit) {
         return find("status = ?1 and resumedAt is null and suspendExpiresAt is not null and suspendExpiresAt <= ?2",

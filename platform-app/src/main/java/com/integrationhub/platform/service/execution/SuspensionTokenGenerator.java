@@ -12,7 +12,7 @@ import java.util.Base64;
  * URL-safe para usarlo directamente en path params del REST endpoint
  * {@code POST /api/process-executions/resume/{token}}.</p>
  *
- * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
  */
 @ApplicationScoped
 public class SuspensionTokenGenerator {

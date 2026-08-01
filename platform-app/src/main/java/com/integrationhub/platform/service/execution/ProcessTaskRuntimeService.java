@@ -381,7 +381,7 @@ public class ProcessTaskRuntimeService {
          * que retorno {@link com.integrationhub.platform.spi.task.TaskResult#suspended}.
          * El engine genera el token y persiste el state JSON-serializado.
          *
-         * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+         * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 suspension engine), ADR-009
          */
         static TaskRunResult suspended(String details, Map<String, Object> suspendedState) {
             return new TaskRunResult(true, details, null, null, Map.of(), false, true,

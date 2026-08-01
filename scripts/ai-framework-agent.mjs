@@ -417,6 +417,12 @@ function migrateSchema(db) {
   ensureColumn("ai_trace_links", "source_file", "TEXT");
   // v12.41: display_status enriquece link_status con vocabulario por target_type.
   ensureColumn("ai_trace_links", "display_status", "TEXT");
+  // Feature a la que pertenece el codigo del target. Los RF se numeran POR SPEC (`RF-006` significa
+  // cosas distintas en siete specs a la vez), asi que sin este dato un `@covers RF-006` en cualquier
+  // fichero certificaba el RF-006 de TODAS. No se reutiliza `source_file` para esto: ahi va la ruta
+  // del codigo, y check-orphan-evidence la usa para decidir si un fichero canonico esta conectado —
+  // meterle rutas de specs/ lo haria mas permisivo justo donde debe detectar huerfanos.
+  ensureColumn("ai_trace_links", "target_scope", "TEXT");
   // v12.45: snooze por kind de alerta.
   ensureColumn("ai_action_snoozes", "kind", "TEXT");
 }
@@ -5633,14 +5639,17 @@ function harvestTraceFromSource(root, db) {
   const insert = db.prepare(`
     INSERT INTO ai_trace_links(
       source_type, source_ref, target_type, target_ref, relation,
-      confidence, evidence_ref, link_status, origin, source_file, display_status
+      confidence, evidence_ref, link_status, origin, source_file, display_status, target_scope
     )
-    VALUES ('source', ?, ?, ?, ?, ?, ?, 'implemented', 'source-harvest', ?, ?)
+    VALUES ('source', ?, ?, ?, ?, ?, ?, 'implemented', 'source-harvest', ?, ?, ?)
   `);
   // Captura la palabra clave + UNA LISTA de codigos separados por coma:
   //   `@trace RF-001` y tambien `@trace RF-001, RF-002, RF-003`.
   // El grupo 2 es la lista completa; abajo se separa y se emite un link por codigo.
-  const tagRe = /@(trace|implements|covers|fixes)\s+((?:RF-\d+|RNF-\d+|HU-\d+|ADR-\d+)(?:\s*,\s*(?:RF-\d+|RNF-\d+|HU-\d+|ADR-\d+))*)/gi;
+  // El grupo 2 es el slug de la feature cuando la anotacion viene CUALIFICADA
+  // (`@trace spec 008-mensajeria-pagos RF-013`), que es la forma que la casa ya usa en 162 sitios.
+  // Sin el, un `@covers RF-006` certifica a la vez el RF-006 de las ocho specs.
+  const tagRe = /@(trace|implements|covers|fixes)\s+(?:spec\s+([0-9]{3}-[a-z0-9-]+)\s+)?((?:RF-\d+|RNF-\d+|HU-\d+|ADR-\d+)(?:\s*,\s*(?:RF-\d+|RNF-\d+|HU-\d+|ADR-\d+))*)/gi;
   let count = 0;
   db.exec("BEGIN");
   try {
@@ -5650,7 +5659,8 @@ function harvestTraceFromSource(root, db) {
       let m;
       while ((m = tagRe.exec(text)) !== null) {
         const tag = m[1].toLowerCase();
-        const targets = m[2].toUpperCase().split(",").map((s) => s.trim()).filter(Boolean);
+        const scope = m[2] ? m[2].toLowerCase() : null;
+        const targets = m[3].toUpperCase().split(",").map((s) => s.trim()).filter(Boolean);
         for (const target of targets) {
         const relation =
           tag === "trace"
@@ -5672,9 +5682,9 @@ function harvestTraceFromSource(root, db) {
         // iguales (rel). Ahora evidence_ref = "src/foo.ts:42 @trace RF-02".
         const upTo = text.slice(0, m.index);
         const line = upTo.split("\n").length;
-        const evidenceRef = `${rel}:${line} @${tag} ${target}`;
+        const evidenceRef = `${rel}:${line} @${tag}${scope ? ` spec ${scope}` : ""} ${target}`;
         insert.run(rel, targetType, target, relation, 0.8, evidenceRef, rel,
-          computeDisplayStatus("implemented", targetType));
+          computeDisplayStatus("implemented", targetType), scope);
         count += 1;
         }
       }
