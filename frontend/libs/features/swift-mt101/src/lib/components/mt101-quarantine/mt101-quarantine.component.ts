@@ -93,7 +93,19 @@ export class Mt101QuarantineComponent {
   // sin justificacion de negocio ni ticket/incidente trazable).
   payRequestReason = '';
   payRequestTicket = '';
+  /** Motivo de la resolucion del UNCERTAIN NORMAL del set (v60). */
   payResolutionReason = '';
+  /**
+   * Motivo de la resolucion del UNCERTAIN del CORRECTIVO (B2'), separado del anterior.
+   *
+   * Compartian variable. Estaba hecho a proposito -"reutiliza payResolutionReason", decia el
+   * comentario- pero los dos campos se renderizan A LA VEZ: el del set aparece siempre que haya
+   * fragmentSetId, y el del correctivo cuando su PAY esta UNCERTAIN. Escribir en uno rellenaba el
+   * otro, asi que se podia resolver una operacion gobernada con la justificacion redactada para la
+   * otra, y el rastro de auditoria guardaba el motivo equivocado. En el camino del dinero, la
+   * evidencia de POR QUE se resolvio algo es justo lo que no puede mezclarse.
+   */
+  correctivePayResolutionReason = '';
 
   constructor() {
     this.breadcrumb.setItems([
@@ -936,14 +948,14 @@ export class Mt101QuarantineComponent {
     if (!run) {
       return;
     }
-    if (!this.payResolutionReason.trim()) {
+    if (!this.correctivePayResolutionReason.trim()) {
       this.error.set(this.i18n.t('audit.quarantine.payResolutionReasonRequired'));
       return;
     }
     this.runCorrectiveAction(this.api.mt101ResolveUncertainPay({
       rebuildRunId: run.rebuildRunId,
       connectionRef: this.connectionRef,
-      reason: this.payResolutionReason,
+      reason: this.correctivePayResolutionReason,
     }));
   }
 

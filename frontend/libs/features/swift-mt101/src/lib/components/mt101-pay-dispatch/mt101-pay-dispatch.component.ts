@@ -43,6 +43,21 @@ export class Mt101PayDispatchComponent {
 
   readonly summary = signal<Mt101PayDispatchSummary | null>(null);
   readonly stuck = signal<Mt101PayDispatchIntent[]>([]);
+
+  /**
+   * Cuantas intenciones atascadas NO se estan mostrando, o 0 si se ven todas.
+   *
+   * El endpoint `/stuck` acota a 100 por defecto (Mt101PayDispatchIntentLookupService.DEFAULT_LIMIT)
+   * y el frontend no envia `limit`. La tarjeta de resumen y la alerta muestran el total REAL, asi que
+   * con 250 atascados la pantalla decia 250 y la tabla listaba 100 sin avisar de los 150 que faltaban.
+   * Un operador que trabaja "la lista" hasta acabarla se iba dejando pagos atascados creyendo que no
+   * quedaba ninguno. Truncar en silencio es peor que no listar: da por revisado lo que no se vio.
+   */
+  readonly truncated = computed(() => {
+    const total = this.summary()?.stuck ?? 0;
+    const mostrados = this.stuck().length;
+    return total > mostrados ? total - mostrados : 0;
+  });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);

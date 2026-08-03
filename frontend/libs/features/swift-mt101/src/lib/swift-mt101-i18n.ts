@@ -280,6 +280,7 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'mt101Repair.repairAttempt': 'Intento de reparacion',
     'audit.quarantine.paySelfApprovalBlocked': 'No puedes aprobar un envio que solicitaste tu. La segregacion de funciones exige un aprobador distinto.',
     'audit.quarantine.payRequestedBy': 'Solicitado por',
+    'audit.payDispatch.stuckTruncated': 'Mostrando {shown} de las mas antiguas; faltan {missing} por revisar. Afina el filtro o amplia el limite.',
   },
   en: {
     'processes.template.swiftMt101Massive': 'MT101 massive from file',
@@ -546,6 +547,7 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'mt101Repair.repairAttempt': 'Repair attempt',
     'audit.quarantine.paySelfApprovalBlocked': 'You cannot approve a send you requested yourself. Segregation of duties requires a different approver.',
     'audit.quarantine.payRequestedBy': 'Requested by',
+    'audit.payDispatch.stuckTruncated': 'Showing the {shown} oldest; {missing} more are not listed. Narrow the filter or raise the limit.',
   },
 };
 

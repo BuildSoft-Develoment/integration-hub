@@ -267,7 +267,7 @@
             <div class="q__pay-fields">
               <mat-form-field subscriptSizing="dynamic">
                 <mat-label>{{ i18n.t('audit.quarantine.payResolutionReason') }}</mat-label>
-                <input matInput [(ngModel)]="payResolutionReason" placeholder="INC-77 revisado vs extracto" />
+                <input matInput [(ngModel)]="correctivePayResolutionReason" placeholder="INC-77 revisado vs extracto" />
               </mat-form-field>
             </div>
           }
@@ -285,7 +285,7 @@
             }
             @if (canAuditOperate() && payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
               <span class="q__risk-detail">{{ i18n.t(uncertainPayRisk.labelKey) }}: {{ i18n.t(uncertainPayRisk.summaryKey) }}</span>
-              <button mat-stroked-button type="button" (click)="resolveUncertainPay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.resolveUncertainPay') }}</button>
+              <button mat-stroked-button type="button" (click)="resolveUncertainPay()" [disabled]="loading() || !correctivePayResolutionReason.trim()">{{ i18n.t('audit.quarantine.resolveUncertainPay') }}</button>
             }
             <button mat-stroked-button type="button" (click)="loadPayActions()" [disabled]="loading()">{{ i18n.t('audit.quarantine.payHistory') }}</button>
             <button mat-stroked-button type="button" (click)="dismissCorrective()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>
