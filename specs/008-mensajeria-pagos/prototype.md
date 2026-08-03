@@ -35,9 +35,11 @@ su razon de ser son los caminos de excepcion, porque el camino feliz no necesita
 | `mt101-fragment-lookup` | Buscar un fragmento y su linaje hasta la fila de origen | `RF-022` |
 | `mt101-bulk-correction-wizard` | Correccion masiva con planilla: preview, coercion y apply | `RF-022` |
 
-Ademas, **siete formularios de tarea** (`process-task-forms/`) que se montan dentro del disenador de
-procesos del motor: archive, build, parse, parse-from-table, inbound-deliver, field-mapping-board y
-los demas del vertical. No son pantallas propias: extienden el editor de procesos de la spec 003.
+Ademas, **trece formularios de tarea** (`process-task-forms/`) que se montan dentro del disenador de
+procesos del motor: archive, build, parse, parse-from-table, inbound-deliver, pay, reconcile, repair,
+route, split, status, validate y el field-mapping-board. No son pantallas propias: extienden el
+editor de procesos de la spec 003, y por eso el vertical se carga con `import()` desde el manifest
+del shell junto a `features/processes`.
 
 ## Sistema visual
 
