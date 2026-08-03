@@ -61,7 +61,10 @@ if (plantillas.length === 0) {
 const hallazgos = [];
 for (const file of plantillas) {
   const src = readFileSync(file, "utf8");
-  for (const m of src.matchAll(/<button\b[^>]*>/gs)) {
+  // `[^>]*` NO sirve: un `>` dentro de un binding (`[disabled]="count() > 0"`) cortaria la
+  // etiqueta a la mitad y el tooltip quedaria fuera — el boton pasaria EN SILENCIO, que es el
+  // unico fallo inaceptable en un gate. Se saltan los literales entrecomillados enteros.
+  for (const m of src.matchAll(/<button\b(?:"[^"]*"|'[^']*'|[^>])*>/g)) {
     const tag = m[0];
     const disabled = atributo(tag, "disabled");
     if (!disabled) continue;
@@ -103,10 +106,17 @@ console.error(`en anchors (\`_setupAsAnchor\`), asi que en un <button> el handle
 
 process.exit(strict ? 1 : 0);
 
-/** Valor de `attr=".."`, `[attr]=".."` o `[attr]='..'`; null si el atributo no esta. */
+/**
+ * Valor de `attr=".."`, `[attr]=".."` o `[attr]='..'`; null si el atributo no esta.
+ *
+ * El `\s` inicial NO es cosmetico: sin el, `disabled` engancha la cola de cualquier atributo que
+ * termine igual, y `[class.item--disabled]="x"` se leia como si fuera `[disabled]="x"`. Un boton
+ * meramente PINTADO de gris se contaba como deshabilitado. En un tag, todo atributo viene
+ * precedido de espacio, asi que exigirlo elimina la confusion sin perder ningun caso.
+ */
 function atributo(tag, nombre) {
   const esc = nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`\\[?${esc}\\]?\\s*=\\s*("([^"]*)"|'([^']*)')`, "s");
+  const re = new RegExp(`\\s\\[?${esc}\\]?\\s*=\\s*("([^"]*)"|'([^']*)')`, "s");
   const m = tag.match(re);
   if (!m) return null;
   return m[2] ?? m[3] ?? "";
