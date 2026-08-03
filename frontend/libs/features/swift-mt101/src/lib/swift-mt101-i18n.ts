@@ -278,6 +278,8 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'mt101Repair.addRepair': 'Agregar reparacion',
   'mt101Repair.newReferenceTemplate': 'Template de nueva referencia',
   'mt101Repair.repairAttempt': 'Intento de reparacion',
+    'audit.quarantine.paySelfApprovalBlocked': 'No puedes aprobar un envio que solicitaste tu. La segregacion de funciones exige un aprobador distinto.',
+    'audit.quarantine.payRequestedBy': 'Solicitado por',
   },
   en: {
     'processes.template.swiftMt101Massive': 'MT101 massive from file',
@@ -542,6 +544,8 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'mt101Repair.addRepair': 'Add repair',
   'mt101Repair.newReferenceTemplate': 'New reference template',
   'mt101Repair.repairAttempt': 'Repair attempt',
+    'audit.quarantine.paySelfApprovalBlocked': 'You cannot approve a send you requested yourself. Segregation of duties requires a different approver.',
+    'audit.quarantine.payRequestedBy': 'Requested by',
   },
 };
 

@@ -231,7 +231,19 @@
           <ul>
             <li>{{ i18n.t('audit.quarantine.confirmSet', { set: corr.correctiveSetId }) }}</li>
             <li><span class="q__status--{{ corr.status }}">{{ corr.status }}</span></li>
-            <li class="q__muted">PAY: {{ payStatusFor(corr.rebuildRunId) }}</li>
+            <li class="ih-pay-state ih-pay-state--{{ payStatusFor(corr.rebuildRunId) }}">PAY: {{ payStatusFor(corr.rebuildRunId) }}</li>
+            @if (payStatusFor(corr.rebuildRunId) === 'REQUESTED') {
+              <li class="ih-pay-evidence">
+                <dl>
+                  <dt>{{ i18n.t('audit.quarantine.payRequestedBy') }}</dt>
+                  <dd>{{ payRequestedByOf(corr.rebuildRunId) || '—' }}</dd>
+                  <dt>{{ i18n.t('audit.quarantine.payRequestTicket') }}</dt>
+                  <dd>{{ corr.payRequestTicket || '—' }}</dd>
+                  <dt>{{ i18n.t('audit.quarantine.payRequestReason') }}</dt>
+                  <dd>{{ corr.payRequestReason || '—' }}</dd>
+                </dl>
+              </li>
+            }
             @if (corr.statusSyncStatus && corr.statusSyncStatus !== 'PENDING') {
               <li class="q__muted" [class.q__error]="corr.statusSyncStatus === 'FAILED'">{{ i18n.t('audit.quarantine.correctiveStatusSync', { status: corr.statusSyncStatus }) }}</li>
             }
@@ -267,7 +279,9 @@
               <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading() || !['NOT_REQUESTED', 'FAILED', 'INVALIDATED'].includes(payStatusFor(corr.rebuildRunId))">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
             }
             @if (canAuditAdmin() && corr.status === 'ARCHIVED') {
-              <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()" [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED'">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
+              <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()"
+                      [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED' || isPayMakerOf(corr.rebuildRunId)"
+                      [matTooltip]="isPayMakerOf(corr.rebuildRunId) ? i18n.t('audit.quarantine.paySelfApprovalBlocked') : ''">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
             }
             @if (canAuditOperate() && payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
               <span class="q__risk-detail">{{ i18n.t(uncertainPayRisk.labelKey) }}: {{ i18n.t(uncertainPayRisk.summaryKey) }}</span>

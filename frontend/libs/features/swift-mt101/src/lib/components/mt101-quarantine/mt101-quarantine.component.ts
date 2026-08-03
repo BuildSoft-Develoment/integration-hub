@@ -8,8 +8,9 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { AuthAccessService, AuthService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { ActionDispatcherService, ConfirmDialogComponent, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
@@ -38,6 +39,7 @@ import {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatTooltipModule,
     ClipboardModule,
     IconComponent,
     AuditWorkspaceNavComponent,
@@ -52,6 +54,7 @@ export class Mt101QuarantineComponent {
   private readonly breadcrumb = inject(BreadcrumbService);
   private readonly dialog = inject(MatDialog);
   private readonly access = inject(AuthAccessService);
+  private readonly auth = inject(AuthService);
   readonly i18n = inject(I18nService);
   readonly canAuditAdmin = this.access.canAuditAdmin;
   readonly canAuditOperate = this.access.canAuditOperate;
@@ -865,6 +868,30 @@ export class Mt101QuarantineComponent {
 
   payStatusFor(rebuildRunId: string): string {
     return this.rebuildRuns().find((run) => run.rebuildRunId === rebuildRunId)?.payStatus || 'NOT_REQUESTED';
+  }
+
+  /** Quien SOLICITO el envio del PAY correctivo. Viene en el mismo run que payStatus. */
+  payRequestedByOf(rebuildRunId: string): string {
+    return this.rebuildRuns().find((run) => run.rebuildRunId === rebuildRunId)?.payRequestedBy ?? '';
+  }
+
+  /**
+   * Segregacion de funciones del PAY correctivo: el actor actual es el MISMO que solicito el envio?
+   *
+   * POR QUE HACE FALTA EN LA UI. El backend ya lo rechaza —Mt101CorrectiveLifecycleService lanza
+   * "cannot be approved by its requester ... segregation of duties requires a different approver"—
+   * pero eso es un 400 que llega DESPUES de pulsar el boton que envia un pago real. Y aqui se
+   * agrava: `canAuditOperate` incluye a `canAuditAdmin` (auth-access.service.ts: canOperate =
+   * canAdmin() || ...), asi que un platform-admin satisface las DOS mitades del cuatro-ojos y ve a la
+   * vez "Solicitar envio" y "Aprobar y enviar (PAY)". El dato para evitarlo -payRequestedBy- ya
+   * viajaba en el modelo y no lo miraba nadie.
+   *
+   * Espeja isMakerOf() de mt101-pay-conflicts, donde esto ya estaba resuelto para una accion que
+   * solo apaga una alerta. La que mueve dinero no lo tenia.
+   */
+  isPayMakerOf(rebuildRunId: string): boolean {
+    const maker = this.payRequestedByOf(rebuildRunId).trim().toLowerCase();
+    return maker.length > 0 && maker === this.auth.username().trim().toLowerCase();
   }
 
   /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (no envía). */

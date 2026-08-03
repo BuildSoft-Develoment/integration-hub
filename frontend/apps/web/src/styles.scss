@@ -173,6 +173,31 @@ $ih-dark-theme: mat.define-theme((
   --mat-sys-outline: var(--ih-border-strong);
 }
 
+/* ── Estado del PAY del money-path (MT101) ─────────────────────────────────────────────────
+   Vive aqui, con los tokens, porque es semantica COMPARTIDA entre pantallas: pay-dispatch y
+   quarantine muestran el MISMO estado y lo pintaban distinto. UNCERTAIN llego a compartir color
+   con .pd__error y con REJECTED en una pantalla, y a ser texto gris de apoyo en la otra.
+
+   Importa porque invierte la regla del dominio: REJECTED significa que el banco NO lo recibio y es
+   seguro reintentar; UNCERTAIN significa que NO SE PUDO DEMOSTRAR que no lo recibiera, y es
+   exactamente el que nunca se reenvia a ciegas. Pintarlos igual empuja a tratar el peligroso como
+   el inofensivo.
+
+   Global y no por componente tambien por una razon practica: el CSS de mt101-quarantine ya esta a
+   233 bytes del techo de 8 kB por componente, asi que duplicar la semantica ahi ni cabe ni debe. */
+.ih-pay-state { font-weight:600; }
+.ih-pay-state--UNCERTAIN { color:var(--ih-status-warning); }
+.ih-pay-state--REQUESTED { color:var(--ih-status-info); }
+.ih-pay-state--SENT { color:var(--ih-status-success); }
+.ih-pay-state--FAILED,.ih-pay-state--INVALIDATED { color:var(--ih-status-error); }
+.ih-pay-state { font-size:.78rem; }
+/* Evidencia de una solicitud gobernada, visible ANTES de aprobar y no tras otro clic. */
+.ih-pay-evidence { list-style:none; margin-left:-1.1rem; font-size:.78rem; }
+.ih-pay-evidence dl { display:grid; grid-template-columns:auto 1fr; gap:.15rem .6rem; margin:.35rem 0 0; padding:.5rem .65rem; border-left:3px solid var(--ih-status-info); }
+.ih-pay-evidence dt { font-weight:600; color:var(--ih-text-soft); }
+.ih-pay-evidence dd { margin:0; overflow-wrap:anywhere; }
+
+
 :root[data-theme-mode='dark'] {
   --ih-surface: #09111d;
   --ih-surface-alt: #101826;
