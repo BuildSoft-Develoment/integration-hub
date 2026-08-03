@@ -52,7 +52,7 @@ services:
     depends_on:
       - platform-app
       - keycloak
-    restart: unless-stopped
+    restart: always
 
   # ---------------------------------------------------------------------------------
   # Postgres â€” base de datos OPERACIONAL de la plataforma (y del audit-consumer).
@@ -60,7 +60,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: ih-int-postgres
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_DB: integration_hub
       POSTGRES_USER: postgres
@@ -80,7 +80,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
     container_name: ih-int-keycloak
-    restart: unless-stopped
+    restart: always
     command: ["start-dev", "--import-realm"]
     environment:
       KEYCLOAK_ADMIN: admin
@@ -114,7 +114,7 @@ services:
   kafka:
     image: apache/kafka:3.7.0
     container_name: ih-int-kafka
-    restart: unless-stopped
+    restart: always
     environment:
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
@@ -142,7 +142,7 @@ services:
   minio:
     image: minio/minio:RELEASE.2024-01-16T16-07-38Z
     container_name: ih-int-minio
-    restart: unless-stopped
+    restart: always
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -176,7 +176,7 @@ services:
   sftp-source:
     image: atmoz/sftp:alpine
     container_name: ih-int-sftp-source
-    restart: unless-stopped
+    restart: always
     command: ${SFTP_SOURCE_USER:-ihsource}:${SFTP_SOURCE_PASS:-ihsource}:1001:1001:upload
     volumes:
       - sftp_source_data:/home/${SFTP_SOURCE_USER:-ihsource}/upload
@@ -188,7 +188,7 @@ services:
   ftp-source:
     image: delfer/alpine-ftp-server:latest
     container_name: ih-int-ftp-source
-    restart: unless-stopped
+    restart: always
     environment:
       USERS: "${FTP_SOURCE_USER:-ihftp}|${FTP_SOURCE_PASS:-ihftp}|/ftp/ihftp"
       ADDRESS: ftp-source
@@ -204,7 +204,7 @@ services:
   sftp-bank:
     image: atmoz/sftp:alpine
     container_name: ih-int-sftp-bank
-    restart: unless-stopped
+    restart: always
     command: ${SFTP_BANK_USER:-bank}:${SFTP_BANK_PASS:-bank}:1002:1002:inbox,outbox
     volumes:
       - sftp_bank_data:/home/${SFTP_BANK_USER:-bank}
@@ -233,7 +233,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_started
-    restart: unless-stopped
+    restart: always
 
   # ---------------------------------------------------------------------------------
   # Plataforma (imagen NATIVA con /appih horneado). Ancla el netns de plugins.
@@ -299,7 +299,7 @@ services:
         condition: service_started
       kafka:
         condition: service_started
-    restart: unless-stopped
+    restart: always
 
   # ---------------------------------------------------------------------------------
   # 3 backends gRPC â€” comparten el netns de la app => la ve en 127.0.0.1:5006x (localhost).
@@ -308,7 +308,7 @@ services:
     image: demo-transform-java:1.0.0
     build: ../../../../ejemplos/plugin-demo/backend-grpc-java
     container_name: ih-int-plugin-java
-    restart: unless-stopped
+    restart: always
     environment:
       PLUGIN_GRPC_PORT: "50061"
       # Comparte el netns del app (que ya usa 8080) -> el HTTP server del plugin Quarkus a
@@ -323,7 +323,7 @@ services:
     image: demo-transform-node:1.0.0
     build: ../../../../ejemplos/plugin-demo/backend-grpc-node
     container_name: ih-int-plugin-node
-    restart: unless-stopped
+    restart: always
     environment:
       PLUGIN_GRPC_PORT: "50062"
     network_mode: "service:platform-app"
@@ -335,7 +335,7 @@ services:
     image: demo-transform-py:1.0.0
     build: ../../../../ejemplos/plugin-demo/backend-grpc-python
     container_name: ih-int-plugin-python
-    restart: unless-stopped
+    restart: always
     environment:
       PLUGIN_GRPC_PORT: "50063"
     network_mode: "service:platform-app"
@@ -350,7 +350,7 @@ services:
     image: demo-transform-widget:1.0.0
     build: ../../../../ejemplos/plugin-demo/frontend-widget
     container_name: ih-int-plugin-widget
-    restart: unless-stopped
+    restart: always
     networks: [ihnet]
 
   # Echo HTTP â€” destino de las tareas REST_CALL (para probar el offload async). Devuelve
@@ -358,7 +358,7 @@ services:
   echo:
     image: ealen/echo-server:latest
     container_name: ih-int-echo
-    restart: unless-stopped
+    restart: always
     environment:
       PORT: "80"
     networks: [ihnet]
@@ -370,7 +370,7 @@ services:
   mock-gateway:
     image: nginx:1.27-alpine
     container_name: ih-int-mock-gw
-    restart: unless-stopped
+    restart: always
     volumes:
       - ./int/mock-gateway.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
