@@ -6,6 +6,41 @@ Operacion del camino del dinero: que hacer cuando un pago no termina en un estad
 > Si no se puede DEMOSTRAR que el banco no recibio nada, la salida es conciliar, no reintentar. Un
 > duplicado en el camino del dinero cuesta mas que un pago pendiente.
 
+## Requisitos que opera este runbook
+
+Cada procedimiento de abajo existe porque hay un requisito detras. Si un requisito cambia, este
+documento cambia con el.
+
+| Requisito | Que gobierna aqui |
+|---|---|
+| `RF-004` | `MT101_PAY` despacha al banco con idempotencia por `sendersReference`. Es el origen del ledger `mt101_pay_dispatch_intent`, de la bandera `pay_conflict` y del endpoint de conciliacion de intents |
+| `RF-005` | `MT101_STATUS` recibe (`callback`) o pollea (`poll`) las confirmaciones MT900/MT910. Es lo que resuelve —o no— un fragmento `UNCERTAIN` |
+| `RF-006` | `MT101_RECONCILE` cruza enviados contra confirmados en una ventana y publica excepciones. Es el origen de `NEEDS_RECONCILIATION` |
+| `RF-019` | El rol `payments-operator`: quien puede ejecutar los procesos del catalogo 008 sin poder editar el catalogo del motor. Gobierna el acceso a las consolas de esta pagina |
+| `RF-022` | `MT101_BUILD_FROM_TABLE` y la cuarentena por fila: el reproceso quirurgico de los endpoints de remediacion |
+| `RF-024` | El reproceso correctivo con maker-checker sobre el PAY: quien solicita no puede aprobar. Es el flujo de acknowledge de mas abajo |
+
+## SLO/SLI
+
+> Objetivos baseline propuestos — pendientes de validacion con el equipo de operaciones.
+> La linea base del proyecto esta en `ops/fase-8-operacion/slo.md`; aqui solo se anade lo especifico
+> del camino del dinero.
+
+- Disponibilidad de las consolas de pagos: **disponibilidad >= 99.5%** mensual (linea base del proyecto).
+- Latencia de las consolas de consulta (`mt101-pay-dispatch`, `mt101-pay-conflicts`): **p95 <= 800ms**,
+  igual que el resto de tableros de consulta paginada.
+- **Cero tolerancia, no percentil**: `audit_spool_dead`, `audit_dead_letter_total`, `tasks_outbox_dead`,
+  `tasks_inbox_dead` y `tasks_inbox_poison` deben permanecer en **0**. No son metricas de tendencia:
+  cualquier valor mayor que cero es evidencia perdida o trabajo del dinero muerto, y se trata como
+  incidente, no como degradacion.
+
+> **Por que no hay aqui un SLO de "tiempo hasta conciliar un `UNCERTAIN`".** Seria el objetivo mas
+> util de esta pagina y **no se puede medir hoy**: no existe una serie instrumentada de la edad de un
+> fragmento incierto — se obtiene consultando la API, como el resto de metricas de fase 8 citadas en
+> documentacion que no estan en `/q/metrics`. Proponer un numero contra una serie que no existe daria
+> un panel vacio y una falsa sensacion de control. Instrumentarla es trabajo pendiente; mientras
+> tanto, el control es el procedimiento manual de esta pagina.
+
 ## Los tres estados que no son "fallido"
 
 Una ejecucion `FAILED` es facil: se ve, se diagnostica, se reintenta. El problema son los estados **no

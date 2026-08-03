@@ -1,4 +1,14 @@
+---
+kind: infraestructura
+---
+
 # Runbook 008 — Release gate del preflight de V69 (mt101 correctivo)
+
+> **Por que `kind: infraestructura` y no un runbook de feature.** Esto no opera una capacidad del
+> producto: es un gate de despliegue de UNA migracion concreta, `V69`. No tiene SLO propio ni cubre
+> requisitos —los del money-path viven en `008-mensajeria-pagos-runbook.md`—, y su vida acaba cuando
+> V69 este aplicada en todos los entornos. El nombre tampoco puede matchear un slug de feature,
+> porque ese nombre ya lo ocupa el runbook operativo de 008.
 
 Ámbito: despliegue de la migración `V69__mt101_corrective_pay_plan_validate_and_sanitize.sql`, que sanea punteros
 `active_plan_revision` a revisiones no-ACTIVE y luego ejecuta `VALIDATE CONSTRAINT` de las FKs históricas
