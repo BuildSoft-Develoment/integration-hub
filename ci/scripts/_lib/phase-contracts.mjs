@@ -18,6 +18,8 @@
 //
 // Si cambias una regla, la verdad esta AQUI. Doc y UI se regeneran/refrescan.
 
+import { expandCodePaths } from "./code-roots.mjs";
+
 export const PHASE_CONTRACTS = [
   // ──────────────────────────────────────────────────────────────────────
   {
@@ -62,7 +64,7 @@ export const PHASE_CONTRACTS = [
     role: "product_owner",
     allowedAgents: ["product_agent", "analyst_agent"],
     touchAllow: ["docs/fase-0-iniciacion/**", "template.config.json", "template.config.example.json", "AI_CONTEXT.md", "SESSION_LOG.md", "CHANGELOG.md"],
-    touchForbid: ["specs/**", "src/**", "backend/**", "frontend/**", "db/**", "contracts/**"],
+    touchForbid: ["specs/**", "<backend>/**", "<frontend>/**", "<migrations>/**", "contracts/**"],
     transition: { from: "phase-0", toGate: "gate-0-1", canRequest: true, canApprove: false, approver: "sponsor (humano)" },
   },
 
@@ -105,7 +107,7 @@ export const PHASE_CONTRACTS = [
     role: "business_analyst",
     allowedAgents: ["analyst_agent", "product_agent"],
     touchAllow: ["docs/fase-1-analisis-requerimientos/**", "TRACEABILITY_MATRIX.md", "specs/<feature>/spec-funcional.md", "AI_CONTEXT.md", "SESSION_LOG.md"],
-    touchForbid: ["src/**", "backend/**", "frontend/**", "specs/<feature>/prototype-html5/**", "db/**", "contracts/**"],
+    touchForbid: ["<backend>/**", "<frontend>/**", "specs/<feature>/prototype-html5/**", "<migrations>/**", "contracts/**"],
     transition: { from: "phase-1", toGate: "gate-1-2", canRequest: true, canApprove: false, approver: "product_owner (humano)" },
   },
 
@@ -176,7 +178,7 @@ export const PHASE_CONTRACTS = [
     role: "ux_frontend",
     allowedAgents: ["ux_agent", "frontend_spdd_agent", "product_agent"],
     touchAllow: ["specs/<feature>/product-design.md", "specs/<feature>/spdd-frontend.md", "specs/<feature>/prototype.md", "specs/<feature>/prototype-validation.md", "specs/<feature>/ui-test-cases.md", "specs/<feature>/prototype-html5/**", "specs/<feature>/traceability.md", "specs/_shared/**", "prototype/index.html", "AI_CONTEXT.md", "SESSION_LOG.md"],
-    touchForbid: ["src/**", "backend/**", "frontend/**", "apps/**", "services/**", "libs/**", "db/migration/**", "contracts/api/openapi.yaml", "specs/<feature>/spec-tecnica.md"],
+    touchForbid: ["<backend>/**", "<frontend>/**", "<migrations>/**", "contracts/api/openapi.yaml", "specs/<feature>/spec-tecnica.md"],
     transition: { from: "phase-2", toGate: "gate-prototype-human-visual-review", canRequest: true, canApprove: false, approver: "product_designer / product_owner (humano)" },
   },
 
@@ -228,7 +230,7 @@ export const PHASE_CONTRACTS = [
     role: "architect",
     allowedAgents: ["architect_agent"],
     touchAllow: ["docs/fase-3-arquitectura/**", "likec4/**", "diagramas/**", "specs/<feature>/threat-model.md", "AI_CONTEXT.md", "SESSION_LOG.md"],
-    touchForbid: ["src/**", "backend/**", "frontend/**", "specs/<feature>/prototype-html5/**", "db/migration/**"],
+    touchForbid: ["<backend>/**", "<frontend>/**", "specs/<feature>/prototype-html5/**", "<migrations>/**"],
     transition: { from: "phase-3", toGate: "gate-3-4", canRequest: true, canApprove: false, approver: "tech_lead (humano)" },
   },
 
@@ -276,7 +278,7 @@ export const PHASE_CONTRACTS = [
     role: "spec_author",
     allowedAgents: ["backend_agent", "spec_agent"],
     touchAllow: ["specs/<feature>/spec-tecnica.md", "specs/<feature>/api-contract.md", "specs/<feature>/spec-tareas.md", "specs/<feature>/traceability.md", "contracts/**", "AI_CONTEXT.md", "SESSION_LOG.md"],
-    touchForbid: ["src/**", "backend/**", "frontend/**", "db/migration/**", "specs/<feature>/prototype-html5/**"],
+    touchForbid: ["<backend>/**", "<frontend>/**", "<migrations>/**", "specs/<feature>/prototype-html5/**"],
     transition: { from: "phase-4", toGate: "gate-sdd-approved", canRequest: true, canApprove: false, approver: "tech_lead (humano)" },
   },
 
@@ -324,7 +326,7 @@ export const PHASE_CONTRACTS = [
     gates: ["gate-build-ready"],
     role: "builder",
     allowedAgents: ["backend_agent", "frontend_agent", "build_agent"],
-    touchAllow: ["src/**", "backend/**", "frontend/**", "apps/**", "services/**", "libs/**", "db/migration/**", "tests/**", "specs/<feature>/traceability.md", "AI_CONTEXT.md", "SESSION_LOG.md"],
+    touchAllow: ["<backend>/**", "<frontend>/**", "<migrations>/**", "<backend-test>/**", "<frontend-test>", "specs/<feature>/traceability.md", "AI_CONTEXT.md", "SESSION_LOG.md"],
     touchForbid: ["docs/fase-0-iniciacion/**", "specs/<feature>/prototype-html5/**", "specs/<feature>/spec-funcional.md"],
     transition: { from: "phase-5", toGate: "gate-build-ready", canRequest: true, canApprove: false, approver: "tech_lead (humano) + CI verde" },
   },
@@ -369,8 +371,8 @@ export const PHASE_CONTRACTS = [
     gates: ["gate-qa-passed"],
     role: "qa",
     allowedAgents: ["qa_agent"],
-    touchAllow: ["tests/**", "qa/**", "specs/<feature>/ui-test-cases.md", "specs/<feature>/traceability.md", "AI_CONTEXT.md", "SESSION_LOG.md"],
-    touchForbid: ["db/migration/**", "contracts/api/openapi.yaml", "specs/<feature>/spec-funcional.md", "specs/<feature>/prototype-html5/**"],
+    touchAllow: ["<backend-test>/**", "<frontend-test>", "qa/**", "specs/<feature>/ui-test-cases.md", "specs/<feature>/traceability.md", "AI_CONTEXT.md", "SESSION_LOG.md"],
+    touchForbid: ["<migrations>/**", "contracts/api/openapi.yaml", "specs/<feature>/spec-funcional.md", "specs/<feature>/prototype-html5/**"],
     transition: { from: "phase-6", toGate: "gate-qa-passed", canRequest: true, canApprove: false, approver: "qa_lead (humano)" },
   },
 
@@ -416,7 +418,7 @@ export const PHASE_CONTRACTS = [
     role: "release_manager",
     allowedAgents: ["devops_agent", "release_agent"],
     touchAllow: ["releases/**", "ops/release-notes/**", "ops/runbooks/**", "CHANGELOG.md", "ci/**", ".github/**", "AI_CONTEXT.md", "SESSION_LOG.md"],
-    touchForbid: ["src/**", "backend/**", "frontend/**", "specs/<feature>/spec-funcional.md", "db/migration/**"],
+    touchForbid: ["<backend>/**", "<frontend>/**", "specs/<feature>/spec-funcional.md", "<migrations>/**"],
     transition: { from: "phase-7", toGate: "gate-deploy-ready", canRequest: true, canApprove: false, approver: "release_manager (humano)" },
   },
 
@@ -461,7 +463,7 @@ export const PHASE_CONTRACTS = [
     role: "sre_ops",
     allowedAgents: ["sre_agent", "ops_agent", "devops_agent"],
     touchAllow: ["ops/runbooks/**", "ops/monitoring/**", "ops/dr/**", "ops/**", "specs/<feature>/traceability.md", "AI_CONTEXT.md", "SESSION_LOG.md"],
-    touchForbid: ["src/**", "backend/**", "frontend/**", "specs/<feature>/spec-funcional.md", "db/migration/**"],
+    touchForbid: ["<backend>/**", "<frontend>/**", "specs/<feature>/spec-funcional.md", "<migrations>/**"],
     transition: { from: "phase-8", toGate: "gate-operations-ready", canRequest: true, canApprove: false, approver: "sre_lead (humano)" },
   },
 ];
@@ -485,10 +487,17 @@ export function getAllPhaseContracts() {
  * interpolado al slug real si se provee. Sin slug, conserva el placeholder.
  * Es la base enforzable por roadmap:audit (git diff vs allowed/forbidden).
  */
-export function getTouchPolicy(phaseId, slug) {
+export function getTouchPolicy(phaseId, slug, root = ".") {
   const c = getPhaseContract(phaseId);
   if (!c) return { allowed_paths: [], forbidden_paths: [] };
-  const interp = (arr) => (arr || []).map((p) => (slug ? p.replace(/<feature>/g, slug) : p));
+  // <feature> se interpola con el slug; los tokens de codigo se expanden desde el pom raiz.
+  // Sin la segunda expansion, `<backend>/**` llegaria literal a matchAny y no matcharia nada:
+  // el mismo fallo que tenian los globs genericos que estos tokens sustituyen.
+  const interp = (arr) =>
+    expandCodePaths(
+      (arr || []).map((p) => (slug ? p.replace(/<feature>/g, slug) : p)),
+      root,
+    );
   return {
     allowed_paths: interp(c.touchAllow),
     forbidden_paths: interp(c.touchForbid),

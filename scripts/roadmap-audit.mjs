@@ -60,7 +60,7 @@ if (feature == null || phase == null) {
 if (phase == null || phase < 0) phase = inferPhaseForFeature(feature);
 
 // 2. touch_policy de la fase (con slug interpolado).
-const touch = getTouchPolicy(phase, feature || undefined);
+const touch = getTouchPolicy(phase, feature || undefined, root);
 
 // 3. Archivos tocados.
 const changed = getChangedFiles(base);

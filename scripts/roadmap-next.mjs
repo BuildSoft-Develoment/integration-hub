@@ -91,7 +91,7 @@ if (next.phase >= 0 && next.phase <= 8) {
 // con <feature> interpolado al slug real cuando aplica.
 if (next.phase >= 0 && next.phase <= 8) {
   const slug = next.feature || null;
-  next.touch_policy = getTouchPolicy(next.phase, slug);
+  next.touch_policy = getTouchPolicy(next.phase, slug, root);
   const profile = getAgentProfile(next.phase);
   next.recommended_agent = profile.recommended_agent;
   next.allowed_agents = profile.allowed_agents;

@@ -35,7 +35,7 @@ const c = computeContract(root, slug);
 const dec = readIf(join(root, "specs", slug, "prototype-html5", "decisiones-ux.md"));
 const domain = (dec.match(/Dominio[^\n:]*:\s*([^\n]+)/i) || [])[1]?.trim() || "(declarar en decisiones-ux.md)";
 const golden = (dec.match(/Golden[\s\S]*?Path:\s*`?([^`\n]+)`?/i) || [])[1]?.trim() || "(elegir de ejemplos/fase-2-ux-ui/prototype-html5-golden/)";
-const tp = getTouchPolicy(2, slug);
+const tp = getTouchPolicy(2, slug, root);
 
 const prompt = render();
 console.log(prompt);
