@@ -32,7 +32,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { PHASE_CONTRACTS, getTouchPolicy } from "./_lib/phase-contracts.mjs";
-import { mavenModules, globsMuertos } from "./_lib/code-roots.mjs";
+import { mavenModules, globsMuertos, globsSinDestino } from "./_lib/code-roots.mjs";
 import { matchAny } from "./_lib/glob-match.mjs";
 import { resolveStrict } from "./_lib/strict-mode.mjs";
 
@@ -62,6 +62,11 @@ for (const c of PHASE_CONTRACTS) {
   if (m.length > 0) muertosPorFase.set(c.id, [...new Set(m)]);
 }
 const muertosDistintos = new Set([...muertosPorFase.values()].flat());
+const motivoDe = new Map();
+for (const c of PHASE_CONTRACTS) {
+  const tp = getTouchPolicy(c.id, undefined, root);
+  for (const x of [...globsSinDestino(tp.allowed_paths, root), ...globsSinDestino(tp.forbidden_paths, root)]) motivoDe.set(x.glob, x.motivo);
+}
 
 // ── 2) tokens que expanden a vacio ────────────────────────────────────────────────────
 for (const c of PHASE_CONTRACTS) {
@@ -166,13 +171,17 @@ console.log(`Modulos Maven: ${modulos.length} · probados con fichero real: ${pr
 // "carpeta que el proyecto aun no ha creado" necesita criterio humano, y bloquear por lo segundo
 // convertiria este gate en ruido. Lo que SI bloquea es que la politica deje de discriminar.
 if (muertosDistintos.size > 0) {
-  console.log(`\nRutas declaradas que hoy no existen (informativo, no bloquea):`);
+  console.log(`\nRutas declaradas sin contenido hoy (informativo, no bloquea):`);
   for (const g of [...muertosDistintos].sort()) {
     const fases = [...muertosPorFase.entries()].filter(([, v]) => v.includes(g)).map(([k]) => k);
-    console.log(`  · ${g}  (fases ${fases.join(", ")})`);
+    const motivo = motivoDe.get(g) || "?";
+    const nota = motivo === "solo-readme"
+      ? "existe con README: puede ser carpeta de salida legitima, o una puerta a estructura obsoleta"
+      : "no existe";
+    console.log(`  · ${g}  (fases ${fases.join(", ")}) — ${nota}`);
   }
-  console.log(`  Decidir una por una: o se crea la ruta, o se quita del contrato. Una ruta declarada`);
-  console.log(`  que no existe no protege nada y parece que si.`);
+  console.log(`  Decidir una por una: o se crea, o se apunta a donde el contenido ya vive, o sale del`);
+  console.log(`  contrato. Una ruta declarada sin contenido no protege nada y parece que si.`);
 }
 
 if (hallazgos.length === 0) {

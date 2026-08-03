@@ -100,17 +100,33 @@ export function expandCodePaths(globs, root) {
  * de una guarda que funciona hasta que alguien la prueba.
  */
 export function globsMuertos(globs, root) {
-  const muertos = [];
+  return globsSinDestino(globs, root).map((x) => x.glob);
+}
+
+/**
+ * Igual que globsMuertos pero diciendo POR QUE, que es lo que decide la accion:
+ *   - "inexistente": la ruta no esta. O se crea, o sobra en el contrato.
+ *   - "solo-readme": la carpeta existe con un README que explica su regla. Puede ser correcto —
+ *     `diagramas/` declara en su propio README que guarda exportaciones y que el modelo maestro
+ *     vive en `likec4/`—, o puede ser una puerta documental a una estructura que ya no existe,
+ *     como lo era `src/`, cuyo README decia "equivalente a src/ del template, adaptada a la
+ *     estructura real del proyecto" mientras el contrato seguia apuntando ahi.
+ * La diferencia no es decidible por codigo: una carpeta de salida vacia y una ruta obsoleta se ven
+ * igual. Por eso esto informa y no bloquea.
+ */
+export function globsSinDestino(globs, root) {
+  const salida = [];
   for (const g of globs || []) {
     if (/<[a-z-]+>/.test(g)) continue; // sin expandir: no se juzga aqui
     const raiz = g.split("*")[0].replace(/\/$/, "");
     if (!raiz) continue;
-    if (!existsSync(join(root, raiz))) { muertos.push(g); continue; }
-    // Directorio que existe pero solo contiene un README no describe codigo.
+    if (!existsSync(join(root, raiz))) { salida.push({ glob: g, motivo: "inexistente" }); continue; }
     try {
       const hijos = readdirSync(join(root, raiz));
-      if (hijos.length > 0 && hijos.every((h) => /^readme\.md$/i.test(h))) muertos.push(g);
+      if (hijos.length > 0 && hijos.every((h) => /^readme\.md$/i.test(h))) {
+        salida.push({ glob: g, motivo: "solo-readme" });
+      }
     } catch { /* fichero suelto: vale */ }
   }
-  return muertos;
+  return salida;
 }
