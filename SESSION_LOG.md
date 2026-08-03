@@ -28,6 +28,23 @@
 ---
 
 
+## 2026-08-03 16:35 — El motivo del bloqueo del cuatro-ojos vivia en un tooltip que nadie podia ver
+- Agente: Claude Opus 5 (asistido por Natan Davila)
+- Resumen: en Material 21.2.14 un boton deshabilitado lleva el `disabled` NATIVO y no emite eventos de raton, asi que el `matTooltip` que explicaba por que el maker no puede aprobar su propio PAY no se mostraba jamas; el motivo pasa a texto visible y se anade un gate para que no vuelva a esconderse.
+- Cambios:
+  - mt101-quarantine y mt101-pay-conflicts: el motivo del bloqueo sale del tooltip a texto visible
+  - frontend/apps/web/src/styles.scss: clase global `.ih-governance-note`
+  - mt101-quarantine.component.ts: se elimina `MatTooltipModule`, que quedaba sin uso
+  - ci/scripts/check-disabled-tooltip.mjs (nuevo), cableado en check:project tras check:touch-policy
+- Pendiente:
+  - process-flow-palette: MISMO defecto (`taskTooltip` solo devuelve el motivo cuando la tarea NO esta disponible). No se toca a ciegas: es fuente de arrastre (fExternalItem) con dos layouts responsive y su verificacion es visual. El gate lo deja rojo, y el hallazgo es real.
+  - Nada de esto llega a la consola desplegada hasta el proximo build nativo (~1h13m): en int sigue corriendo la imagen e6c2d555.
+- Evidencia:
+  - @angular/material 21.2.14: `_getDisabledAttribute() { return this.disabledInteractive || !this.disabled ? null : true; }`
+  - El remedio aparente (`disabledInteractive`) seria peor: el unico corte de click, `_setupAsAnchor`, solo corre si tagName === 'A'; en un <button> el handler se ejecutaria
+  - check-disabled-tooltip: 3 hallazgos contra el HEAD previo, 1 contra el arbol arreglado
+  - nx build web OK (sin empeorar el presupuesto de CSS, por eso la clase es global) y 745/745 tests
+
 ## 2026-08-03 15:30 — Redeploy nativo con los arreglos de consola + flyway repair de V12
 - Agente: Claude Opus 5 (asistido por Natan Davila)
 - Resumen: build nativo appih, imagen nueva y redeploy del stack int; el arranque fallo por el drift de checksum de V12 previsto en 0306be5b y se resolvio con `flyway repair` autorizado.

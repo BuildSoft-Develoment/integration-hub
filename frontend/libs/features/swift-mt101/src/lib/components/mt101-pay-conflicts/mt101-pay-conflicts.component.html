@@ -156,9 +156,14 @@
                           <button mat-flat-button color="primary" type="button"
                                   [disabled]="resolveBusy() || isMakerOf(c)"
                                   (click)="approveAck(c)"
-                                  [matTooltip]="isMakerOf(c) ? i18n.t('audit.payConflicts.approveAckSelfBlocked') : i18n.t('audit.payConflicts.approveAckHint')">
+                                  [matTooltip]="i18n.t('audit.payConflicts.approveAckHint')">
                             {{ i18n.t('audit.payConflicts.approveAck') }}
                           </button>
+                          <!-- El motivo del bloqueo va VISIBLE, no en el tooltip: con `disabled` nativo el boton no
+                               emite eventos de raton y el tooltip no se dispara nunca (ver .ih-governance-note). -->
+                          @if (isMakerOf(c)) {
+                            <p class="ih-governance-note">{{ i18n.t('audit.payConflicts.approveAckSelfBlocked') }}</p>
+                          }
                         }
                       } @else {
                         <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()" (click)="confirmResolve(c)">

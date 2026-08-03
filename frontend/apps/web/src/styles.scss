@@ -197,6 +197,19 @@ $ih-dark-theme: mat.define-theme((
 .ih-pay-evidence dt { font-weight:600; color:var(--ih-text-soft); }
 .ih-pay-evidence dd { margin:0; overflow-wrap:anywhere; }
 
+/* Motivo por el que una accion gobernada esta BLOQUEADA. Va visible y nunca en un tooltip.
+   Razon concreta, comprobada en @angular/material 21.2.14: MatButton._getDisabledAttribute()
+   devuelve `true` salvo que se pida `disabledInteractive`, es decir pone el `disabled` NATIVO,
+   y un boton nativamente deshabilitado no emite eventos de raton — un matTooltip colgado de el
+   no se dispara JAMAS. El operador veia el boton gris del cuatro-ojos sin ninguna explicacion.
+   Y el arreglo aparente es peor: `disabledInteractive` quita ese atributo, mientras que el unico
+   sitio donde Material corta el click (`_setupAsAnchor`) solo corre si tagName === 'A'. En un
+   <button> dejaria pasar el click al backend. Texto visible: sirve tambien a teclado y a lector
+   de pantalla, que es donde un tooltip de hover nunca llego.
+   `flex-basis:100%` lo baja a su propia linea dentro de la barra .q__actions (flex con wrap),
+   pegado al boton que explica; en un contenedor no-flex es inocuo. */
+.ih-governance-note { flex-basis:100%; margin:0; color:var(--ih-status-info); font-size:.78rem; }
+
 
 :root[data-theme-mode='dark'] {
   --ih-surface: #09111d;

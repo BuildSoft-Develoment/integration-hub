@@ -8,7 +8,6 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthAccessService, AuthService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { ActionDispatcherService, ConfirmDialogComponent, IconComponent } from '@integration-hub/shared/ui';
@@ -39,7 +38,6 @@ import {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
-    MatTooltipModule,
     ClipboardModule,
     IconComponent,
     AuditWorkspaceNavComponent,

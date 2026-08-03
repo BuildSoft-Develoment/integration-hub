@@ -95,8 +95,12 @@
   max-width: 36rem;
 }
 
+/* `wrap` para que el motivo de bloqueo del cuatro-ojos (.ih-governance-note, flex-basis:100%)
+   caiga en su propia linea bajo los botones en vez de aplastarlos. De paso, la barra deja de
+   desbordarse en pantallas estrechas. */
 .conflicts__resolve-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 

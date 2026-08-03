@@ -280,8 +280,10 @@
             }
             @if (canAuditAdmin() && corr.status === 'ARCHIVED') {
               <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()"
-                      [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED' || isPayMakerOf(corr.rebuildRunId)"
-                      [matTooltip]="isPayMakerOf(corr.rebuildRunId) ? i18n.t('audit.quarantine.paySelfApprovalBlocked') : ''">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
+                      [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED' || isPayMakerOf(corr.rebuildRunId)">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
+              @if (isPayMakerOf(corr.rebuildRunId)) {
+                <p class="ih-governance-note">{{ i18n.t('audit.quarantine.paySelfApprovalBlocked') }}</p>
+              }
             }
             @if (canAuditOperate() && payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
               <span class="q__risk-detail">{{ i18n.t(uncertainPayRisk.labelKey) }}: {{ i18n.t(uncertainPayRisk.summaryKey) }}</span>
