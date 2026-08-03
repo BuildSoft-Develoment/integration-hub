@@ -28,6 +28,23 @@
 ---
 
 
+## 2026-08-03 17:35 — Redeploy nativo con los 3 arreglos + el stack deja de depender de la IP de la oficina
+- Agente: Claude Opus 5 (asistido por Natan Davila)
+- Resumen: build nativo (34 min), imagen 1594624bfee0 y stack recreado entero; de paso, `PUBLIC_BASE_URL` tenia clavada la IP de la oficina anterior y el login habria muerto al cambiar de red.
+- Cambios:
+  - int/.env: PUBLIC_BASE_URL pasa de https://192.168.100.25:8443 a https://localhost:8443 (fichero en .gitignore, no versionado)
+  - Imagen integration-hub:native-appih e6c2d555 -> 1594624bfee0
+  - Borradas 12 imagenes de testcontainers (~14 GB dentro del vhdx) por decision del usuario
+- Pendiente:
+  - NO HAY IMAGEN DE VUELTA ATRAS: `mvn clean` borro el runner previo y la imagen anterior desaparecio del almacen. Reconstruible desde el commit anterior (~34 min), pero no inmediata.
+  - Revision visual humana: los 3 arreglos de tooltip/nota y que la paleta se vea igual en columna y en fila.
+  - El vhdx no encoge solo: para devolver los ~14 GB a C: hay que compactarlo con Docker parado.
+- Evidencia:
+  - Runner 17:18:28 / 89955260 bytes (antes 14:50:41 / 89932972); verificado por timestamp, no por exit code
+  - Issuer vivo = https://localhost:8443/iam/realms/integration-hub; redirect_uri localhost -> 302 y uno ajeno -> 400 (control)
+  - BD intacta: 104 migraciones, V12 checksum 598736224 (el reparado), 0 fallidas, pay_dispatch_intent con 5 filas
+  - Los 2 chunks lazy que sirve https://localhost:8443/appih/ son md5-identicos al build local
+
 ## 2026-08-03 16:55 — La paleta del flow editor, y una guarda que vivia en un atributo de UI
 - Agente: Claude Opus 5 (asistido por Natan Davila)
 - Resumen: tercer caso del tooltip invisible, con un agravante que aparecio al mirarlo: lo UNICO que impedia soltar en el lienzo una tarea de plugin no confiable era el atributo `disabled` del boton de la paleta.
