@@ -27,6 +27,22 @@
 
 ---
 
+
+## 2026-08-03 15:30 — Redeploy nativo con los arreglos de consola + flyway repair de V12
+- Agente: Claude Opus 5 (asistido por Natan Davila)
+- Resumen: build nativo appih, imagen nueva y redeploy del stack int; el arranque fallo por el drift de checksum de V12 previsto en 0306be5b y se resolvio con `flyway repair` autorizado.
+- Cambios:
+  - Consola MT101: UNCERTAIN deja de verse como error, cuatro-ojos del PAY correctivo en la UI, motivos separados, aviso de truncado, accesibilidad del field-mapping-board
+  - Imagen integration-hub:native-appih reconstruida (sha256:e6c2d555…, antes db577d4d…)
+  - flyway_schema_history del entorno int: V12 pasa de checksum -134086729 a 598736224
+- Pendiente:
+  - El repair en PRODUCCION sigue pendiente y necesita ventana y runbook: aqui int es desechable, alli no.
+  - Revision visual humana de la consola: el material esta en el informe, la firma es del humano.
+- Evidencia:
+  - Build nativo 1h13m, BUILD SUCCESS, runner de 89.9 MB verificado por timestamp (no por exit code)
+  - Repair: "Repairing Schema History table for version 12" + "Successfully validated 104 migrations"
+  - Post-repair: 104 filas intactas, mt101_pay_dispatch_intent con sus 5 registros, https://localhost:8443/appih/ HTTP 200
+
 ## 2026-08-03 09:42 — Politica de rutas del contrato de fases: corregir y vigilar
 - Agente: Claude Opus 5 (asistido por Natan Davila)
 - Resumen: touchAllow/touchForbid declaraban rutas de una plantilla generica (`src/**`, `tests/**`, `db/migration/**`) que en este monolito de 7 modulos Maven no describen nada; se derivan ahora del pom y se anade un validador que impide que vuelvan a apuntar al vacio.
