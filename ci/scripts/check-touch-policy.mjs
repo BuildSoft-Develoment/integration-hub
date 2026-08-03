@@ -101,25 +101,60 @@ function ficheroDeProduccion(modulo) {
   return abs ? abs.slice(root.length + 1).split("\\").join("/") : null;
 }
 
-const construccion = getTouchPolicy(FASE_CONSTRUCCION, undefined, root);
-let probados = 0;
+/** Primer fichero que exista bajo una ruta relativa, buscando en profundidad. */
+function primerFichero(rel, filtro) {
+  const base = join(root, rel);
+  if (!existsSync(base)) return null;
+  const buscar = (d, prof = 0) => {
+    if (prof > 12) return null;
+    let e; try { e = readdirSync(d, { withFileTypes: true }); } catch { return null; }
+    for (const x of e) if (x.isFile() && filtro(x.name)) return join(d, x.name);
+    for (const x of e) {
+      if (x.isDirectory()) { const r = buscar(join(d, x.name), prof + 1); if (r) return r; }
+    }
+    return null;
+  };
+  const abs = buscar(base);
+  return abs ? abs.slice(root.length + 1).split("\\").join("/") : null;
+}
+
+/**
+ * Sujetos del oraculo. Cada uno es un fichero REAL del repo con la expectativa de que fase lo
+ * permite y cuales lo prohiben.
+ *
+ * Las migraciones y el frontend no estaban aqui en la primera version de este validador, y su
+ * ausencia era el mismo defecto que el gate persigue: el caso que motivo todo el arreglo —tocar una
+ * migracion durante QA— no lo ejercitaba nadie. Un oraculo que solo mira una familia de ficheros
+ * certifica esa familia y nada mas.
+ */
+const sujetos = [];
 for (const m of modulos) {
   const f = ficheroDeProduccion(m);
-  if (!f) continue;
-  probados += 1;
+  if (f) sujetos.push({ f, que: `codigo de '${m}'`, prohibenEn: FASES_ANALISIS });
+}
+for (const m of modulos) {
+  const mig = primerFichero(`${m}/src/main/resources/db`, (n) => n.endsWith(".sql"));
+  if (mig) sujetos.push({ f: mig, que: `migracion de '${m}'`, prohibenEn: [2, 3, 4, 6, 7, 8] });
+}
+const front = primerFichero("frontend/libs", (n) => n.endsWith(".ts") && !n.endsWith(".spec.ts"));
+if (front) sujetos.push({ f: front, que: "codigo de frontend", prohibenEn: FASES_ANALISIS });
 
-  if (!matchAny(f, construccion.allowed_paths)) {
+const construccion = getTouchPolicy(FASE_CONSTRUCCION, undefined, root);
+let probados = 0;
+for (const s of sujetos) {
+  probados += 1;
+  if (!matchAny(s.f, construccion.allowed_paths)) {
     hallazgos.push(
-      `fase ${FASE_CONSTRUCCION} (Construccion) NO PERMITE ${f}. El modulo '${m}' queda fuera de `
-      + `allowed_paths: con la guarda encendida, construir en el seria una violacion.`,
+      `fase ${FASE_CONSTRUCCION} (Construccion) NO PERMITE ${s.f} (${s.que}). Queda fuera de `
+      + `allowed_paths: con la guarda encendida, trabajar ahi seria una violacion.`,
     );
   }
-  for (const fase of FASES_ANALISIS) {
+  for (const fase of s.prohibenEn) {
     const tp = getTouchPolicy(fase, undefined, root);
-    if (!matchAny(f, tp.forbidden_paths)) {
+    if (!matchAny(s.f, tp.forbidden_paths)) {
       hallazgos.push(
-        `fase ${fase} NO PROHIBE ${f}. El modulo '${m}' se puede reescribir durante una fase de `
-        + `analisis sin que la politica lo registre como violacion.`,
+        `fase ${fase} NO PROHIBE ${s.f} (${s.que}). Se puede modificar durante esa fase sin que la `
+        + `politica lo registre como violacion.`,
       );
     }
   }
