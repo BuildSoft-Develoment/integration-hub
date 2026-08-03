@@ -577,6 +577,7 @@ export const es = {
   'ui.keyColumns': 'Columnas llave',
   'ui.columnMappings': 'Mapeo de campos',
   'ui.columnFunctions': 'Funciones por columna',
+  'ui.dbWriteOpenPicker': 'Abrir selector de origen',
   'ui.dbWriteAvailableSources': 'Origen disponible',
   'ui.dbWriteAvailableSourcesHint': 'Arrastra metadata, summary, records, table, errors u out hacia un destino.',
   'ui.dbWriteTargetColumns': 'Columnas destino',

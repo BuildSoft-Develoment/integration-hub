@@ -88,6 +88,24 @@ describe('ADR-021 · i18n del vertical SWIFT MT101', () => {
 
     expect(ownKeys.length, 'no se detecto ninguna clave en uso: revisar los patrones').toBeGreaterThan(20);
     expect(missing, 'claves usadas por el vertical que nadie declara (se renderizan crudas)').toEqual([]);
+
+    // PUNTO CIEGO QUE ESTA PRUEBA TENIA. El filtro de arriba se queda con el namespace del vertical y
+    // ASUME que las demas las trae el core. Nadie lo comprobaba: `ui.dbWriteOpenPicker` se usaba en
+    // este vertical y en dos componentes de process-form-kit, no existia en ningun diccionario, y los
+    // tres botones renderizaban la clave cruda como su aria-label. La prueba pasaba en verde.
+    // Una clave asumida y no verificada es igual de invisible que una que no se mira.
+    const foraneas = [...used]
+      .filter((key) => !key.endsWith('.'))
+      .filter((key) => !ownKeys.includes(key));
+    // Vale que este declarada en CUALQUIERA de los dos sitios: el vertical tambien aporta claves
+    // fuera de su namespace (p.ej. `audit.quarantine.*` de sus propias pantallas de auditoria).
+    const foraneasHuerfanas = foraneas
+      .filter((key) => !(key in declared.es) && !baseEs.includes(`'${key}':`))
+      .sort();
+    expect(
+      foraneasHuerfanas,
+      'claves de otros namespaces que el vertical usa y el core NO declara (se renderizan crudas)'
+    ).toEqual([]);
   });
 
   it('las claves del vertical ya no estan en el diccionario del core', () => {

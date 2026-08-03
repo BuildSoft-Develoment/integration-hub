@@ -38,7 +38,9 @@
 
           <div class="mapping-select__actions">
             @if (hasSource(target.field) && !readonly()) {
-              <button type="button" class="mapping-select__icon mapping-select__icon--clear" (click)="clear.emit(target.field)">
+              <button type="button" class="mapping-select__icon mapping-select__icon--clear" (click)="clear.emit(target.field)"
+                      [attr.aria-label]="i18n.t('mt101.mappingClearField', { field: target.field })"
+                      [attr.title]="i18n.t('mt101.mappingClearField', { field: target.field })">
                 <span aria-hidden="true">x</span>
               </button>
             }

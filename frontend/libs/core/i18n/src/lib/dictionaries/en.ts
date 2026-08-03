@@ -577,6 +577,7 @@ export const en = {
   'ui.keyColumns': 'Key columns',
   'ui.columnMappings': 'Field mappings',
   'ui.columnFunctions': 'Column functions',
+  'ui.dbWriteOpenPicker': 'Open source picker',
   'ui.dbWriteAvailableSources': 'Available sources',
   'ui.dbWriteAvailableSourcesHint': 'Drag metadata, summary, records, table, errors, or out into a target.',
   'ui.dbWriteTargetColumns': 'Target columns',
