@@ -28,6 +28,22 @@
 ---
 
 
+## 2026-08-03 16:55 — La paleta del flow editor, y una guarda que vivia en un atributo de UI
+- Agente: Claude Opus 5 (asistido por Natan Davila)
+- Resumen: tercer caso del tooltip invisible, con un agravante que aparecio al mirarlo: lo UNICO que impedia soltar en el lienzo una tarea de plugin no confiable era el atributo `disabled` del boton de la paleta.
+- Cambios:
+  - process-flow-palette: el tooltip pasa al envoltorio (el boton sigue con `disabled`), + motivo para lector de pantalla
+  - process-task-list.handleCreateNode: rechaza task types no disponibles, junto a `readonly`
+  - process-task-list.component.spec.ts (nuevo): 2 casos sobre quien entra al lienzo
+- Pendiente:
+  - Revision visual: que el tooltip salga al pasar por un chip gris, que la paleta se vea igual en columna y en fila (<=900px), y que arrastrar una tarea disponible siga funcionando.
+  - Sigue sin llegar a la consola desplegada hasta el proximo build nativo: en int corre e6c2d555.
+- Evidencia:
+  - `taskTooltip()` solo anade `STATUS: reason` cuando la tarea NO esta disponible: el motivo existia solo cuando era imposible verlo
+  - `handleCreateNode` solo miraba `readonly()`; el test nuevo pasa a rojo si se quita la guarda (1 failed / 135 passed)
+  - Foblex resuelve el item con `closest('[fExternalItem]')`, que sube desde el puntero: un ancestro nuevo no lo rompe. Sus dos `parentElement` son de nodos del lienzo, no de items externos
+  - check-disabled-tooltip: 0 hallazgos sobre 126 plantillas · 136/136 test files · nx build web OK
+
 ## 2026-08-03 16:35 — El motivo del bloqueo del cuatro-ojos vivia en un tooltip que nadie podia ver
 - Agente: Claude Opus 5 (asistido por Natan Davila)
 - Resumen: en Material 21.2.14 un boton deshabilitado lleva el `disabled` NATIVO y no emite eventos de raton, asi que el `matTooltip` que explicaba por que el maker no puede aprobar su propio PAY no se mostraba jamas; el motivo pasa a texto visible y se anade un gate para que no vuelva a esconderse.

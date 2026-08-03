@@ -159,6 +159,14 @@ export class ProcessTaskListComponent {
     if (this.readonly()) {
       return;
     }
+    // Lo UNICO que impedia soltar en el lienzo un task type no disponible (plugin DEGRADED,
+    // UNTRUSTED o SHADOWED_BY_LOCAL) era el atributo `disabled` del boton de la paleta. Un
+    // atributo de presentacion no es un control: quien decide si una tarea entra al flujo es
+    // este handler, al lado de `readonly`. La paleta sigue pintandolos en gris — eso es UX, no
+    // la guarda.
+    if (!this.manager.isAvailable(event.data)) {
+      return;
+    }
     const rect = event.externalItemRect ?? event.rect;
     this.addTaskAt.emit({
       taskType: event.data,

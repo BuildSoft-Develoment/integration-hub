@@ -10,23 +10,35 @@
         @if (isExpanded(cat)) {
           <div class="flow-palette__group-items">
             @for (taskType of types; track taskType) {
-              <button
-                fExternalItem
-                type="button"
-                class="flow-palette__item"
-                [class.flow-palette__item--disabled]="taskDisabled(taskType)"
-                [disabled]="taskDisabled(taskType)"
-                [fData]="taskType"
-                [matTooltip]="taskTooltip(taskType)"
-                matTooltipPosition="right"
-              >
-                <span class="flow-palette__icon" [ngClass]="presentation(taskType).toneClass" aria-hidden="true">
-                  <svg viewBox="0 0 24 24">
-                    <path [attr.d]="presentation(taskType).iconPath" />
-                  </svg>
-                </span>
-                <span class="flow-palette__label">{{ presentation(taskType).badge }}</span>
-              </button>
+              <!-- El tooltip va en el ENVOLTORIO, no en el boton. Un <button> deshabilitado lleva el
+                   `disabled` nativo y no emite eventos de raton: colgado del boton, el tooltip moria
+                   justo cuando pasa a llevar el motivo (`taskTooltip` solo anade STATUS: reason cuando
+                   la tarea NO esta disponible). El envoltorio no esta deshabilitado, asi que si lo
+                   recibe. El `[disabled]` se queda donde estaba: es lo que impide ARRANCAR el arrastre
+                   de una tarea de plugin no confiable. -->
+              <span class="flow-palette__item-wrap" [matTooltip]="taskTooltip(taskType)" matTooltipPosition="right">
+                <button
+                  fExternalItem
+                  type="button"
+                  class="flow-palette__item"
+                  [class.flow-palette__item--disabled]="taskDisabled(taskType)"
+                  [disabled]="taskDisabled(taskType)"
+                  [fData]="taskType"
+                >
+                  <span class="flow-palette__icon" [ngClass]="presentation(taskType).toneClass" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path [attr.d]="presentation(taskType).iconPath" />
+                    </svg>
+                  </span>
+                  <span class="flow-palette__label">{{ presentation(taskType).badge }}</span>
+                  @if (taskDisabled(taskType)) {
+                    <!-- El hover no existe con teclado ni con lector de pantalla, y el chip mide 70px
+                         fijos con overflow:hidden: no cabe texto. Fuera de flujo (position:absolute),
+                         asi que no ocupa celda de la rejilla ni desplaza nada. -->
+                    <span class="ih-visually-hidden">{{ taskTooltip(taskType) }}</span>
+                  }
+                </button>
+              </span>
             }
           </div>
         }

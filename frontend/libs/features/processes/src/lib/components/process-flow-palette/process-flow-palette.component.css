@@ -51,6 +51,14 @@
         gap: 0.15rem;
         padding-left: 0.1rem;
       }
+      /* Envoltorio que sostiene el tooltip del item (ver la plantilla). `max-content` y no un 70px
+         repetido: hace que el ancho lo siga fijando `.flow-palette__item`, y ademas al no ser `auto`
+         desactiva el `align-items: stretch` de la columna — sin el, el envoltorio se estiraria a todo
+         lo ancho del grupo y el tooltip saltaria al pasar por el hueco vacio al lado del chip. */
+      .flow-palette__item-wrap {
+        display: flex;
+        width: max-content;
+      }
       .flow-palette__item {
         display: grid !important;
         grid-template-columns: 1.1rem minmax(0, 1fr) !important;
