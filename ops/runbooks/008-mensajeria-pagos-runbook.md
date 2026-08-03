@@ -11,14 +11,25 @@ Operacion del camino del dinero: que hacer cuando un pago no termina en un estad
 Cada procedimiento de abajo existe porque hay un requisito detras. Si un requisito cambia, este
 documento cambia con el.
 
+> Ojo con una confusion facil: **`NEEDS_RECONCILIATION` no lo pone ninguna tarea MT101**. Es un estado
+> de ejecucion del MOTOR (`ProcessExecutionStateService`, spec 003) que aparece cuando queda trabajo en
+> vuelo o cuando el PAY dejo algo incierto. Lo que pertenece a 008 es como se RESUELVE y como se
+> CIERRA, que es lo que mapea la tabla.
+
 | Requisito | Que gobierna aqui |
 |---|---|
 | `RF-004` | `MT101_PAY` despacha al banco con idempotencia por `sendersReference`. Es el origen del ledger `mt101_pay_dispatch_intent`, de la bandera `pay_conflict` y del endpoint de conciliacion de intents |
 | `RF-005` | `MT101_STATUS` recibe (`callback`) o pollea (`poll`) las confirmaciones MT900/MT910. Es lo que resuelve —o no— un fragmento `UNCERTAIN` |
-| `RF-006` | `MT101_RECONCILE` cruza enviados contra confirmados en una ventana y publica excepciones. Es el origen de `NEEDS_RECONCILIATION` |
+| `RF-006` | El cruce de enviados contra confirmados. Gobierna `POST /mt101-quarantine/process-executions/close-reconciled`, que **cierra** una ejecucion `NEEDS_RECONCILIATION` y solo si todos sus fragmentos estan resueltos (asi lo declara `api-contract.md`) |
 | `RF-019` | El rol `payments-operator`: quien puede ejecutar los procesos del catalogo 008 sin poder editar el catalogo del motor. Gobierna el acceso a las consolas de esta pagina |
 | `RF-022` | `MT101_BUILD_FROM_TABLE` y la cuarentena por fila: el reproceso quirurgico de los endpoints de remediacion |
 | `RF-024` | El reproceso correctivo con maker-checker sobre el PAY: quien solicita no puede aprobar. Es el flujo de acknowledge de mas abajo |
+
+> **No todo lo que opera esta pagina es de 008.** Los endpoints de `audit-spool` y de `tasks-dlq`
+> (redrive del outbox, requeue de suspensiones) son del MOTOR, no del vertical: no aparecen en el
+> `api-contract.md` de 008 y su trazabilidad vive en las specs 003 y 004. Se operan desde aqui porque
+> cuando el camino del dinero se atasca, el atasco suele estar ahi — pero un cambio en ellos se
+> gobierna por su propia spec.
 
 ## SLO/SLI
 
