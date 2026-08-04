@@ -91,7 +91,13 @@
     border-radius: var(--radio); padding: .9rem 1rem; box-shadow: var(--sombra);
   }
   .tarjeta__rotulo { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--texto-suave); }
-  .tarjeta__cifra { font-size: 1.85rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: .2rem; }
+  /* `clamp` y no un tamano fijo: un importe largo como "PEN 48 320,50" desbordaba la tarjeta y se
+     cortaba en pantallas estrechas. Una cifra de dinero recortada es peor que una cifra pequena. */
+  .tarjeta__cifra {
+    font-size: clamp(1.15rem, 3.4vw, 1.85rem);
+    font-weight: 700; font-variant-numeric: tabular-nums;
+    margin-top: .2rem; overflow-wrap: anywhere;
+  }
   .tarjeta__pie { font-size: .78rem; color: var(--texto-suave); }
   .tarjeta--alerta { border-left: 4px solid var(--ambar); }
   .tarjeta--alerta .tarjeta__cifra { color: var(--ambar); }
