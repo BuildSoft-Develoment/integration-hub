@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lectores de archivo — Integration Hub</title>
+<style>
+  :root {
+    --carbon: #1a1a1f;
+    --grafito: #55555f;
+    --niebla: #f5f5f7;
+    --hoja: #ffffff;
+    --raya: #dcdce2;
+    --violeta: #6d28d9;
+    --violeta-tenue: #f1ecfd;
+    --oliva: #4d7c0f;
+    --oliva-tenue: #f0f7e6;
+    --ocre: #a16207;
+    --ocre-tenue: #fdf6e3;
+    --carmin: #be123c;
+    --carmin-tenue: #fdedf1;
+    --esquina: 8px;
+    --relieve: 0 1px 3px rgba(26,26,31,.07), 0 6px 18px rgba(26,26,31,.05);
+    --maquina: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--niebla); color:var(--carbon); font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+
+  .tira { display:flex; align-items:center; gap:.9rem; padding:.75rem 1.3rem; background:var(--hoja); border-bottom:1px solid var(--raya); }
+  .tira__logo { font-weight:700; }
+  .tira__nota { color:var(--grafito); font-size:.85rem; }
+  .tira__hueco { flex:1; }
+  .tira__salida { color:var(--grafito); font-size:.82rem; text-decoration:none; }
+  .tira__salida:hover { color:var(--violeta); }
+
+  .conmutador { display:flex; gap:.35rem; padding:.5rem 1.3rem; background:var(--hoja); border-bottom:1px solid var(--raya); overflow-x:auto; }
+  .conmutador button {
+    padding:.35rem .8rem; border:1px solid var(--raya); border-radius:999px;
+    background:var(--hoja); color:var(--grafito); font:inherit; font-size:.83rem;
+    cursor:pointer; white-space:nowrap;
+  }
+  .conmutador button:hover { border-color:var(--violeta); color:var(--violeta); }
+  .conmutador button[aria-current="page"] { background:var(--violeta); border-color:var(--violeta); color:#fff; font-weight:600; }
+
+  .zona { padding:1.3rem; max-width:1300px; margin:0 auto; }
+  .lamina[hidden] { display:none; }
+
+  .rotulo { margin:0 0 .2rem; font-size:1.32rem; letter-spacing:-.01em; }
+  .aclaracion { margin:0 0 1.2rem; color:var(--grafito); font-size:.89rem; max-width:66ch; }
+
+  .partido { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:1rem; align-items:start; }
+  .bloque { background:var(--hoja); border:1px solid var(--raya); border-radius:var(--esquina); box-shadow:var(--relieve); }
+  .bloque__alto { display:flex; align-items:center; gap:.6rem; padding:.65rem .9rem; border-bottom:1px solid var(--raya); }
+  .bloque__nombre { margin:0; font-size:.9rem; font-weight:650; }
+  .bloque__hueco { flex:1; }
+  .bloque__dentro { padding:.9rem; }
+
+  .crudo {
+    font-family:var(--maquina); font-size:.78rem; line-height:1.85;
+    background:#fbfbfd; border-radius:6px; padding:.7rem .8rem; overflow-x:auto; white-space:pre;
+  }
+  .crudo__cab { color:var(--violeta); font-weight:700; }
+  .crudo__num { color:#a0a0ab; user-select:none; display:inline-block; width:2.1rem; }
+  .crudo__mal { background:var(--carmin-tenue); color:var(--carmin); }
+
+  .par { display:grid; grid-template-columns:1fr auto 1fr; gap:.45rem; align-items:center; padding:.4rem 0; border-bottom:1px solid var(--raya); }
+  .par:last-child { border-bottom:0; }
+  .par__col { font-family:var(--maquina); font-size:.79rem; background:var(--violeta-tenue); color:var(--violeta); padding:.2rem .45rem; border-radius:5px; }
+  .par__flecha { color:#b8b8c2; font-size:.85rem; }
+  .par__campo { display:flex; align-items:center; gap:.35rem; }
+  .par__campo select { width:100%; padding:.28rem .4rem; border:1px solid var(--raya); border-radius:6px; font:inherit; font-size:.8rem; }
+  .par__tipo { font-size:.7rem; color:var(--grafito); text-transform:uppercase; letter-spacing:.04em; }
+
+  .etiqueta { display:inline-block; padding:.1rem .45rem; border-radius:5px; font-size:.72rem; font-weight:600; }
+  .etiqueta--ok { background:var(--oliva-tenue); color:var(--oliva); }
+  .etiqueta--duda { background:var(--ocre-tenue); color:var(--ocre); }
+  .etiqueta--mal { background:var(--carmin-tenue); color:var(--carmin); }
+
+  .tecla {
+    padding:.38rem .75rem; border:1px solid var(--raya); border-radius:7px;
+    background:var(--hoja); color:var(--carbon); font:inherit; font-size:.82rem; cursor:pointer;
+  }
+  .tecla:hover { background:#f0f0f4; }
+  .tecla--viva { background:var(--violeta); border-color:var(--violeta); color:#fff; }
+  .tecla--viva:hover { background:#5b21b6; }
+  .tecla:focus-visible { outline:2px solid var(--violeta); outline-offset:2px; }
+  .tecla:disabled { opacity:.45; cursor:not-allowed; }
+
+  .parrilla { width:100%; border-collapse:collapse; font-size:.83rem; }
+  .parrilla th, .parrilla td { padding:.42rem .55rem; border-bottom:1px solid var(--raya); text-align:left; white-space:nowrap; }
+  .parrilla th { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--grafito); background:#fafafc; }
+  .parrilla td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .parrilla tr.rota td { background:var(--carmin-tenue); }
+
+  .banda { display:flex; gap:.55rem; padding:.7rem .9rem; border-radius:8px; font-size:.85rem; margin-bottom:1rem; }
+  .banda--verde { background:var(--oliva-tenue); color:var(--oliva); border:1px solid #d3e7b6; }
+  .banda--ambar { background:var(--ocre-tenue); color:var(--ocre); border:1px solid #ecdcac; }
+  .banda--rojo { background:var(--carmin-tenue); color:var(--carmin); border:1px solid #f4c4d1; }
+
+  .desierto { text-align:center; padding:2.8rem 1rem; color:var(--grafito); }
+  .desierto__marca { font-size:2rem; }
+  .desierto__linea { color:var(--carbon); font-weight:600; margin:.55rem 0 .3rem; }
+
+  .cargando__pieza { height:12px; border-radius:6px; margin-bottom:.6rem; background:linear-gradient(90deg,#e8e8ee 25%,#f3f3f7 50%,#e8e8ee 75%); background-size:200% 100%; animation:ola 1.35s infinite; }
+  @keyframes ola { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .cargando__pieza{animation:none} }
+
+  .opciones { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:.8rem 1rem; }
+  .opcion label { display:block; font-size:.79rem; font-weight:600; margin-bottom:.22rem; }
+  .opcion input, .opcion select { width:100%; padding:.4rem .55rem; border:1px solid var(--raya); border-radius:7px; font:inherit; font-size:.85rem; }
+  .opcion small { display:block; color:var(--grafito); font-size:.76rem; margin-top:.2rem; }
+
+  .toast { position:fixed; right:1.2rem; bottom:1.2rem; z-index:40; max-width:23rem;
+    background:var(--carbon); color:#eeeef2; padding:.65rem .95rem; border-radius:9px; font-size:.84rem;
+    box-shadow:0 12px 30px rgba(26,26,31,.3); }
+  .toast[hidden] { display:none; }
+
+  @media (max-width:960px) {
+    .partido { grid-template-columns:1fr; }
+    .zona { padding:1rem; }
+    .tira { padding:.65rem 1rem; }
+    .conmutador { padding:.5rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="tira">
+  <span class="tira__logo">Integration Hub</span>
+  <span class="tira__nota">Lectores de archivo</span>
+  <span class="tira__hueco"></span>
+  <a class="tira__salida" data-hub-link href="../../../prototype/index.html">← Volver al hub</a>
+</header>
+
+<nav class="conmutador" aria-label="Secciones de lectores">
+  <button data-lamina="lectores" aria-current="page">Lectores definidos</button>
+  <button data-lamina="mapeo">Muestra y mapeo</button>
+  <button data-lamina="formato">Opciones de formato</button>
+  <button data-lamina="ensayo">Ensayo de lectura</button>
+  <button data-lamina="anchos">Ancho fijo</button>
+  <button data-lamina="tipos">Tipos y conversiones</button>
+  <button data-lamina="cambios">Cuando el archivo cambia</button>
+  <button data-lamina="sinmuestra">Sin muestra</button>
+</nav>
+
+<div id="chivato" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="zona">
+
+  <!-- LECTORES -->
+  <section class="lamina" id="lamina-lectores">
+    <h1 class="rotulo">Lectores definidos</h1>
+    <p class="aclaracion">Un lector dice como se interpreta un archivo: donde empiezan los datos, que separa las columnas y que significa cada una.</p>
+
+    <div class="banda banda--ambar">
+      <span><strong>El "Extracto contable" fallo anoche.</strong>
+      El archivo trae una columna nueva que el lector no esperaba. Cuando un proveedor cambia el
+      formato sin avisar, el lector no adivina: para y lo dice, en vez de leer columnas corridas y
+      guardar importes en el campo equivocado.</span>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__alto"><h2 class="bloque__nombre">6 lectores</h2><span class="bloque__hueco"></span>
+        <button class="tecla tecla--viva" data-lamina-ir="mapeo">Nuevo lector</button></div>
+      <div class="bloque__dentro" style="overflow-x:auto;">
+        <table class="parrilla">
+          <thead><tr><th>Nombre</th><th>Formato</th><th class="num">Campos</th><th>Usado por</th><th>Ultima lectura</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>Nomina mensual</td><td>CSV separado por comas</td><td class="num">8</td><td>2 procesos</td><td><span class="etiqueta etiqueta--ok">Sin incidencias</span></td><td><button class="tecla" data-lamina-ir="mapeo">Abrir</button></td></tr>
+            <tr><td>Confirmaciones del banco</td><td>TXT de ancho fijo</td><td class="num">6</td><td>1 proceso</td><td><span class="etiqueta etiqueta--ok">Sin incidencias</span></td><td><button class="tecla" data-lamina-ir="anchos">Abrir</button></td></tr>
+            <tr><td>Guias de transporte</td><td>CSV separado por punto y coma</td><td class="num">11</td><td>1 proceso</td><td><span class="etiqueta etiqueta--duda">2 filas descartadas</span></td><td><button class="tecla" data-lamina-ir="ensayo">Abrir</button></td></tr>
+            <tr><td>Inventario</td><td>Hoja de calculo</td><td class="num">14</td><td>3 procesos</td><td><span class="etiqueta etiqueta--ok">Sin incidencias</span></td><td><button class="tecla" data-lamina-ir="formato">Abrir</button></td></tr>
+            <tr><td>Padron de clientes</td><td>CSV separado por tabulador</td><td class="num">9</td><td>sin usar</td><td><span class="etiqueta etiqueta--duda">Nunca se ejecuto</span></td><td><button class="tecla" data-lamina-ir="mapeo">Abrir</button></td></tr>
+            <tr><td>Extracto contable</td><td>TXT de ancho fijo</td><td class="num">7</td><td>1 proceso</td><td><span class="etiqueta etiqueta--mal">Fallo el ultimo</span></td><td><button class="tecla" data-lamina-ir="ensayo">Abrir</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAPEO -->
+  <section class="lamina" id="lamina-mapeo" hidden>
+    <h1 class="rotulo">Muestra y mapeo</h1>
+    <p class="aclaracion">A la izquierda, lo que hay en el archivo. A la derecha, en que se convierte. Se decide mirando datos de verdad, no adivinando.</p>
+
+    <div class="partido">
+      <div class="bloque">
+        <div class="bloque__alto"><h2 class="bloque__nombre">nomina-20260804.csv</h2><span class="bloque__hueco"></span>
+          <span style="font-size:.78rem;color:var(--grafito);">primeras 6 lineas</span></div>
+        <div class="bloque__dentro">
+          <div class="crudo"><span class="crudo__num">1</span><span class="crudo__cab">dni,nombre,cuenta,moneda,monto,bic,concepto,cargos</span>
+<span class="crudo__num">2</span>10293847,ROSA QUISPE,00112233445,PEN,2450.00,BCPLPEPL,SUELDO AGO,OUR
+<span class="crudo__num">3</span>20384756,LUIS MAMANI,00998877665,PEN,3100.50,BCPLPEPL,SUELDO AGO,OUR
+<span class="crudo__num">4</span>30475869,ANA TORRES,00554433221,USD,890.00,BCPLPEPL,SUELDO AGO,SHA
+<span class="crudo__num">5</span>40586970,JOSE HUAMAN,00776655443,PEN,2780.25,BCPLPEPL,SUELDO AGO,OUR
+<span class="crudo__num">6</span><span class="crudo__mal">50697081,MARIA FLORES,00332211009,SOL,1950.00,BCPLPEPL,SUELDO AGO,OUR</span></div>
+          <p style="font-size:.78rem;color:var(--grafito);margin:.6rem 0 0;">
+            La linea 6 lleva <code>SOL</code> donde se espera un codigo de moneda de tres letras.
+            Se ve aqui, antes de procesar 10.000 filas.
+          </p>
+        </div>
+      </div>
+
+      <div class="bloque">
+        <div class="bloque__alto"><h2 class="bloque__nombre">A que campo va cada columna</h2></div>
+        <div class="bloque__dentro">
+          <div class="par"><span class="par__col">dni</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Documento</option><option>Ignorar</option></select><span class="par__tipo">texto</span></span></div>
+          <div class="par"><span class="par__col">nombre</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Beneficiario</option><option>Ignorar</option></select><span class="par__tipo">texto</span></span></div>
+          <div class="par"><span class="par__col">cuenta</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Cuenta destino</option><option>Ignorar</option></select><span class="par__tipo">texto</span></span></div>
+          <div class="par"><span class="par__col">moneda</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Moneda</option><option>Ignorar</option></select><span class="par__tipo">codigo</span></span></div>
+          <div class="par"><span class="par__col">monto</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Importe</option><option>Ignorar</option></select><span class="par__tipo">decimal</span></span></div>
+          <div class="par"><span class="par__col">bic</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Banco destino</option><option>Ignorar</option></select><span class="par__tipo">codigo</span></span></div>
+          <div class="par"><span class="par__col">concepto</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Concepto</option><option>Ignorar</option></select><span class="par__tipo">texto</span></span></div>
+          <div class="par"><span class="par__col">cargos</span><span class="par__flecha">→</span>
+            <span class="par__campo"><select><option>Reparto de gastos</option><option>Ignorar</option></select><span class="par__tipo">codigo</span></span></div>
+
+          <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap;">
+            <button class="tecla tecla--viva" data-hacer="guardar-mapeo">Guardar mapeo</button>
+            <button class="tecla" data-lamina-ir="ensayo">Ensayar la lectura</button>
+            <button class="tecla" data-hacer="autodetectar">Detectar por cabecera</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORMATO -->
+  <section class="lamina" id="lamina-formato" hidden>
+    <h1 class="rotulo">Opciones de formato</h1>
+    <p class="aclaracion">Lo que cambia como se parte el archivo. Cada opcion muestra el efecto sobre la muestra de arriba.</p>
+
+    <div class="banda banda--ambar">
+      <span><strong>La codificacion importa mas de lo que parece.</strong>
+      Un archivo en Latin-1 leido como UTF-8 convierte cada acento en un simbolo raro, y eso viaja
+      hasta el nombre del beneficiario en un pago.</span>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__alto"><h2 class="bloque__nombre">Como se parte</h2></div>
+      <div class="bloque__dentro">
+        <div class="opciones">
+          <div class="opcion"><label>Separador</label>
+            <select><option>Coma</option><option>Punto y coma</option><option>Tabulador</option><option>Barra vertical</option></select>
+            <small>El que separa columnas en cada linea.</small></div>
+          <div class="opcion"><label>Primera fila</label>
+            <select><option>Es la cabecera</option><option>Ya son datos</option></select>
+            <small>Si es cabecera, da nombre a las columnas.</small></div>
+          <div class="opcion"><label>Codificacion</label>
+            <select><option>UTF-8</option><option>Latin-1</option><option>Windows-1252</option></select>
+            <small>Si aparecen simbolos raros en los nombres, es esto.</small></div>
+          <div class="opcion"><label>Comillas</label>
+            <select><option>Solo cuando hace falta</option><option>Siempre</option><option>Nunca</option></select>
+            <small>Para valores que contienen el separador.</small></div>
+          <div class="opcion"><label>Decimales</label>
+            <select><option>Punto</option><option>Coma</option></select>
+            <small>Confundirlo multiplica o divide importes por mil.</small></div>
+          <div class="opcion"><label>Filas a saltar</label>
+            <input value="0" />
+            <small>Para archivos con lineas de titulo antes de los datos.</small></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap;">
+          <button class="tecla tecla--viva" data-hacer="aplicar-formato">Aplicar y ver el efecto</button>
+          <button class="tecla" data-lamina-ir="mapeo">Volver a la muestra</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ENSAYO -->
+  <section class="lamina" id="lamina-ensayo" hidden>
+    <h1 class="rotulo">Ensayo de lectura</h1>
+    <p class="aclaracion">Se leen las primeras filas de verdad, con el mapeo puesto, y se ensena lo que saldria. Nada se guarda.</p>
+
+    <div id="ensayo-cargando" hidden>
+      <div class="bloque"><div class="bloque__dentro">
+        <div class="cargando__pieza" style="width:88%"></div>
+        <div class="cargando__pieza" style="width:74%"></div>
+        <div class="cargando__pieza" style="width:91%"></div>
+        <div class="cargando__pieza" style="width:60%"></div>
+      </div></div>
+    </div>
+
+    <div id="ensayo-hecho" hidden>
+      <div class="banda banda--verde"><span><strong>Listo: 5 filas de 6 se leyeron bien.</strong> La sexta se descarto y se explica abajo.</span></div>
+      <div class="bloque">
+        <div class="bloque__alto"><h2 class="bloque__nombre">Como quedarian las filas</h2></div>
+        <div class="bloque__dentro" style="overflow-x:auto;">
+          <table class="parrilla">
+            <thead><tr><th>#</th><th>Beneficiario</th><th>Cuenta</th><th>Moneda</th><th class="num">Importe</th><th>Gastos</th><th>Resultado</th></tr></thead>
+            <tbody>
+              <tr><td class="num">2</td><td>ROSA QUISPE</td><td>00112233445</td><td>PEN</td><td class="num">2 450,00</td><td>OUR</td><td><span class="etiqueta etiqueta--ok">Correcta</span></td></tr>
+              <tr><td class="num">3</td><td>LUIS MAMANI</td><td>00998877665</td><td>PEN</td><td class="num">3 100,50</td><td>OUR</td><td><span class="etiqueta etiqueta--ok">Correcta</span></td></tr>
+              <tr><td class="num">4</td><td>ANA TORRES</td><td>00554433221</td><td>USD</td><td class="num">890,00</td><td>SHA</td><td><span class="etiqueta etiqueta--ok">Correcta</span></td></tr>
+              <tr><td class="num">5</td><td>JOSE HUAMAN</td><td>00776655443</td><td>PEN</td><td class="num">2 780,25</td><td>OUR</td><td><span class="etiqueta etiqueta--ok">Correcta</span></td></tr>
+              <tr class="rota"><td class="num">6</td><td>MARIA FLORES</td><td>00332211009</td><td>SOL</td><td class="num">1 950,00</td><td>OUR</td><td><span class="etiqueta etiqueta--mal">Moneda invalida</span></td></tr>
+            </tbody>
+          </table>
+          <p style="font-size:.79rem;color:var(--grafito);margin:.7rem 0 0;">
+            La fila 6 no se pierde: va a cuarentena con su motivo, se corrige y se reprocesa.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div id="ensayo-roto" hidden>
+      <div class="banda banda--rojo"><span><strong>No se pudo leer el archivo.</strong> El separador configurado deja una sola columna: probablemente no es una coma.</span></div>
+      <div class="bloque"><div class="bloque__dentro">
+        <div class="crudo"><span class="crudo__num">1</span>dni;nombre;cuenta;moneda;monto;bic;concepto;cargos</div>
+        <p style="font-size:.79rem;color:var(--grafito);margin:.7rem 0 0;">
+          Se esperaba coma y el archivo usa punto y coma. Cambialo en las opciones de formato.
+        </p>
+        <div style="display:flex;gap:.5rem;margin-top:.8rem;flex-wrap:wrap;">
+          <button class="tecla tecla--viva" data-lamina-ir="formato">Ir a opciones de formato</button>
+          <button class="tecla" data-hacer="reensayar">Reintentar</button>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ANCHO FIJO -->
+  <section class="lamina" id="lamina-anchos" hidden>
+    <h1 class="rotulo">Ancho fijo</h1>
+    <p class="aclaracion">Sin separadores: cada campo ocupa unas posiciones exactas. Se marcan sobre la linea real.</p>
+
+    <div class="bloque" style="margin-bottom:1rem;">
+      <div class="bloque__alto"><h2 class="bloque__nombre">confirmaciones-20260804.txt</h2></div>
+      <div class="bloque__dentro">
+        <div class="crudo"><span class="crudo__num">1</span>QB0417  20260804ACEPTADO 000012480.00PEN
+<span class="crudo__num">2</span>QB0418  20260804ACEPTADO 000009210.50PEN
+<span class="crudo__num">3</span>QB0419  20260804RECHAZADO000004100.00USD
+<span class="crudo__num">4</span>QB0420  20260804ACEPTADO 000022530.00PEN
+<span class="crudo__num">5</span>QB0421  20260804ACEPTADO 000003875.25PEN</div>
+      </div>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__alto"><h2 class="bloque__nombre">Posiciones</h2></div>
+      <div class="bloque__dentro" style="overflow-x:auto;">
+        <table class="parrilla">
+          <thead><tr><th>Campo</th><th class="num">Desde</th><th class="num">Largo</th><th>Tipo</th><th>Ejemplo</th></tr></thead>
+          <tbody>
+            <tr><td>Referencia</td><td class="num">1</td><td class="num">8</td><td>texto</td><td>QB0417</td></tr>
+            <tr><td>Fecha</td><td class="num">9</td><td class="num">8</td><td>fecha AAAAMMDD</td><td>20260804</td></tr>
+            <tr><td>Situacion</td><td class="num">17</td><td class="num">9</td><td>texto</td><td>ACEPTADO</td></tr>
+            <tr><td>Importe</td><td class="num">26</td><td class="num">12</td><td>decimal implicito</td><td>000012480.00</td></tr>
+            <tr><td>Moneda</td><td class="num">38</td><td class="num">3</td><td>codigo</td><td>PEN</td></tr>
+          </tbody>
+        </table>
+        <div class="banda banda--ambar" style="margin:.9rem 0 0;">
+          <span>Una posicion mal contada desplaza TODOS los campos siguientes. Por eso la muestra va
+          arriba: se comprueba mirando, no sumando de cabeza.</span>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="tecla tecla--viva" data-hacer="guardar-anchos">Guardar posiciones</button>
+          <button class="tecla" data-lamina-ir="ensayo">Ensayar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TIPOS -->
+  <section class="lamina" id="lamina-tipos" hidden>
+    <h1 class="rotulo">Tipos y conversiones</h1>
+    <p class="aclaracion">En el archivo todo es texto. Aqui se dice en que se convierte, y que hacer cuando no se puede.</p>
+
+    <div class="banda banda--ambar">
+      <span><strong>Una conversion silenciosa es peor que un error.</strong>
+      Si <code>1.950,00</code> se lee como <code>1,95</code> nadie lo nota hasta que el pago sale
+      por mil veces menos. Por eso lo que no convierte se descarta con motivo, no se aproxima.</span>
+    </div>
+
+    <div class="bloque" style="margin-bottom:1rem;">
+      <div class="bloque__alto"><h2 class="bloque__nombre">Reglas por campo</h2></div>
+      <div class="bloque__dentro" style="overflow-x:auto;">
+        <table class="parrilla">
+          <thead><tr><th>Campo</th><th>En el archivo</th><th>Se convierte a</th><th>Formato</th><th>Si no puede</th></tr></thead>
+          <tbody>
+            <tr><td>Importe</td><td>2450.00</td><td>decimal</td><td>punto decimal</td><td><span class="etiqueta etiqueta--mal">Descarta la fila</span></td></tr>
+            <tr><td>Moneda</td><td>PEN</td><td>codigo de 3 letras</td><td>ISO 4217</td><td><span class="etiqueta etiqueta--mal">Descarta la fila</span></td></tr>
+            <tr><td>Fecha de proceso</td><td>20260804</td><td>fecha</td><td>AAAAMMDD</td><td><span class="etiqueta etiqueta--mal">Descarta la fila</span></td></tr>
+            <tr><td>Documento</td><td>10293847</td><td>texto</td><td>sin cambios</td><td><span class="etiqueta etiqueta--ok">No aplica</span></td></tr>
+            <tr><td>Concepto</td><td>SUELDO AGO</td><td>texto</td><td>recorta a 35</td><td><span class="etiqueta etiqueta--duda">Recorta y avisa</span></td></tr>
+            <tr><td>Reparto de gastos</td><td>OUR</td><td>lista cerrada</td><td>OUR, BEN, SHA</td><td><span class="etiqueta etiqueta--mal">Descarta la fila</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__alto"><h2 class="bloque__nombre">Que pasa con los espacios y los ceros</h2></div>
+      <div class="bloque__dentro">
+        <div class="opciones">
+          <div class="opcion"><label>Espacios sobrantes</label>
+            <select><option>Quitar de los extremos</option><option>Dejar como estan</option></select>
+            <small>Un nombre con espacio final crea dos beneficiarios distintos.</small></div>
+          <div class="opcion"><label>Ceros a la izquierda</label>
+            <select><option>Conservar</option><option>Quitar</option></select>
+            <small>En cuentas bancarias, quitarlos rompe el numero.</small></div>
+          <div class="opcion"><label>Texto vacio</label>
+            <select><option>Tratar como ausente</option><option>Tratar como cadena vacia</option></select>
+            <small>Cambia si el campo obligatorio se considera cumplido.</small></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap;">
+          <button class="tecla tecla--viva" data-hacer="guardar-tipos">Guardar reglas</button>
+          <button class="tecla" data-lamina-ir="ensayo">Ensayar con estas reglas</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAMBIOS -->
+  <section class="lamina" id="lamina-cambios" hidden>
+    <h1 class="rotulo">Cuando el archivo cambia</h1>
+    <p class="aclaracion">Un proveedor mueve una columna y no avisa. El lector no lo adivina: compara con lo que esperaba y para.</p>
+
+    <div class="banda banda--rojo">
+      <span><strong>El "Extracto contable" no se pudo leer anoche.</strong>
+      Trae 8 columnas donde antes habia 7. Leerlo igualmente habria metido la fecha en el campo del
+      importe, y eso no se descubre hasta que alguien cuadra a fin de mes.</span>
+    </div>
+
+    <div class="bloque" style="margin-bottom:1rem;">
+      <div class="bloque__alto"><h2 class="bloque__nombre">Lo que esperaba y lo que llego</h2></div>
+      <div class="bloque__dentro" style="overflow-x:auto;">
+        <table class="parrilla">
+          <thead><tr><th class="num">#</th><th>Se esperaba</th><th>Llego</th><th>Situacion</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>fecha</td><td>fecha</td><td><span class="etiqueta etiqueta--ok">Igual</span></td></tr>
+            <tr><td class="num">2</td><td>cuenta</td><td>cuenta</td><td><span class="etiqueta etiqueta--ok">Igual</span></td></tr>
+            <tr><td class="num">3</td><td>concepto</td><td>sucursal</td><td><span class="etiqueta etiqueta--mal">Columna nueva</span></td></tr>
+            <tr><td class="num">4</td><td>cargo</td><td>concepto</td><td><span class="etiqueta etiqueta--duda">Desplazada</span></td></tr>
+            <tr><td class="num">5</td><td>abono</td><td>cargo</td><td><span class="etiqueta etiqueta--duda">Desplazada</span></td></tr>
+            <tr><td class="num">6</td><td>saldo</td><td>abono</td><td><span class="etiqueta etiqueta--duda">Desplazada</span></td></tr>
+            <tr><td class="num">7</td><td>—</td><td>saldo</td><td><span class="etiqueta etiqueta--duda">Desplazada</span></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.79rem;color:var(--grafito);margin:.7rem 0 0;max-width:62ch;">
+          Una sola columna insertada en la posicion 3 desplaza cuatro campos. Ninguno da error por
+          separado —todos siguen siendo texto— y por eso el lector compara la forma completa, no
+          campo a campo.
+        </p>
+      </div>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__alto"><h2 class="bloque__nombre">Que hacer</h2></div>
+      <div class="bloque__dentro">
+        <div class="opciones">
+          <div class="opcion"><label>Si el archivo no encaja</label>
+            <select><option>Parar y avisar</option><option>Leer lo que coincida</option></select>
+            <small>Parar es lo seguro. "Leer lo que coincida" solo tiene sentido si el orden esta garantizado.</small></div>
+          <div class="opcion"><label>Columnas nuevas desconocidas</label>
+            <select><option>Ignorarlas</option><option>Tratarlas como error</option></select>
+            <small>Ignorar vale si van al final; si aparecen en medio, desplazan.</small></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap;">
+          <button class="tecla tecla--viva" data-hacer="remapear">Volver a mapear con la forma nueva</button>
+          <button class="tecla" data-lamina-ir="mapeo">Ver la muestra</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIN MUESTRA -->
+  <section class="lamina" id="lamina-sinmuestra" hidden>
+    <h1 class="rotulo">Sin muestra</h1>
+    <p class="aclaracion">Un lector se configura mirando datos. Sin un archivo de ejemplo, se estaria adivinando.</p>
+    <div class="bloque">
+      <div class="desierto">
+        <div class="desierto__marca">📄</div>
+        <div class="desierto__linea">Sin coincidencias en la carpeta</div>
+        <p style="margin:.2rem 0 1.1rem;">No hay ningun archivo que encaje con el patron configurado, asi que no se puede mostrar una muestra.</p>
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;">
+          <button class="tecla tecla--viva" data-hacer="subir">Subir un archivo de ejemplo</button>
+          <button class="tecla" data-hacer="usar-anterior">Usar la ultima muestra guardada</button>
+          <button class="tecla" data-lamina-ir="lectores">Volver a los lectores</button>
+        </div>
+        <p style="font-size:.79rem;color:var(--grafito);max-width:52ch;margin:1.2rem auto 0;">
+          La muestra guardada es de la ultima lectura correcta. Sirve para retocar el mapeo sin
+          esperar al archivo de manana, pero no refleja un cambio de formato reciente: si el
+          proveedor movio una columna ayer, la muestra vieja no lo sabe.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var laminas = document.querySelectorAll(".lamina");
+    var botones = document.querySelectorAll(".conmutador button");
+
+    function abrir(nombre) {
+      laminas.forEach(function (l) { l.hidden = l.id !== "lamina-" + nombre; });
+      botones.forEach(function (b) {
+        if (b.dataset.lamina === nombre) { b.setAttribute("aria-current", "page"); }
+        else { b.removeAttribute("aria-current"); }
+      });
+      if (nombre === "ensayo") { correrEnsayo(); }
+      window.scrollTo(0, 0);
+    }
+    botones.forEach(function (b) { b.addEventListener("click", function () { abrir(b.dataset.lamina); }); });
+
+    // El ensayo recorre sus tres desenlaces: leyendo, leido con una fila descartada, y separador
+    // equivocado. Los tres se ven sin tener que romper un archivo a proposito.
+    var giro = 0;
+    function correrEnsayo() {
+      var c = document.getElementById("ensayo-cargando");
+      var h = document.getElementById("ensayo-hecho");
+      var r = document.getElementById("ensayo-roto");
+      c.hidden = false; h.hidden = true; r.hidden = true;
+      setTimeout(function () {
+        c.hidden = true;
+        if (giro % 2 === 0) { h.hidden = false; } else { r.hidden = false; }
+        giro += 1;
+      }, 1300);
+    }
+
+    var cuenta = null;
+    function chivar(texto) {
+      var t = document.getElementById("chivato");
+      t.textContent = texto; t.hidden = false;
+      clearTimeout(cuenta);
+      cuenta = setTimeout(function () { t.hidden = true; }, 3000);
+    }
+
+    document.addEventListener("click", function (e) {
+      var salto = e.target.getAttribute && e.target.getAttribute("data-lamina-ir");
+      if (salto) { abrir(salto); return; }
+      var hacer = e.target.getAttribute && e.target.getAttribute("data-hacer");
+      if (!hacer) { return; }
+      if (hacer === "reensayar") { correrEnsayo(); return; }
+      if (hacer === "guardar-mapeo") { chivar("Mapeo guardado. Se aplica a la proxima lectura."); return; }
+      if (hacer === "autodetectar") { chivar("Detectados 8 campos por el nombre de la cabecera."); return; }
+      if (hacer === "aplicar-formato") { chivar("Formato aplicado a la muestra."); return; }
+      if (hacer === "guardar-anchos") { chivar("Posiciones guardadas."); return; }
+      if (hacer === "remapear") { abrir("mapeo"); chivar("Mapeo abierto con las 8 columnas nuevas."); return; }
+      if (hacer === "usar-anterior") { chivar("Cargada la muestra de la ultima lectura correcta (03 ago)."); return; }
+      if (hacer === "guardar-tipos") { chivar("Reglas de conversion guardadas."); return; }
+      if (hacer === "subir") { chivar("Elige un archivo de ejemplo para configurar el lector."); return; }
+    });
+  })();
+</script>
+
+</body>
+</html>

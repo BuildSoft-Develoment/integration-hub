@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tema del sistema — Integration Hub</title>
+<style>
+  :root {
+    --fondo: #ffffff;
+    --fondo-hueco: #f6f7f9;
+    --trazo: #d8dde3;
+    --letra: #16191d;
+    --letra-tenue: #5d6672;
+    --primario: #0b5fff;
+    --primario-vela: #e8f0ff;
+    --logro: #0f7b3f;
+    --logro-vela: #e6f5ec;
+    --alarma: #c2410c;
+    --alarma-vela: #fdf1e9;
+    --ruina: #b4232b;
+    --ruina-vela: #fdecec;
+    --curvita: 9px;
+    --sombrilla: 0 1px 2px rgba(22,25,29,.07), 0 8px 20px rgba(22,25,29,.06);
+    --teclas: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  [data-modo="noche"] {
+    --fondo: #101317;
+    --fondo-hueco: #181c22;
+    --trazo: #2b3138;
+    --letra: #e8ebef;
+    --letra-tenue: #98a2ae;
+    --primario: #6ea8ff;
+    --primario-vela: #16233a;
+    --logro: #56c98a;
+    --logro-vela: #12291d;
+    --alarma: #f0a06a;
+    --alarma-vela: #2c1e14;
+    --ruina: #f08a8f;
+    --ruina-vela: #2c1618;
+    --sombrilla: 0 1px 2px rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.35);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fondo-hueco); color:var(--letra); font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; transition:background-color .2s, color .2s; }
+  @media (prefers-reduced-motion:reduce) { body { transition:none; } }
+
+  .capitel { display:flex; align-items:center; gap:1rem; padding:.85rem 1.4rem; background:var(--fondo); border-bottom:1px solid var(--trazo); }
+  .capitel__insignia { font-weight:700; }
+  .capitel__ambito { color:var(--letra-tenue); font-size:.85rem; }
+  .capitel__hueco { flex:1; }
+  .capitel__puerta { color:var(--letra-tenue); font-size:.82rem; text-decoration:none; }
+  .capitel__puerta:hover { color:var(--primario); }
+
+  .conmuta {
+    display:inline-flex; gap:2px; padding:2px; border:1px solid var(--trazo);
+    border-radius:999px; background:var(--fondo-hueco);
+  }
+  .conmuta button {
+    padding:.3rem .7rem; border:0; border-radius:999px; background:transparent;
+    color:var(--letra-tenue); font:inherit; font-size:.79rem; cursor:pointer;
+  }
+  .conmuta button[aria-pressed="true"] { background:var(--primario); color:#fff; font-weight:600; }
+
+  .barandilla { display:flex; gap:.35rem; padding:.5rem 1.4rem; background:var(--fondo); border-bottom:1px solid var(--trazo); overflow-x:auto; }
+  .barandilla button {
+    padding:.35rem .8rem; border:1px solid transparent; border-radius:7px;
+    background:transparent; color:var(--letra-tenue); font:inherit; font-size:.85rem;
+    cursor:pointer; white-space:nowrap;
+  }
+  .barandilla button:hover { background:var(--fondo-hueco); color:var(--letra); }
+  .barandilla button[aria-current="page"] { background:var(--primario-vela); border-color:var(--primario); color:var(--primario); font-weight:600; }
+
+  .nave { max-width:1120px; margin:0 auto; padding:1.5rem 1.4rem 4rem; }
+  .panel-vista[hidden] { display:none; }
+
+  .rubrica { margin:0 0 .2rem; font-size:1.34rem; letter-spacing:-.012em; }
+  .coletilla { margin:0 0 1.25rem; color:var(--letra-tenue); font-size:.89rem; max-width:66ch; }
+
+  .muestrario { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:.8rem; }
+  .muestra { background:var(--fondo); border:1px solid var(--trazo); border-radius:var(--curvita); overflow:hidden; box-shadow:var(--sombrilla); }
+  .muestra__mancha { height:62px; }
+  .muestra__pie { padding:.55rem .7rem; }
+  .muestra__mote { font-size:.82rem; font-weight:650; }
+  .muestra__codigo { font-family:var(--teclas); font-size:.74rem; color:var(--letra-tenue); }
+  .muestra__uso { font-size:.74rem; color:var(--letra-tenue); margin-top:.2rem; }
+
+  .lamina2 { background:var(--fondo); border:1px solid var(--trazo); border-radius:var(--curvita); box-shadow:var(--sombrilla); margin-bottom:1.1rem; }
+  .lamina2__ceja { display:flex; align-items:center; gap:.7rem; padding:.75rem 1rem; border-bottom:1px solid var(--trazo); }
+  .lamina2__nombre { margin:0; font-size:.96rem; }
+  .lamina2__hueco { flex:1; }
+  .lamina2__fondo { padding:1rem; }
+
+  .escalera { display:grid; gap:.5rem; }
+  .peldano { display:grid; grid-template-columns:8rem 1fr; gap:.8rem; align-items:baseline; padding:.35rem 0; border-bottom:1px solid var(--trazo); }
+  .peldano:last-child { border-bottom:0; }
+  .peldano__etq { font-family:var(--teclas); font-size:.75rem; color:var(--letra-tenue); }
+
+  .boton2 {
+    padding:.45rem .85rem; border:1px solid var(--trazo); border-radius:8px;
+    background:var(--fondo); color:var(--letra); font:inherit; font-size:.85rem; cursor:pointer;
+  }
+  .boton2:hover { background:var(--fondo-hueco); }
+  .boton2--primario { background:var(--primario); border-color:var(--primario); color:#fff; }
+  .boton2--riesgo { background:var(--ruina); border-color:var(--ruina); color:#fff; }
+  .boton2:focus-visible { outline:2px solid var(--primario); outline-offset:2px; }
+  .boton2:disabled { opacity:.45; cursor:not-allowed; }
+
+  .placa { display:inline-block; padding:.12rem .48rem; border-radius:5px; font-size:.72rem; font-weight:600; }
+  .placa--logro { background:var(--logro-vela); color:var(--logro); }
+  .placa--alarma { background:var(--alarma-vela); color:var(--alarma); }
+  .placa--ruina { background:var(--ruina-vela); color:var(--ruina); }
+  .placa--info { background:var(--primario-vela); color:var(--primario); }
+
+  .tablon { width:100%; border-collapse:collapse; font-size:.85rem; }
+  .tablon th, .tablon td { padding:.48rem .6rem; border-bottom:1px solid var(--trazo); text-align:left; white-space:nowrap; }
+  .tablon th { font-size:.71rem; text-transform:uppercase; letter-spacing:.06em; color:var(--letra-tenue); background:var(--fondo-hueco); }
+  .tablon td.der { text-align:right; font-variant-numeric:tabular-nums; }
+
+  .faja { display:flex; gap:.6rem; padding:.72rem .95rem; border-radius:8px; font-size:.86rem; margin-bottom:1.1rem; border:1px solid; }
+  .faja--logro { background:var(--logro-vela); border-color:var(--logro); color:var(--logro); }
+  .faja--alarma { background:var(--alarma-vela); border-color:var(--alarma); color:var(--alarma); }
+  .faja--ruina { background:var(--ruina-vela); border-color:var(--ruina); color:var(--ruina); }
+
+  .contraste { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:.7rem; }
+  .pareja { border:1px solid var(--trazo); border-radius:8px; padding:.7rem .8rem; }
+  .pareja__ejemplo { font-size:.95rem; font-weight:600; margin-bottom:.3rem; }
+  .pareja__ratio { font-family:var(--teclas); font-size:.76rem; color:var(--letra-tenue); }
+
+  .yermo2 { text-align:center; padding:2.9rem 1rem; color:var(--letra-tenue); }
+  .yermo2__marca { font-size:2.1rem; }
+  .yermo2__frase { color:var(--letra); font-weight:600; margin:.55rem 0 .3rem; }
+
+  .listilla { height:12px; border-radius:6px; margin-bottom:.6rem; background:var(--fondo-hueco); position:relative; overflow:hidden; }
+  .listilla::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,var(--trazo),transparent); animation:barrido 1.4s infinite; }
+  @keyframes barrido { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+  @media (prefers-reduced-motion:reduce){ .listilla::after{animation:none} }
+
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:1.3rem; z-index:50;
+    background:var(--letra); color:var(--fondo); padding:.65rem 1.05rem; border-radius:999px;
+    font-size:.85rem; box-shadow:var(--sombrilla); }
+  .toast[hidden] { display:none; }
+
+  @media (max-width:800px) {
+    .nave { padding:1.1rem 1rem 3rem; }
+    .capitel { padding:.7rem 1rem; }
+    .barandilla { padding:.5rem 1rem; }
+    .peldano { grid-template-columns:1fr; gap:.1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="capitel">
+  <span class="capitel__insignia">Integration Hub</span>
+  <span class="capitel__ambito">Tema del sistema</span>
+  <span class="capitel__hueco"></span>
+  <div class="conmuta" role="group" aria-label="Modo de color">
+    <button data-modo-btn="dia" aria-pressed="true">Claro</button>
+    <button data-modo-btn="noche" aria-pressed="false">Oscuro</button>
+  </div>
+  <a class="capitel__puerta" data-hub-link href="../../../prototype/index.html">← Volver al hub</a>
+</header>
+
+<nav class="barandilla" aria-label="Secciones del tema">
+  <button data-panel="colores" aria-current="page">Colores</button>
+  <button data-panel="tipos">Tipografia y espacio</button>
+  <button data-panel="piezas">Piezas en vivo</button>
+  <button data-panel="contraste">Contraste</button>
+  <button data-panel="marca">Marca del cliente</button>
+  <button data-panel="precedencia">De donde sale cada valor</button>
+  <button data-panel="sinmarca">Sin marca</button>
+</nav>
+
+<div id="campana" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="nave">
+
+  <!-- COLORES -->
+  <section class="panel-vista" id="panel-colores">
+    <h1 class="rubrica">Colores</h1>
+    <p class="coletilla">Cada color tiene un trabajo. Cambiar uno cambia el significado en toda la consola, asi que aqui se ve para que sirve cada cual antes de tocarlo.</p>
+
+    <div class="faja faja--alarma">
+      <span><strong>El ambar y el rojo no son intercambiables.</strong>
+      El rojo dice "salio mal"; el ambar dice "no sabemos". En la mesa de pagos esa diferencia
+      decide si un envio se reintenta o se concilia primero.</span>
+    </div>
+
+    <div class="muestrario">
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--primario)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Accion</div><div class="muestra__codigo">--primario</div>
+          <div class="muestra__uso">Lo que se pulsa. Solo uno por pantalla.</div></div></div>
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--logro)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Logrado</div><div class="muestra__codigo">--logro</div>
+          <div class="muestra__uso">Termino bien. Nunca para "en curso".</div></div></div>
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--alarma)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Sin certeza</div><div class="muestra__codigo">--alarma</div>
+          <div class="muestra__uso">No sabemos como acabo. Bloquea reintentos.</div></div></div>
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--ruina)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Fallido</div><div class="muestra__codigo">--ruina</div>
+          <div class="muestra__uso">Salio mal y se sabe. Se puede reintentar.</div></div></div>
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--letra)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Texto</div><div class="muestra__codigo">--letra</div>
+          <div class="muestra__uso">Cuerpo y titulares.</div></div></div>
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--letra-tenue)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Texto secundario</div><div class="muestra__codigo">--letra-tenue</div>
+          <div class="muestra__uso">Contexto, nunca informacion critica.</div></div></div>
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--trazo)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Bordes</div><div class="muestra__codigo">--trazo</div>
+          <div class="muestra__uso">Separa sin gritar.</div></div></div>
+      <div class="muestra"><div class="muestra__mancha" style="background:var(--fondo-hueco);border-bottom:1px solid var(--trazo)"></div>
+        <div class="muestra__pie"><div class="muestra__mote">Fondo hundido</div><div class="muestra__codigo">--fondo-hueco</div>
+          <div class="muestra__uso">Cabeceras de tabla y zonas de reposo.</div></div></div>
+    </div>
+  </section>
+
+  <!-- TIPOS -->
+  <section class="panel-vista" id="panel-tipos" hidden>
+    <h1 class="rubrica">Tipografia y espacio</h1>
+    <p class="coletilla">La escala completa, en la pantalla y no en un documento. Un tamano se juzga al lado de los otros.</p>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Escala de texto</h2></div>
+      <div class="lamina2__fondo">
+        <div class="escalera">
+          <div class="peldano"><span class="peldano__etq">1.34rem · 650</span><span style="font-size:1.34rem;font-weight:650;">Titulo de pantalla</span></div>
+          <div class="peldano"><span class="peldano__etq">1.0rem · 650</span><span style="font-size:1rem;font-weight:650;">Titulo de bloque</span></div>
+          <div class="peldano"><span class="peldano__etq">0.95rem · 400</span><span style="font-size:.95rem;">Texto de cuerpo, el que mas se lee</span></div>
+          <div class="peldano"><span class="peldano__etq">0.85rem · 400</span><span style="font-size:.85rem;">Contenido de tabla y formularios</span></div>
+          <div class="peldano"><span class="peldano__etq">0.79rem · 400</span><span style="font-size:.79rem;color:var(--letra-tenue);">Pistas y aclaraciones bajo un campo</span></div>
+          <div class="peldano"><span class="peldano__etq">0.71rem · 600</span><span style="font-size:.71rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--letra-tenue);">Cabecera de columna</span></div>
+          <div class="peldano"><span class="peldano__etq">monoespaciada</span><span style="font-family:var(--teclas);font-size:.82rem;">QB0417 · 12 480,00 · sftp://origen:22</span></div>
+        </div>
+        <div class="faja faja--logro" style="margin:1.1rem 0 0;">
+          <span><strong>Las cifras y las referencias van en monoespaciada y tabulares.</strong>
+          Comparar columnas de importes desalineadas es como se cuela un cero de mas.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Espaciado</h2></div>
+      <div class="lamina2__fondo">
+        <table class="tablon">
+          <thead><tr><th>Medida</th><th class="der">Valor</th><th>Donde se usa</th></tr></thead>
+          <tbody>
+            <tr><td>Pegado</td><td class="der">0,25 rem</td><td>entre una etiqueta y su campo</td></tr>
+            <tr><td>Cercano</td><td class="der">0,5 rem</td><td>entre botones de un grupo</td></tr>
+            <tr><td>Normal</td><td class="der">0,9 rem</td><td>relleno de tarjetas y bloques</td></tr>
+            <tr><td>Separado</td><td class="der">1,2 rem</td><td>entre bloques de una pantalla</td></tr>
+            <tr><td>Aparte</td><td class="der">2 rem</td><td>antes de una zona distinta</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- PIEZAS -->
+  <section class="panel-vista" id="panel-piezas" hidden>
+    <h1 class="rubrica">Piezas en vivo</h1>
+    <p class="coletilla">Los mismos componentes de la consola, con el tema aplicado. Cambia a oscuro arriba y mira si algo se pierde.</p>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Botones</h2></div>
+      <div class="lamina2__fondo">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+          <button class="boton2 boton2--primario" data-gesto="probar">Accion principal</button>
+          <button class="boton2" data-gesto="probar">Accion secundaria</button>
+          <button class="boton2 boton2--riesgo" data-gesto="probar">Accion peligrosa</button>
+          <button class="boton2" disabled>Apagado</button>
+        </div>
+        <p style="font-size:.79rem;color:var(--letra-tenue);margin:.7rem 0 0;max-width:60ch;">
+          El apagado tiene que verse apagado en los dos modos. En oscuro, una opacidad que funciona
+          en claro puede dejarlo casi invisible o casi normal.
+        </p>
+      </div>
+    </div>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Estados</h2></div>
+      <div class="lamina2__fondo">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem;">
+          <span class="placa placa--logro">Enviado</span>
+          <span class="placa placa--alarma">Sin confirmar</span>
+          <span class="placa placa--ruina">Rechazado</span>
+          <span class="placa placa--info">Solicitado</span>
+        </div>
+        <table class="tablon">
+          <thead><tr><th>Referencia</th><th class="der">Importe</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td style="font-family:var(--teclas)">QB0417</td><td class="der">12 480,00</td><td><span class="placa placa--alarma">Sin confirmar</span></td></tr>
+            <tr><td style="font-family:var(--teclas)">QB0420</td><td class="der">22 530,00</td><td><span class="placa placa--ruina">Rechazado</span></td></tr>
+            <tr><td style="font-family:var(--teclas)">QB0421</td><td class="der">3 875,25</td><td><span class="placa placa--logro">Enviado</span></td></tr>
+            <tr><td style="font-family:var(--teclas)">QB0422</td><td class="der">18 060,00</td><td><span class="placa placa--logro">Enviado</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Mientras carga</h2></div>
+      <div class="lamina2__fondo">
+        <div class="listilla" style="width:88%"></div>
+        <div class="listilla" style="width:70%"></div>
+        <div class="listilla" style="width:94%"></div>
+        <p style="font-size:.79rem;color:var(--letra-tenue);margin:.6rem 0 0;">
+          El brillo de carga se apaga con "reducir movimiento": una animacion continua marea a
+          quien la tiene activada, y aqui no aporta informacion.
+        </p>
+
+        <h3 style="margin:1.2rem 0 .5rem;font-size:.9rem;">Lo que hay que mirar al cambiar de modo</h3>
+        <table class="tablon">
+          <thead><tr><th>Pieza</th><th>Riesgo en oscuro</th><th>Como se comprueba</th></tr></thead>
+          <tbody>
+            <tr><td>Boton apagado</td><td>se vuelve casi invisible o casi normal</td><td>compararlo con el activo</td></tr>
+            <tr><td>Bordes de tabla</td><td>desaparecen y las filas se funden</td><td>mirar una tabla larga</td></tr>
+            <tr><td>Sombras</td><td>no se ven sobre fondo oscuro</td><td>el relieve pasa a ser el borde</td></tr>
+            <tr><td>Velas de estado</td><td>pierden diferencia entre ambar y rojo</td><td>ponerlos juntos, como aqui</td></tr>
+            <tr><td>Texto secundario</td><td>baja de contraste sobre fondo hundido</td><td>ver la seccion de contraste</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTRASTE -->
+  <section class="panel-vista" id="panel-contraste" hidden>
+    <h1 class="rubrica">Contraste</h1>
+    <p class="coletilla">Cada pareja de colores, medida. Un tema bonito que no se lee es un tema roto.</p>
+
+    <div class="faja faja--ruina">
+      <span><strong>Una pareja no llega al minimo.</strong> El texto secundario sobre fondo hundido
+      se queda en 4,1:1 en modo oscuro. Se lee, pero no en una pantalla con reflejos a las tres de
+      la manana, que es cuando se usa.</span>
+    </div>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Parejas medidas</h2></div>
+      <div class="lamina2__fondo">
+        <div class="contraste">
+          <div class="pareja" style="background:var(--fondo)"><div class="pareja__ejemplo" style="color:var(--letra)">Texto sobre fondo</div><div class="pareja__ratio">15,8:1 · sobrado</div></div>
+          <div class="pareja" style="background:var(--fondo)"><div class="pareja__ejemplo" style="color:var(--letra-tenue)">Secundario sobre fondo</div><div class="pareja__ratio">6,2:1 · correcto</div></div>
+          <div class="pareja" style="background:var(--primario)"><div class="pareja__ejemplo" style="color:#fff">Texto sobre accion</div><div class="pareja__ratio">5,9:1 · correcto</div></div>
+          <div class="pareja" style="background:var(--logro-vela)"><div class="pareja__ejemplo" style="color:var(--logro)">Logrado sobre su vela</div><div class="pareja__ratio">7,1:1 · correcto</div></div>
+          <div class="pareja" style="background:var(--alarma-vela)"><div class="pareja__ejemplo" style="color:var(--alarma)">Sin certeza sobre su vela</div><div class="pareja__ratio">6,4:1 · correcto</div></div>
+          <div class="pareja" style="background:var(--ruina-vela)"><div class="pareja__ejemplo" style="color:var(--ruina)">Fallido sobre su vela</div><div class="pareja__ratio">6,8:1 · correcto</div></div>
+          <div class="pareja" style="background:var(--fondo-hueco)"><div class="pareja__ejemplo" style="color:var(--letra-tenue)">Secundario sobre hundido</div><div class="pareja__ratio">4,1:1 · justo en oscuro</div></div>
+          <div class="pareja" style="background:var(--fondo)"><div class="pareja__ejemplo" style="color:var(--trazo)">Borde como texto</div><div class="pareja__ratio">1,9:1 · nunca para texto</div></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap;">
+          <button class="boton2 boton2--primario" data-gesto="recalcular">Recalcular con el tema actual</button>
+          <button class="boton2" data-gesto="exportar-tema">Exportar el tema</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MARCA -->
+  <section class="panel-vista" id="panel-marca" hidden>
+    <h1 class="rubrica">Marca del cliente</h1>
+    <p class="coletilla">Cada banco quiere su color. Lo que no se negocia es que los estados sigan significando lo mismo.</p>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Que se puede cambiar</h2></div>
+      <div class="lamina2__fondo" style="overflow-x:auto;">
+        <table class="tablon">
+          <thead><tr><th>Elemento</th><th>Se puede</th><th>Por que</th></tr></thead>
+          <tbody>
+            <tr><td>Color de accion</td><td><span class="placa placa--logro">Si</span></td><td>es identidad, no significado</td></tr>
+            <tr><td>Logotipo y nombre</td><td><span class="placa placa--logro">Si</span></td><td>identidad pura</td></tr>
+            <tr><td>Tipografia</td><td><span class="placa placa--logro">Si</span></td><td>siempre que mantenga cifras tabulares</td></tr>
+            <tr><td>Redondeo y sombras</td><td><span class="placa placa--logro">Si</span></td><td>estilo, no informacion</td></tr>
+            <tr><td>Verde de "logrado"</td><td><span class="placa placa--ruina">No</span></td><td>el verde significa terminado en todo el sector</td></tr>
+            <tr><td>Ambar de "sin certeza"</td><td><span class="placa placa--ruina">No</span></td><td>separa "no sabemos" de "salio mal"</td></tr>
+            <tr><td>Rojo de "fallido"</td><td><span class="placa placa--ruina">No</span></td><td>igual que el ambar, es semantica</td></tr>
+          </tbody>
+        </table>
+        <div class="faja faja--alarma" style="margin:.9rem 0 0;">
+          <span>Un cliente pidio el rojo corporativo como color de accion. Se rechazo: un boton
+          rojo junto a una fila roja de "fallido" convierte cada pantalla en una adivinanza.</span>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="boton2 boton2--primario" data-gesto="probar-marca">Probar con otra marca</button>
+          <button class="boton2" data-panel-ir="contraste">Comprobar contraste</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRECEDENCIA -->
+  <section class="panel-vista" id="panel-precedencia" hidden>
+    <h1 class="rubrica">De donde sale cada valor</h1>
+    <p class="coletilla">Hay tres temas a la vez: el de fabrica, el del banco y lo que prefiera cada persona. Cuando algo se ve raro, la pregunta es cual gano.</p>
+
+    <div class="faja faja--logro">
+      <span><strong>Gana el mas concreto.</strong> La preferencia de la persona pesa mas que la del
+      banco, y la del banco mas que la de fabrica. Salvo en los tres colores de estado, que no se
+      dejan tocar por nadie.</span>
+    </div>
+
+    <div class="lamina2">
+      <div class="lamina2__ceja"><h2 class="lamina2__nombre">Quien decide cada cosa, ahora mismo</h2></div>
+      <div class="lamina2__fondo" style="overflow-x:auto;">
+        <table class="tablon">
+          <thead><tr><th>Valor</th><th>Fabrica</th><th>Banco</th><th>Persona</th><th>Gana</th></tr></thead>
+          <tbody>
+            <tr><td>Color de accion</td><td>azul</td><td>verde corporativo</td><td>—</td><td><span class="placa placa--info">Banco</span></td></tr>
+            <tr><td>Modo claro u oscuro</td><td>claro</td><td>claro</td><td>oscuro</td><td><span class="placa placa--info">Persona</span></td></tr>
+            <tr><td>Tipografia</td><td>del sistema</td><td>—</td><td>—</td><td><span class="placa placa--logro">Fabrica</span></td></tr>
+            <tr><td>Redondeo</td><td>9 px</td><td>4 px</td><td>—</td><td><span class="placa placa--info">Banco</span></td></tr>
+            <tr><td>Verde de "logrado"</td><td>verde</td><td>intento: azul</td><td>—</td><td><span class="placa placa--ruina">Fabrica, forzado</span></td></tr>
+            <tr><td>Ambar de "sin certeza"</td><td>ambar</td><td>—</td><td>—</td><td><span class="placa placa--ruina">Fabrica, forzado</span></td></tr>
+            <tr><td>Densidad de tabla</td><td>normal</td><td>—</td><td>compacta</td><td><span class="placa placa--info">Persona</span></td></tr>
+            <tr><td>Reducir movimiento</td><td>no</td><td>—</td><td>si</td><td><span class="placa placa--info">Persona</span></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.79rem;color:var(--letra-tenue);margin:.8rem 0 0;max-width:64ch;">
+          La quinta fila es la interesante: el banco pidio azul para "logrado" y el sistema lo
+          ignora. Se deja constancia del intento en vez de borrarlo, para que quien lo pidio vea
+          que se leyo su peticion y por que no se aplico.
+        </p>
+        <p style="font-size:.79rem;color:var(--letra-tenue);margin:.5rem 0 0;max-width:64ch;">
+          "Reducir movimiento" no lo elige nadie en esta pantalla: viene del sistema operativo de
+          cada persona. Aparece aqui porque cambia lo que se ve, y no saberlo lleva a reportar
+          como fallo una animacion que falta a proposito.
+        </p>
+        <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap;">
+          <button class="boton2 boton2--primario" data-gesto="ver-efectivo">Ver el tema efectivo</button>
+          <button class="boton2" data-panel-ir="marca">Volver a la marca</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIN MARCA -->
+  <section class="panel-vista" id="panel-sinmarca" hidden>
+    <h1 class="rubrica">Sin marca</h1>
+    <p class="coletilla">Que se ve cuando no hay ningun tema de cliente cargado.</p>
+    <div class="lamina2">
+      <div class="yermo2">
+        <div class="yermo2__marca">🎨</div>
+        <div class="yermo2__frase">Sin coincidencias</div>
+        <p style="margin:.2rem 0 .4rem;">No hay ningun tema de cliente guardado con ese nombre.</p>
+        <p style="margin:0 0 1.2rem;font-size:.83rem;">La consola funciona con el tema de fabrica: no es un error, es lo que se ve al empezar.</p>
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;">
+          <button class="boton2 boton2--primario" data-gesto="crear-tema">Crear un tema</button>
+          <button class="boton2" data-panel-ir="colores">Ver el tema de fabrica</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var paneles = document.querySelectorAll(".panel-vista");
+    var solapas = document.querySelectorAll(".barandilla button");
+
+    function mostrar(nombre) {
+      paneles.forEach(function (p) { p.hidden = p.id !== "panel-" + nombre; });
+      solapas.forEach(function (b) {
+        if (b.dataset.panel === nombre) { b.setAttribute("aria-current", "page"); }
+        else { b.removeAttribute("aria-current"); }
+      });
+      window.scrollTo(0, 0);
+    }
+    solapas.forEach(function (b) { b.addEventListener("click", function () { mostrar(b.dataset.panel); }); });
+
+    // El conmutador es el gesto central: cambia las variables en la raiz y TODA la pantalla
+    // responde. Es la unica forma honesta de comprobar un tema — mirandolo, no leyendo hexadecimales.
+    var botonesModo = document.querySelectorAll("[data-modo-btn]");
+    botonesModo.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var modo = b.dataset.modoBtn;
+        if (modo === "noche") { document.documentElement.setAttribute("data-modo", "noche"); }
+        else { document.documentElement.removeAttribute("data-modo"); }
+        botonesModo.forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+        tanir("Modo " + (modo === "noche" ? "oscuro" : "claro") + " aplicado a toda la consola.");
+      });
+    });
+
+    var reloj2 = null;
+    function tanir(texto) {
+      var c = document.getElementById("campana");
+      c.textContent = texto; c.hidden = false;
+      clearTimeout(reloj2);
+      reloj2 = setTimeout(function () { c.hidden = true; }, 3000);
+    }
+
+    document.addEventListener("click", function (e) {
+      var ir = e.target.getAttribute && e.target.getAttribute("data-panel-ir");
+      if (ir) { mostrar(ir); return; }
+      var gesto = e.target.getAttribute && e.target.getAttribute("data-gesto");
+      if (!gesto) { return; }
+      if (gesto === "probar") { tanir("Es una muestra: sirve para ver el tema, no ejecuta nada."); return; }
+      if (gesto === "recalcular") { tanir("Todo listo: contraste recalculado con el tema actual."); return; }
+      if (gesto === "exportar-tema") { tanir("Error: no se pudo exportar, el nombre del tema esta vacio."); return; }
+      if (gesto === "probar-marca") { tanir("Cargando el tema de otro cliente…"); return; }
+      if (gesto === "ver-efectivo") { tanir("Tema efectivo: verde del banco, modo oscuro de la persona, estados de fabrica."); return; }
+      if (gesto === "crear-tema") { tanir("Empieza por el color de accion y el logotipo."); return; }
+    });
+  })();
+</script>
+
+</body>
+</html>

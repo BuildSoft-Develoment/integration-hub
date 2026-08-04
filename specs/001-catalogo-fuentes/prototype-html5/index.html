@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Catalogo de fuentes de datos — Integration Hub</title>
+<style>
+  :root {
+    --tinta: #14212b;
+    --tinta-suave: #4a5b68;
+    --lienzo: #eef2f4;
+    --superficie: #ffffff;
+    --linea: #d5dee3;
+    --verde-mar: #0f766e;
+    --verde-mar-claro: #e6f4f2;
+    --arena: #92400e;
+    --arena-claro: #fdf4e7;
+    --granate: #9f1239;
+    --granate-claro: #fdeef2;
+    --indigo: #3730a3;
+    --indigo-claro: #eef0fd;
+    --curva: 14px;
+    --elevacion: 0 2px 4px rgba(20,33,43,.06), 0 12px 28px rgba(20,33,43,.07);
+    --teclado: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--lienzo); color:var(--tinta); font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+
+  .cabecera { background:var(--superficie); border-bottom:1px solid var(--linea); }
+  .cabecera__fila { display:flex; align-items:center; gap:1rem; padding:.9rem 1.5rem; }
+  .cabecera__marca { font-weight:700; }
+  .cabecera__sep { flex:1; }
+  .cabecera__enlace { color:var(--tinta-suave); font-size:.83rem; text-decoration:none; }
+  .cabecera__enlace:hover { color:var(--verde-mar); }
+
+  .pestanas { display:flex; gap:.2rem; padding:0 1.5rem; overflow-x:auto; }
+  .pestana {
+    padding:.6rem .9rem; border:0; background:transparent; cursor:pointer;
+    font:inherit; font-size:.88rem; color:var(--tinta-suave);
+    border-bottom:3px solid transparent; white-space:nowrap;
+  }
+  .pestana:hover { color:var(--tinta); }
+  .pestana[aria-current="page"] { color:var(--verde-mar); border-bottom-color:var(--verde-mar); font-weight:600; }
+
+  .contenido { max-width:1180px; margin:0 auto; padding:1.6rem 1.5rem 4rem; }
+  .vista[hidden] { display:none; }
+
+  .encabezado-vista { display:flex; align-items:flex-end; gap:1rem; margin-bottom:1.3rem; flex-wrap:wrap; }
+  h1 { margin:0; font-size:1.4rem; letter-spacing:-.01em; }
+  .lema { margin:.25rem 0 0; color:var(--tinta-suave); font-size:.9rem; max-width:64ch; }
+
+  .rejilla { display:grid; grid-template-columns:repeat(auto-fill,minmax(255px,1fr)); gap:1rem; }
+  .conector {
+    background:var(--superficie); border:1px solid var(--linea); border-radius:var(--curva);
+    padding:1rem; box-shadow:var(--elevacion); display:flex; flex-direction:column; gap:.55rem;
+  }
+  .conector__alto { display:flex; align-items:center; gap:.6rem; }
+  .conector__icono {
+    width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
+    font-size:1.05rem; font-weight:700; color:#fff; flex:none;
+  }
+  .i-sftp { background:var(--verde-mar); }
+  .i-ftp  { background:var(--indigo); }
+  .i-s3   { background:var(--arena); }
+  .i-fs   { background:#475569; }
+  .i-rest { background:var(--granate); }
+  .conector__nombre { font-weight:650; font-size:.96rem; }
+  .conector__tipo { font-size:.76rem; color:var(--tinta-suave); text-transform:uppercase; letter-spacing:.05em; }
+  .conector__ruta { font-family:var(--teclado); font-size:.78rem; color:var(--tinta-suave); overflow-wrap:anywhere; }
+  .conector__pie { display:flex; align-items:center; gap:.5rem; margin-top:auto; padding-top:.6rem; border-top:1px solid var(--linea); }
+
+  .pulso { display:inline-flex; align-items:center; gap:.35rem; font-size:.78rem; font-weight:600; }
+  .pulso::before { content:""; width:8px; height:8px; border-radius:50%; }
+  .pulso--vivo { color:var(--verde-mar); } .pulso--vivo::before { background:var(--verde-mar); }
+  .pulso--lento { color:var(--arena); } .pulso--lento::before { background:var(--arena); }
+  .pulso--caido { color:var(--granate); } .pulso--caido::before { background:var(--granate); }
+
+  .boton {
+    padding:.4rem .75rem; border:1px solid var(--linea); border-radius:9px;
+    background:var(--superficie); color:var(--tinta); font:inherit; font-size:.82rem; cursor:pointer;
+  }
+  .boton:hover { background:#f3f7f8; }
+  .boton--fuerte { background:var(--verde-mar); border-color:var(--verde-mar); color:#fff; }
+  .boton--fuerte:hover { background:#0b5c56; }
+  .boton:focus-visible { outline:2px solid var(--verde-mar); outline-offset:2px; }
+  .boton:disabled { opacity:.5; cursor:not-allowed; }
+
+  .pasos { display:flex; gap:.4rem; margin-bottom:1.4rem; flex-wrap:wrap; }
+  .paso {
+    flex:1 1 150px; padding:.6rem .8rem; border-radius:10px;
+    background:var(--superficie); border:1px solid var(--linea); font-size:.83rem;
+  }
+  .paso--activo { border-color:var(--verde-mar); background:var(--verde-mar-claro); font-weight:600; color:var(--verde-mar); }
+  .paso--hecho { color:var(--tinta-suave); }
+  .paso__num { font-weight:700; margin-right:.35rem; }
+
+  .ficha { background:var(--superficie); border:1px solid var(--linea); border-radius:var(--curva); box-shadow:var(--elevacion); padding:1.2rem; }
+  .campo { display:block; margin-bottom:.9rem; }
+  .campo__etq { display:block; font-size:.8rem; font-weight:600; margin-bottom:.25rem; }
+  .campo__pista { font-size:.78rem; color:var(--tinta-suave); margin-top:.2rem; }
+  .campo input, .campo select {
+    width:100%; padding:.5rem .65rem; border:1px solid var(--linea);
+    border-radius:9px; font:inherit; font-size:.88rem;
+  }
+  .campo input:focus, .campo select:focus { outline:2px solid var(--verde-mar); outline-offset:1px; border-color:var(--verde-mar); }
+  .dos-columnas { display:grid; grid-template-columns:1fr 1fr; gap:0 1rem; }
+
+  .consola {
+    background:var(--tinta); color:#cfe3e0; border-radius:12px; padding:.9rem 1rem;
+    font-family:var(--teclado); font-size:.8rem; line-height:1.75; overflow-x:auto;
+  }
+  .consola__ok { color:#5eead4; } .consola__mal { color:#fda4af; } .consola__hora { color:#7d93a1; }
+
+  .cinta { display:flex; gap:.6rem; padding:.75rem .95rem; border-radius:11px; font-size:.86rem; margin-bottom:1.1rem; }
+  .cinta--ok { background:var(--verde-mar-claro); color:var(--verde-mar); border:1px solid #bfe3de; }
+  .cinta--ojo { background:var(--arena-claro); color:var(--arena); border:1px solid #f0dcbb; }
+  .cinta--mal { background:var(--granate-claro); color:var(--granate); border:1px solid #f5cbd6; }
+
+  .nada { text-align:center; padding:3rem 1rem; color:var(--tinta-suave); background:var(--superficie); border:1px dashed var(--linea); border-radius:var(--curva); }
+  .nada__signo { font-size:2.2rem; }
+  .nada__frase { color:var(--tinta); font-weight:600; margin:.6rem 0 .3rem; }
+
+  .fantasma { background:var(--superficie); border:1px solid var(--linea); border-radius:var(--curva); padding:1rem; }
+  .fantasma__barra { height:13px; border-radius:7px; margin-bottom:.65rem; background:linear-gradient(90deg,#e4ebee 25%,#f1f5f6 50%,#e4ebee 75%); background-size:200% 100%; animation:vaiven 1.4s infinite; }
+  @keyframes vaiven { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .fantasma__barra{animation:none} }
+
+  .historial { list-style:none; margin:0; padding:0; }
+  .historial li { display:flex; gap:.8rem; padding:.55rem 0; border-bottom:1px solid var(--linea); font-size:.86rem; }
+  .historial time { color:var(--tinta-suave); font-variant-numeric:tabular-nums; flex:none; width:6.5rem; }
+
+  .toast {
+    position:fixed; left:50%; transform:translateX(-50%); bottom:1.4rem; z-index:30;
+    background:var(--tinta); color:#e6f0ef; padding:.7rem 1.1rem; border-radius:999px;
+    font-size:.85rem; box-shadow:0 12px 32px rgba(20,33,43,.3);
+  }
+  .toast[hidden] { display:none; }
+
+  @media (max-width:760px) {
+    .dos-columnas { grid-template-columns:1fr; }
+    .contenido { padding:1.1rem 1rem 3rem; }
+    .cabecera__fila { padding:.7rem 1rem; }
+    .pestanas { padding:0 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="cabecera">
+  <div class="cabecera__fila">
+    <span class="cabecera__marca">Integration Hub</span>
+    <span style="color:var(--tinta-suave);font-size:.86rem;">Fuentes de datos</span>
+    <span class="cabecera__sep"></span>
+    <a class="cabecera__enlace" data-hub-link href="../../../prototype/index.html">← Volver al hub</a>
+    <button class="boton boton--fuerte" data-ir="alta">Nueva fuente</button>
+  </div>
+  <nav class="pestanas" aria-label="Secciones del catalogo">
+    <button class="pestana" data-vista="catalogo" aria-current="page">Catalogo</button>
+    <button class="pestana" data-vista="alta">Alta guiada</button>
+    <button class="pestana" data-vista="prueba">Prueba de conexion</button>
+    <button class="pestana" data-vista="detalle">Detalle</button>
+    <button class="pestana" data-vista="seleccion">Que archivos leer</button>
+    <button class="pestana" data-vista="buscar">Busqueda</button>
+  </nav>
+</header>
+
+<div id="flotante" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="contenido">
+
+  <!-- CATALOGO -->
+  <section class="vista" id="vista-catalogo">
+    <div class="encabezado-vista">
+      <div>
+        <h1>Catalogo de fuentes</h1>
+        <p class="lema">De donde salen los datos. Cada tarjeta dice si respondio la ultima vez que se pregunto.</p>
+      </div>
+      <span class="cabecera__sep"></span>
+      <button class="boton" data-accion="revisar-todo">Revisar todas</button>
+    </div>
+
+    <div class="cinta cinta--ojo">
+      <span><strong>Una fuente no respondio</strong> en la ultima revision: el SFTP del banco corresponsal. Los procesos que la usan quedaran esperando.</span>
+    </div>
+
+    <div class="rejilla">
+      <article class="conector">
+        <div class="conector__alto"><div class="conector__icono i-sftp">SF</div>
+          <div><div class="conector__nombre">Nomina mensual</div><div class="conector__tipo">SFTP</div></div></div>
+        <div class="conector__ruta">sftp://rrhh.interno:22/salidas/nomina/*.csv</div>
+        <div class="conector__pie"><span class="pulso pulso--vivo">Responde</span><span class="cabecera__sep"></span>
+          <button class="boton" data-ir="detalle">Abrir</button></div>
+      </article>
+
+      <article class="conector">
+        <div class="conector__alto"><div class="conector__icono i-sftp">SF</div>
+          <div><div class="conector__nombre">Banco corresponsal</div><div class="conector__tipo">SFTP</div></div></div>
+        <div class="conector__ruta">sftp://corresponsal.ext:22/inbox/confirmaciones/</div>
+        <div class="conector__pie"><span class="pulso pulso--caido">No responde</span><span class="cabecera__sep"></span>
+          <button class="boton" data-ir="prueba">Revisar</button></div>
+      </article>
+
+      <article class="conector">
+        <div class="conector__alto"><div class="conector__icono i-ftp">FT</div>
+          <div><div class="conector__nombre">Proveedor logistico</div><div class="conector__tipo">FTP</div></div></div>
+        <div class="conector__ruta">ftp://transportes.pe/salida/guias/</div>
+        <div class="conector__pie"><span class="pulso pulso--lento">Lenta</span><span class="cabecera__sep"></span>
+          <button class="boton" data-ir="detalle">Abrir</button></div>
+      </article>
+
+      <article class="conector">
+        <div class="conector__alto"><div class="conector__icono i-s3">S3</div>
+          <div><div class="conector__nombre">Bandeja de entrada</div><div class="conector__tipo">Almacen de objetos</div></div></div>
+        <div class="conector__ruta">s3://ih-source-inbox/lotes/</div>
+        <div class="conector__pie"><span class="pulso pulso--vivo">Responde</span><span class="cabecera__sep"></span>
+          <button class="boton" data-ir="detalle">Abrir</button></div>
+      </article>
+
+      <article class="conector">
+        <div class="conector__alto"><div class="conector__icono i-fs">FS</div>
+          <div><div class="conector__nombre">Carpeta compartida</div><div class="conector__tipo">Sistema de archivos</div></div></div>
+        <div class="conector__ruta">/datos/entrada/contabilidad/</div>
+        <div class="conector__pie"><span class="pulso pulso--vivo">Responde</span><span class="cabecera__sep"></span>
+          <button class="boton" data-ir="detalle">Abrir</button></div>
+      </article>
+
+      <article class="conector">
+        <div class="conector__alto"><div class="conector__icono i-rest">RE</div>
+          <div><div class="conector__nombre">Padron de clientes</div><div class="conector__tipo">Servicio web</div></div></div>
+        <div class="conector__ruta">https://padron.interno/api/v2/clientes</div>
+        <div class="conector__pie"><span class="pulso pulso--vivo">Responde</span><span class="cabecera__sep"></span>
+          <button class="boton" data-ir="detalle">Abrir</button></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ALTA -->
+  <section class="vista" id="vista-alta" hidden>
+    <div class="encabezado-vista">
+      <div><h1>Alta de una fuente</h1>
+      <p class="lema">Tres pasos. No se guarda nada hasta que la conexion responda: una fuente que no se puede leer no sirve de nada.</p></div>
+    </div>
+
+    <div class="pasos">
+      <div class="paso paso--hecho"><span class="paso__num">1</span>Tipo de origen</div>
+      <div class="paso paso--activo"><span class="paso__num">2</span>Datos de conexion</div>
+      <div class="paso"><span class="paso__num">3</span>Que archivos leer</div>
+    </div>
+
+    <div class="ficha">
+      <div class="dos-columnas">
+        <label class="campo"><span class="campo__etq">Nombre</span>
+          <input value="Banco corresponsal" /></label>
+        <label class="campo"><span class="campo__etq">Tipo</span>
+          <select><option>SFTP</option><option>FTP</option><option>Almacen de objetos</option><option>Sistema de archivos</option><option>Servicio web</option></select></label>
+        <label class="campo"><span class="campo__etq">Servidor</span>
+          <input value="corresponsal.ext" /></label>
+        <label class="campo"><span class="campo__etq">Puerto</span>
+          <input value="22" /></label>
+        <label class="campo"><span class="campo__etq">Usuario</span>
+          <input value="ihbank" /></label>
+        <label class="campo"><span class="campo__etq">Credencial</span>
+          <input value="••••••••" type="password" />
+          <span class="campo__pista">Se guarda en el almacen de secretos, nunca en la definicion.</span></label>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.4rem;">
+        <button class="boton boton--fuerte" data-accion="probar">Probar la conexion</button>
+        <button class="boton" data-accion="atras">Atras</button>
+        <button class="boton" disabled>Guardar</button>
+      </div>
+      <p class="campo__pista" style="margin-top:.5rem;">Guardar se habilita cuando la prueba responda.</p>
+    </div>
+  </section>
+
+  <!-- PRUEBA -->
+  <section class="vista" id="vista-prueba" hidden>
+    <div class="encabezado-vista">
+      <div><h1>Prueba de conexion</h1>
+      <p class="lema">Se conecta de verdad y lista lo que encuentra. Si falla, dice en que paso.</p></div>
+      <span class="cabecera__sep"></span>
+      <button class="boton" data-accion="probar">Repetir</button>
+    </div>
+
+    <div id="prueba-cargando" class="fantasma" hidden>
+      <div class="fantasma__barra" style="width:70%"></div>
+      <div class="fantasma__barra" style="width:88%"></div>
+      <div class="fantasma__barra" style="width:52%"></div>
+    </div>
+
+    <div id="prueba-mal" hidden>
+      <div class="cinta cinta--mal"><span><strong>No se pudo conectar.</strong> El servidor cerro la conexion al negociar la clave.</span></div>
+      <div class="consola">
+        <div><span class="consola__hora">10:41:02</span> resolviendo corresponsal.ext … <span class="consola__ok">192.0.2.44</span></div>
+        <div><span class="consola__hora">10:41:02</span> abriendo puerto 22 … <span class="consola__ok">abierto</span></div>
+        <div><span class="consola__hora">10:41:04</span> negociando clave de host … <span class="consola__mal">rechazada</span></div>
+        <div><span class="consola__hora">10:41:04</span> <span class="consola__mal">la huella del servidor no coincide con la registrada</span></div>
+      </div>
+      <div style="margin-top:.9rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="boton" data-accion="ver-huella">Comparar huellas</button>
+        <button class="boton" data-accion="probar">Reintentar</button>
+      </div>
+    </div>
+
+    <div id="prueba-bien" hidden>
+      <div class="cinta cinta--ok"><span><strong>Todo listo: la conexion responde.</strong> Se listaron 4 archivos que coinciden con el patron.</span></div>
+      <div class="ficha">
+        <ul class="historial">
+          <li><time>04 ago 06:10</time><span>confirmaciones-20260804.csv · 2,4 MB</span></li>
+          <li><time>03 ago 06:08</time><span>confirmaciones-20260803.csv · 2,1 MB</span></li>
+          <li><time>02 ago 06:11</time><span>confirmaciones-20260802.csv · 2,6 MB</span></li>
+          <li><time>01 ago 06:09</time><span>confirmaciones-20260801.csv · 1,9 MB</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- DETALLE -->
+  <section class="vista" id="vista-detalle" hidden>
+    <div class="encabezado-vista">
+      <div><h1>Nomina mensual</h1>
+      <p class="lema">SFTP · sftp://rrhh.interno:22/salidas/nomina/*.csv</p></div>
+      <span class="cabecera__sep"></span>
+      <span class="pulso pulso--vivo">Responde</span>
+    </div>
+
+    <div class="cinta cinta--ok"><span>Ultima lectura hace 3 horas, sin incidencias. 1 240 filas.</span></div>
+
+    <div class="ficha">
+      <h2 style="margin:0 0 .7rem;font-size:1rem;">Lecturas recientes</h2>
+      <ul class="historial">
+        <li><time>04 ago 03:00</time><span>1 240 filas · 0 descartadas · 12 s</span></li>
+        <li><time>03 ago 03:00</time><span>1 238 filas · 0 descartadas · 11 s</span></li>
+        <li><time>02 ago 03:00</time><span>1 240 filas · 2 descartadas (formato de fecha) · 13 s</span></li>
+        <li><time>01 ago 03:00</time><span>1 235 filas · 0 descartadas · 12 s</span></li>
+        <li><time>31 jul 03:00</time><span>archivo ausente · el proceso espero y reintento a las 04:00</span></li>
+      </ul>
+      <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="boton" data-ir="prueba">Probar ahora</button>
+        <button class="boton" data-accion="descargar">Descargar el ultimo archivo</button>
+        <button class="boton" data-accion="desactivar">Desactivar la fuente</button>
+      </div>
+    </div>
+
+    <div class="ficha" style="margin-top:1.1rem;">
+      <h2 style="margin:0 0 .7rem;font-size:1rem;">Archivos vistos en esta ruta</h2>
+      <p class="campo__pista" style="margin:0 0 .8rem;">
+        Lo que hay hoy en el servidor. Un archivo ya procesado no se vuelve a leer aunque siga ahi.
+      </p>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta-suave);">Archivo</th>
+              <th style="text-align:right;padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta-suave);">Tamano</th>
+              <th style="text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta-suave);">Depositado</th>
+              <th style="text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta-suave);">Situacion</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260804.csv</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">1,8 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">04 ago 02:41</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--vivo">Procesado</span></td></tr>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260803.csv</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">1,8 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">03 ago 02:38</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--vivo">Procesado</span></td></tr>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260802.csv</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">1,9 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">02 ago 02:44</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--lento">Con descartes</span></td></tr>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260801.csv</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">1,8 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">01 ago 02:40</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--vivo">Procesado</span></td></tr>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260731.csv.part</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">0,4 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">31 jul 02:39</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--caido">Incompleto</span></td></tr>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260730.csv</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">1,7 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">30 jul 02:42</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--vivo">Procesado</span></td></tr>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260729.csv</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">1,7 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">29 jul 02:40</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--vivo">Procesado</span></td></tr>
+            <tr><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);font-family:var(--teclado);font-size:.8rem;">nomina-20260728.csv</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums;">1,8 MB</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);">28 jul 02:41</td><td style="padding:.45rem .6rem;border-bottom:1px solid var(--linea);"><span class="pulso pulso--vivo">Procesado</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="campo__pista" style="margin-top:.7rem;">
+        El <code>.part</code> del 31 de julio es un deposito a medias: el proceso lo ignoro y espero
+        al archivo definitivo, que nunca llego. Por eso ese dia no hubo lectura.
+      </p>
+    </div>
+  </section>
+
+  <!-- SELECCION DE ARCHIVOS -->
+  <section class="vista" id="vista-seleccion" hidden>
+    <div class="encabezado-vista">
+      <div><h1>Que archivos leer</h1>
+      <p class="lema">Una carpeta suele tener mas cosas de las que interesan. Aqui se decide cuales entran y en que orden.</p></div>
+    </div>
+
+    <div class="ficha" style="margin-bottom:1.1rem;">
+      <div class="dos-columnas">
+        <label class="campo"><span class="campo__etq">Patron del nombre</span>
+          <input value="nomina-*.csv" />
+          <span class="campo__pista">Se comparan solo los nombres, no el contenido.</span></label>
+        <label class="campo"><span class="campo__etq">Orden de lectura</span>
+          <select><option>Mas antiguo primero</option><option>Mas reciente primero</option><option>Alfabetico</option></select>
+          <span class="campo__pista">Con pagos, el orden importa: lo antiguo se liquida antes.</span></label>
+        <label class="campo"><span class="campo__etq">Cuantos por ejecucion</span>
+          <input value="1" />
+          <span class="campo__pista">Uno por vuelta evita que un lote gigante bloquee el resto.</span></label>
+        <label class="campo"><span class="campo__etq">Al terminar</span>
+          <select><option>Dejarlo donde esta</option><option>Mover a procesados</option><option>Borrar</option></select></label>
+      </div>
+    </div>
+
+    <div class="cinta cinta--ojo">
+      <span><strong>Los archivos a medio subir se ignoran.</strong>
+      Un <code>.part</code> o un archivo cuyo tamano sigue creciendo no se lee: leerlo a medias
+      seria peor que no leerlo, porque las filas que faltan no volverian a mirarse.</span>
+    </div>
+
+    <div class="ficha">
+      <h2 style="margin:0 0 .7rem;font-size:1rem;">Con este patron, ahora mismo entrarian</h2>
+      <ul class="historial">
+        <li><time>04 ago</time><span>nomina-20260804.csv — entra</span></li>
+        <li><time>03 ago</time><span>nomina-20260803.csv — ya procesado, no se repite</span></li>
+        <li><time>31 jul</time><span>nomina-20260731.csv.part — se ignora, deposito incompleto</span></li>
+        <li><time>—</time><span>resumen-mensual.xlsx — no coincide con el patron</span></li>
+      </ul>
+      <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="boton boton--fuerte" data-accion="guardar-seleccion">Guardar reglas</button>
+        <button class="boton" data-ir="detalle">Ver el detalle de la fuente</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUSQUEDA -->
+  <section class="vista" id="vista-buscar" hidden>
+    <div class="encabezado-vista">
+      <div><h1>Busqueda</h1><p class="lema">Por nombre, servidor o ruta.</p></div>
+    </div>
+    <div class="ficha" style="margin-bottom:1.1rem;">
+      <div class="dos-columnas">
+        <label class="campo"><span class="campo__etq">Texto</span><input value="mainframe" /></label>
+        <label class="campo"><span class="campo__etq">Tipo</span><select><option>Cualquiera</option><option>SFTP</option><option>FTP</option></select></label>
+      </div>
+      <button class="boton boton--fuerte" data-accion="buscar">Buscar</button>
+      <button class="boton" data-accion="limpiar">Limpiar</button>
+    </div>
+    <div id="buscar-nada" class="nada">
+      <div class="nada__signo">🔍</div>
+      <div class="nada__frase">Sin coincidencias</div>
+      <p style="margin:.2rem 0 1rem;">No hay ninguna fuente que encaje con "mainframe". Prueba con parte del servidor.</p>
+      <button class="boton" data-accion="limpiar">Quitar filtros</button>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var vistas = document.querySelectorAll(".vista");
+    var pestanas = document.querySelectorAll(".pestana");
+
+    function ir(nombre) {
+      vistas.forEach(function (v) { v.hidden = v.id !== "vista-" + nombre; });
+      pestanas.forEach(function (p) {
+        if (p.dataset.vista === nombre) { p.setAttribute("aria-current", "page"); }
+        else { p.removeAttribute("aria-current"); }
+      });
+      if (nombre === "prueba") { correrPrueba(); }
+      window.scrollTo(0, 0);
+    }
+    pestanas.forEach(function (p) { p.addEventListener("click", function () { ir(p.dataset.vista); }); });
+
+    // La prueba de conexion recorre sus tres desenlaces: mientras conecta, fallo y exito.
+    var vuelta = 0;
+    function correrPrueba() {
+      var cargando = document.getElementById("prueba-cargando");
+      var mal = document.getElementById("prueba-mal");
+      var bien = document.getElementById("prueba-bien");
+      cargando.hidden = false; mal.hidden = true; bien.hidden = true;
+      setTimeout(function () {
+        cargando.hidden = true;
+        if (vuelta % 2 === 0) { mal.hidden = false; } else { bien.hidden = false; }
+        vuelta += 1;
+      }, 1500);
+    }
+
+    var reloj = null;
+    function volar(texto) {
+      var f = document.getElementById("flotante");
+      f.textContent = texto; f.hidden = false;
+      clearTimeout(reloj);
+      reloj = setTimeout(function () { f.hidden = true; }, 3000);
+    }
+
+    document.addEventListener("click", function (e) {
+      var destino = e.target.getAttribute && e.target.getAttribute("data-ir");
+      if (destino) { ir(destino); return; }
+      var accion = e.target.getAttribute && e.target.getAttribute("data-accion");
+      if (!accion) { return; }
+      if (accion === "probar") { ir("prueba"); return; }
+      if (accion === "atras") { ir("catalogo"); return; }
+      if (accion === "buscar" || accion === "limpiar") { volar("Busqueda actualizada."); return; }
+      if (accion === "revisar-todo") { volar("Revisando las 6 fuentes…"); return; }
+      if (accion === "descargar") { volar("Preparando la descarga del ultimo archivo."); return; }
+      if (accion === "desactivar") { volar("Desactivar pide confirmacion: hay 3 procesos que usan esta fuente."); return; }
+      if (accion === "guardar-seleccion") { volar("Reglas guardadas. Se aplican en la proxima ejecucion."); return; }
+      if (accion === "ver-huella") { volar("Huella registrada SHA256:d4f1… · huella recibida SHA256:9a02…"); return; }
+    });
+  })();
+</script>
+
+</body>
+</html>

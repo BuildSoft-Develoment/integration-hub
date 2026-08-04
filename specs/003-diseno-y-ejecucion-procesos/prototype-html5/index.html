@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Editor de procesos — Integration Hub</title>
+<style>
+  :root {
+    --noche: #0d1117;
+    --noche-alta: #161b22;
+    --pizarra: #21262d;
+    --borde-frio: #30363d;
+    --texto-claro: #e6edf3;
+    --texto-medio: #8b949e;
+    --cian: #2dd4bf;
+    --cian-hondo: #0d5f57;
+    --lima: #a3e635;
+    --lima-hondo: #3f6212;
+    --naranja: #fb923c;
+    --naranja-hondo: #7c2d12;
+    --rosa: #f472b6;
+    --rosa-hondo: #831843;
+    --lila: #a78bfa;
+    --canto: 10px;
+    --tipografia-fija: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--noche); color:var(--texto-claro); font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+
+  .cinta-alta { display:flex; align-items:center; gap:.85rem; padding:.6rem 1.1rem; background:var(--noche-alta); border-bottom:1px solid var(--borde-frio); }
+  .cinta-alta__nombre { font-weight:700; }
+  .cinta-alta__proceso { color:var(--texto-medio); font-size:.85rem; }
+  .cinta-alta__aire { flex:1; }
+  .cinta-alta__vuelta { color:var(--texto-medio); font-size:.81rem; text-decoration:none; }
+  .cinta-alta__vuelta:hover { color:var(--cian); }
+
+  .pastillas { display:flex; gap:.3rem; padding:.45rem 1.1rem; background:var(--noche-alta); border-bottom:1px solid var(--borde-frio); overflow-x:auto; }
+  .pastillas button {
+    padding:.32rem .75rem; border:1px solid var(--borde-frio); border-radius:6px;
+    background:transparent; color:var(--texto-medio); font:inherit; font-size:.82rem; cursor:pointer; white-space:nowrap;
+  }
+  .pastillas button:hover { color:var(--texto-claro); border-color:var(--texto-medio); }
+  .pastillas button[aria-current="page"] { background:var(--cian-hondo); border-color:var(--cian); color:var(--cian); font-weight:600; }
+
+  .escena { padding:1.1rem; }
+  .plano[hidden] { display:none; }
+
+  .encabeza { margin:0 0 .2rem; font-size:1.28rem; letter-spacing:-.01em; }
+  .susurro { margin:0 0 1.1rem; color:var(--texto-medio); font-size:.87rem; max-width:66ch; }
+
+  .taller { display:grid; grid-template-columns:180px minmax(0,1fr) 250px; gap:.9rem; align-items:start; }
+
+  .paleta { background:var(--noche-alta); border:1px solid var(--borde-frio); border-radius:var(--canto); padding:.7rem; }
+  .paleta__grupo { font-size:.68rem; text-transform:uppercase; letter-spacing:.1em; color:var(--texto-medio); margin:.6rem 0 .35rem; }
+  .pieza {
+    display:flex; align-items:center; gap:.45rem; width:100%; padding:.4rem .5rem; margin-bottom:.25rem;
+    border:1px solid var(--borde-frio); border-radius:7px; background:var(--pizarra);
+    color:var(--texto-claro); font:inherit; font-size:.79rem; cursor:grab; text-align:left;
+  }
+  .pieza:hover { border-color:var(--cian); }
+  .pieza__punto { width:9px; height:9px; border-radius:3px; flex:none; }
+  .p-lee { background:var(--cian); } .p-graba { background:var(--lima); }
+  .p-arma { background:var(--naranja); } .p-paga { background:var(--rosa); }
+  .pieza[disabled] { opacity:.45; cursor:not-allowed; }
+
+  .lienzo {
+    background:var(--noche-alta); border:1px solid var(--borde-frio); border-radius:var(--canto);
+    min-height:430px; padding:1.1rem; position:relative; overflow-x:auto;
+    background-image:radial-gradient(circle, #21262d 1px, transparent 1px);
+    background-size:18px 18px;
+  }
+  .cadena { display:flex; align-items:center; gap:.15rem; flex-wrap:wrap; }
+  .nodo {
+    background:var(--pizarra); border:1px solid var(--borde-frio); border-radius:9px;
+    padding:.55rem .7rem; min-width:132px; cursor:pointer; position:relative;
+  }
+  .nodo:hover { border-color:var(--texto-medio); }
+  .nodo--puesto { border-color:var(--cian); box-shadow:0 0 0 1px var(--cian); }
+  .nodo--roto { border-color:var(--rosa); }
+  .nodo__cinta { height:3px; border-radius:2px; margin:-.55rem -.7rem .45rem; }
+  .c-lee { background:var(--cian); } .c-graba { background:var(--lima); }
+  .c-arma { background:var(--naranja); } .c-paga { background:var(--rosa); }
+  .nodo__nombre { font-size:.82rem; font-weight:650; }
+  .nodo__orden { font-size:.68rem; color:var(--texto-medio); font-variant-numeric:tabular-nums; }
+  .hilo { color:var(--borde-frio); font-size:1.1rem; padding:0 .1rem; }
+
+  .inspector { background:var(--noche-alta); border:1px solid var(--borde-frio); border-radius:var(--canto); padding:.85rem; }
+  .inspector__titulo { margin:0 0 .1rem; font-size:.9rem; }
+  .inspector__tipo { font-size:.72rem; color:var(--cian); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.7rem; }
+  .dato { margin-bottom:.65rem; }
+  .dato__nombre { display:block; font-size:.74rem; color:var(--texto-medio); margin-bottom:.18rem; }
+  .dato input, .dato select {
+    width:100%; padding:.35rem .5rem; background:var(--pizarra); color:var(--texto-claro);
+    border:1px solid var(--borde-frio); border-radius:6px; font:inherit; font-size:.81rem;
+  }
+  .dato input:focus, .dato select:focus { outline:2px solid var(--cian); outline-offset:1px; }
+  .dato small { display:block; color:var(--texto-medio); font-size:.72rem; margin-top:.18rem; }
+
+  .llave {
+    padding:.35rem .7rem; border:1px solid var(--borde-frio); border-radius:6px;
+    background:var(--pizarra); color:var(--texto-claro); font:inherit; font-size:.8rem; cursor:pointer;
+  }
+  .llave:hover { border-color:var(--cian); }
+  .llave--viva { background:var(--cian-hondo); border-color:var(--cian); color:var(--cian); font-weight:600; }
+  .llave:focus-visible { outline:2px solid var(--cian); outline-offset:2px; }
+  .llave:disabled { opacity:.42; cursor:not-allowed; }
+
+  .marco { background:var(--noche-alta); border:1px solid var(--borde-frio); border-radius:var(--canto); padding:.9rem; margin-bottom:.9rem; }
+  .marco__titulo { margin:0 0 .6rem; font-size:.92rem; }
+
+  .rejilla-datos { width:100%; border-collapse:collapse; font-size:.81rem; }
+  .rejilla-datos th, .rejilla-datos td { padding:.4rem .55rem; border-bottom:1px solid var(--borde-frio); text-align:left; white-space:nowrap; }
+  .rejilla-datos th { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--texto-medio); }
+  .rejilla-datos td.cifra { text-align:right; font-variant-numeric:tabular-nums; }
+
+  .chapa { display:inline-block; padding:.1rem .45rem; border-radius:5px; font-size:.71rem; font-weight:600; }
+  .chapa--corre { background:var(--cian-hondo); color:var(--cian); }
+  .chapa--fin { background:var(--lima-hondo); color:var(--lima); }
+  .chapa--paro { background:var(--rosa-hondo); color:var(--rosa); }
+  .chapa--espera { background:var(--naranja-hondo); color:var(--naranja); }
+
+  .franja { display:flex; gap:.55rem; padding:.65rem .85rem; border-radius:8px; font-size:.84rem; margin-bottom:.9rem; border:1px solid; }
+  .franja--bien { background:rgba(163,230,53,.08); border-color:var(--lima-hondo); color:var(--lima); }
+  .franja--ojo { background:rgba(251,146,60,.08); border-color:var(--naranja-hondo); color:var(--naranja); }
+  .franja--mal { background:rgba(244,114,182,.08); border-color:var(--rosa-hondo); color:var(--rosa); }
+
+  .yermo { text-align:center; padding:2.6rem 1rem; color:var(--texto-medio); }
+  .yermo__signo { font-size:2rem; }
+  .yermo__frase { color:var(--texto-claro); font-weight:600; margin:.5rem 0 .3rem; }
+
+  .veta { height:11px; border-radius:6px; margin-bottom:.55rem; background:linear-gradient(90deg,#21262d 25%,#2d333b 50%,#21262d 75%); background-size:200% 100%; animation:corriente 1.4s infinite; }
+  @keyframes corriente { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .veta{animation:none} }
+
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:1.3rem; z-index:50;
+    background:var(--pizarra); border:1px solid var(--borde-frio); color:var(--texto-claro);
+    padding:.6rem 1rem; border-radius:8px; font-size:.83rem; box-shadow:0 14px 34px rgba(0,0,0,.5); }
+  .toast[hidden] { display:none; }
+
+  @media (max-width:1080px) {
+    .taller { grid-template-columns:1fr; }
+    .escena { padding:.9rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="cinta-alta">
+  <span class="cinta-alta__nombre">Integration Hub</span>
+  <span class="cinta-alta__proceso">Procesos · Nomina mensual</span>
+  <span class="cinta-alta__aire"></span>
+  <a class="cinta-alta__vuelta" data-hub-link href="../../../prototype/index.html">← Volver al hub</a>
+  <button class="llave llave--viva" data-obrar="guardar">Guardar</button>
+</header>
+
+<nav class="pastillas" aria-label="Secciones del editor">
+  <button data-plano="taller" aria-current="page">Diseno</button>
+  <button data-plano="corrida">Ejecucion en curso</button>
+  <button data-plano="historia">Historial</button>
+  <button data-plano="tiempos">Tiempos por tarea</button>
+  <button data-plano="parado">Tarea detenida</button>
+  <button data-plano="enlaces">Que usa cada tarea</button>
+  <button data-plano="vacio">Proceso nuevo</button>
+</nav>
+
+<div id="soplo" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="escena">
+
+  <!-- TALLER -->
+  <section class="plano" id="plano-taller">
+    <h1 class="encabeza">Diseno del proceso</h1>
+    <p class="susurro">Las tareas se encadenan en orden. Cada una recibe lo que produjo la anterior; si una falla, las siguientes no corren.</p>
+
+    <div class="taller">
+      <aside class="paleta" aria-label="Tareas disponibles">
+        <div class="paleta__grupo">Entrada</div>
+        <button class="pieza"><span class="pieza__punto p-lee"></span>Leer archivo</button>
+        <button class="pieza"><span class="pieza__punto p-lee"></span>Consultar base</button>
+        <button class="pieza"><span class="pieza__punto p-lee"></span>Llamar servicio</button>
+        <div class="paleta__grupo">Almacen</div>
+        <button class="pieza"><span class="pieza__punto p-graba"></span>Guardar en tabla</button>
+        <button class="pieza"><span class="pieza__punto p-graba"></span>Escribir archivo</button>
+        <div class="paleta__grupo">Pagos</div>
+        <button class="pieza"><span class="pieza__punto p-arma"></span>Armar mensaje</button>
+        <button class="pieza"><span class="pieza__punto p-arma"></span>Validar mensaje</button>
+        <button class="pieza"><span class="pieza__punto p-arma"></span>Archivar</button>
+        <button class="pieza"><span class="pieza__punto p-paga"></span>Pagar</button>
+        <div class="paleta__grupo">No disponibles</div>
+        <button class="pieza" disabled><span class="pieza__punto p-arma"></span>Transformar (python)</button>
+        <p style="font-size:.71rem;color:var(--texto-medio);margin:.35rem 0 0;">
+          Apagada porque su firma no verifico. Arrastrarla al lienzo no se permite.
+        </p>
+      </aside>
+
+      <div class="lienzo">
+        <div class="cadena">
+          <div class="nodo"><div class="nodo__cinta c-lee"></div><div class="nodo__nombre">Leer archivo</div><div class="nodo__orden">1 · nomina-*.csv</div></div>
+          <span class="hilo">→</span>
+          <div class="nodo"><div class="nodo__cinta c-graba"></div><div class="nodo__nombre">Guardar en tabla</div><div class="nodo__orden">2 · staging</div></div>
+          <span class="hilo">→</span>
+          <div class="nodo nodo--puesto"><div class="nodo__cinta c-arma"></div><div class="nodo__nombre">Armar mensaje</div><div class="nodo__orden">3 · 2 por mensaje</div></div>
+          <span class="hilo">→</span>
+          <div class="nodo"><div class="nodo__cinta c-arma"></div><div class="nodo__nombre">Validar mensaje</div><div class="nodo__orden">4 · 7 reglas</div></div>
+          <span class="hilo">→</span>
+          <div class="nodo"><div class="nodo__cinta c-arma"></div><div class="nodo__nombre">Archivar</div><div class="nodo__orden">5 · con huella</div></div>
+          <span class="hilo">→</span>
+          <div class="nodo"><div class="nodo__cinta c-paga"></div><div class="nodo__nombre">Pagar</div><div class="nodo__orden">6 · una sola vez</div></div>
+        </div>
+
+        <div class="franja franja--ojo" style="margin-top:1.4rem;max-width:60ch;">
+          <span>La tarea de pago solo admite ejecutarse <strong>una vez</strong>. No es una
+          preferencia: repetirla por lotes podria enviar el mismo pago dos veces, asi que el
+          selector no ofrece otra opcion.</span>
+        </div>
+      </div>
+
+      <aside class="inspector" aria-label="Detalle de la tarea">
+        <h2 class="inspector__titulo">Armar mensaje</h2>
+        <div class="inspector__tipo">Tarea 3 de 6</div>
+        <div class="dato"><span class="dato__nombre">De donde toma los datos</span>
+          <select><option>Salida de "Guardar en tabla"</option><option>Consulta directa</option></select></div>
+        <div class="dato"><span class="dato__nombre">Operaciones por mensaje</span>
+          <input value="2" />
+          <small>Mas operaciones, menos mensajes y mas riesgo por mensaje.</small></div>
+        <div class="dato"><span class="dato__nombre">Tamano de pagina</span>
+          <input value="2500" />
+          <small>Cuantas filas se traen de golpe. Bajarlo alarga; subirlo consume memoria.</small></div>
+        <div class="dato"><span class="dato__nombre">Modo de ejecucion</span>
+          <select><option>Una vez</option><option>Por lotes</option></select></div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.8rem;">
+          <button class="llave llave--viva" data-obrar="aplicar">Aplicar</button>
+          <button class="llave" data-obrar="quitar">Quitar del flujo</button>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- CORRIDA -->
+  <section class="plano" id="plano-corrida" hidden>
+    <h1 class="encabeza">Ejecucion en curso</h1>
+    <p class="susurro">Las mismas seis tareas, con lo que va pasando en cada una. Se actualiza solo.</p>
+
+    <div class="franja franja--bien"><span><strong>Van 4 de 6 tareas.</strong> 10.000 filas leidas, 5.000 mensajes armados.</span></div>
+
+    <div class="marco">
+      <h2 class="marco__titulo">Tareas</h2>
+      <table class="rejilla-datos">
+        <thead><tr><th>#</th><th>Tarea</th><th>Situacion</th><th class="cifra">Registros</th><th class="cifra">Duracion</th><th>Detalle</th></tr></thead>
+        <tbody>
+          <tr><td class="cifra">1</td><td>Leer archivo</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">10 000</td><td class="cifra">14 s</td><td>0 descartadas</td></tr>
+          <tr><td class="cifra">2</td><td>Guardar en tabla</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">10 000</td><td class="cifra">1 m 12 s</td><td>en staging</td></tr>
+          <tr><td class="cifra">3</td><td>Armar mensaje</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">5 000</td><td class="cifra">22 m</td><td>2 operaciones por mensaje</td></tr>
+          <tr><td class="cifra">4</td><td>Validar mensaje</td><td><span class="chapa chapa--corre">En curso</span></td><td class="cifra">3 180</td><td class="cifra">4 m</td><td>0 invalidos hasta ahora</td></tr>
+          <tr><td class="cifra">5</td><td>Archivar</td><td><span class="chapa chapa--espera">Esperando</span></td><td class="cifra">—</td><td class="cifra">—</td><td>arranca al terminar la 4</td></tr>
+          <tr><td class="cifra">6</td><td>Pagar</td><td><span class="chapa chapa--espera">Esperando</span></td><td class="cifra">—</td><td class="cifra">—</td><td>una sola vez</td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:.4rem;margin-top:.9rem;flex-wrap:wrap;">
+        <button class="llave" data-obrar="refrescar">Actualizar</button>
+        <button class="llave" data-obrar="detener">Detener despues de la tarea actual</button>
+      </div>
+      <p style="font-size:.78rem;color:var(--texto-medio);margin:.8rem 0 0;max-width:64ch;">
+        Detener espera a que la tarea en curso acabe; no la corta a mitad. Cortar "Archivar" por
+        la mitad dejaria mensajes archivados y otros no, sin forma de saber cuales — y esa duda
+        cuesta mas que los minutos que se ahorran.
+      </p>
+    </div>
+  </section>
+
+  <!-- HISTORIA -->
+  <section class="plano" id="plano-historia" hidden>
+    <h1 class="encabeza">Historial</h1>
+    <p class="susurro">Las ultimas corridas de este proceso. La duracion dice mas que el resultado: una corrida que tarda el triple ya es un aviso.</p>
+
+    <div id="historia-cargando" hidden>
+      <div class="marco"><div class="veta" style="width:85%"></div><div class="veta" style="width:70%"></div><div class="veta" style="width:92%"></div><div class="veta" style="width:64%"></div></div>
+    </div>
+
+    <div id="historia-hay" hidden>
+      <div class="marco">
+        <table class="rejilla-datos">
+          <thead><tr><th>Cuando</th><th>Resultado</th><th class="cifra">Filas</th><th class="cifra">Mensajes</th><th class="cifra">Duracion</th><th>Nota</th></tr></thead>
+          <tbody>
+            <tr><td>04 ago 10:14</td><td><span class="chapa chapa--corre">En curso</span></td><td class="cifra">10 000</td><td class="cifra">5 000</td><td class="cifra">41 m</td><td>—</td></tr>
+            <tr><td>03 ago 03:00</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">9 980</td><td class="cifra">4 990</td><td class="cifra">38 m</td><td>sin incidencias</td></tr>
+            <tr><td>02 ago 03:00</td><td><span class="chapa chapa--paro">Detenida</span></td><td class="cifra">9 940</td><td class="cifra">0</td><td class="cifra">6 m</td><td>2 filas con moneda invalida</td></tr>
+            <tr><td>01 ago 03:00</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">9 960</td><td class="cifra">4 980</td><td class="cifra">36 m</td><td>sin incidencias</td></tr>
+            <tr><td>31 jul 03:00</td><td><span class="chapa chapa--paro">Detenida</span></td><td class="cifra">0</td><td class="cifra">0</td><td class="cifra">12 s</td><td>archivo ausente</td></tr>
+            <tr><td>30 jul 03:00</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">9 955</td><td class="cifra">4 977</td><td class="cifra">35 m</td><td>sin incidencias</td></tr>
+            <tr><td>29 jul 03:00</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">9 950</td><td class="cifra">4 975</td><td class="cifra">37 m</td><td>sin incidencias</td></tr>
+            <tr><td>28 jul 03:00</td><td><span class="chapa chapa--fin">Terminada</span></td><td class="cifra">9 948</td><td class="cifra">4 974</td><td class="cifra">92 m</td><td>lenta: el servidor de origen respondia a saltos</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="historia-rota" hidden>
+      <div class="franja franja--mal"><span><strong>No se pudo cargar el historial.</strong> El servicio de consulta no responde. Las ejecuciones en curso no se ven afectadas.</span></div>
+      <div class="marco"><div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+        <button class="llave llave--viva" data-obrar="reintentar-historia">Reintentar</button>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- TIEMPOS -->
+  <section class="plano" id="plano-tiempos" hidden>
+    <h1 class="encabeza">Tiempos por tarea</h1>
+    <p class="susurro">Una tarea que tarda cada dia un poco mas no falla: degrada. Y cuando falla, ya lleva semanas avisando.</p>
+
+    <div class="franja franja--ojo">
+      <span><strong>"Armar mensaje" tarda hoy 22 minutos; hace dos semanas tardaba 14.</strong>
+      Nada esta roto y todas las corridas terminaron bien. Pero al ritmo actual, en un mes no cabra
+      en la ventana nocturna.</span>
+    </div>
+
+    <div class="marco">
+      <h2 class="marco__titulo">Duracion de cada tarea, ultimas 6 corridas</h2>
+      <table class="rejilla-datos">
+        <thead><tr><th>Tarea</th><th class="cifra">29 jul</th><th class="cifra">30 jul</th><th class="cifra">31 jul</th><th class="cifra">01 ago</th><th class="cifra">03 ago</th><th class="cifra">04 ago</th><th>Va</th></tr></thead>
+        <tbody>
+          <tr><td>Leer archivo</td><td class="cifra">13 s</td><td class="cifra">12 s</td><td class="cifra">—</td><td class="cifra">14 s</td><td class="cifra">13 s</td><td class="cifra">14 s</td><td><span class="chapa chapa--fin">Estable</span></td></tr>
+          <tr><td>Guardar en tabla</td><td class="cifra">1,1 m</td><td class="cifra">1,0 m</td><td class="cifra">—</td><td class="cifra">1,2 m</td><td class="cifra">1,1 m</td><td class="cifra">1,2 m</td><td><span class="chapa chapa--fin">Estable</span></td></tr>
+          <tr><td>Armar mensaje</td><td class="cifra">14 m</td><td class="cifra">15 m</td><td class="cifra">—</td><td class="cifra">17 m</td><td class="cifra">19 m</td><td class="cifra">22 m</td><td><span class="chapa chapa--espera">Sube</span></td></tr>
+          <tr><td>Validar mensaje</td><td class="cifra">6 m</td><td class="cifra">6 m</td><td class="cifra">—</td><td class="cifra">6 m</td><td class="cifra">6 m</td><td class="cifra">6 m</td><td><span class="chapa chapa--fin">Estable</span></td></tr>
+          <tr><td>Archivar</td><td class="cifra">8 m</td><td class="cifra">8 m</td><td class="cifra">—</td><td class="cifra">8 m</td><td class="cifra">9 m</td><td class="cifra">9 m</td><td><span class="chapa chapa--fin">Estable</span></td></tr>
+          <tr><td>Pagar</td><td class="cifra">5 m</td><td class="cifra">5 m</td><td class="cifra">—</td><td class="cifra">5 m</td><td class="cifra">5 m</td><td class="cifra">—</td><td><span class="chapa chapa--espera">Esperando</span></td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:.78rem;color:var(--texto-medio);margin:.8rem 0 0;max-width:64ch;">
+        El 31 de julio esta vacio porque el archivo no llego. Un hueco no es un cero: pintarlo como
+        cero haria pensar que ese dia fue rapidisimo.
+      </p>
+      <div style="display:flex;gap:.4rem;margin-top:.9rem;flex-wrap:wrap;">
+        <button class="llave llave--viva" data-obrar="ajustar-pagina">Ajustar el tamano de pagina</button>
+        <button class="llave" data-plano-ir="taller">Ver la tarea en el diseno</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARADO -->
+  <section class="plano" id="plano-parado" hidden>
+    <h1 class="encabeza">Tarea detenida</h1>
+    <p class="susurro">La corrida del 2 de agosto paro en la tercera tarea. Aqui esta por que, y que se puede hacer.</p>
+
+    <div class="franja franja--mal">
+      <span><strong>Armar mensaje se detuvo.</strong> 2 filas traen una moneda que no existe, y la
+      tarea no continua con datos que no entiende.</span>
+    </div>
+
+    <div class="marco">
+      <h2 class="marco__titulo">Las filas que la pararon</h2>
+      <table class="rejilla-datos">
+        <thead><tr><th class="cifra">Fila</th><th>Beneficiario</th><th>Valor</th><th>Se esperaba</th></tr></thead>
+        <tbody>
+          <tr><td class="cifra">842</td><td>MOLINERA SAN JUAN</td><td>SOL</td><td>codigo de 3 letras (PEN, USD)</td></tr>
+          <tr><td class="cifra">4 271</td><td>FERRETERIA EL ROBLE</td><td>S/.</td><td>codigo de 3 letras (PEN, USD)</td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:.4rem;margin-top:.9rem;flex-wrap:wrap;">
+        <button class="llave llave--viva" data-obrar="a-cuarentena">Enviar a cuarentena y seguir</button>
+        <button class="llave" data-obrar="reanudar">Reanudar desde esta tarea</button>
+        <button class="llave" data-plano-ir="taller">Revisar el diseno</button>
+      </div>
+      <p style="font-size:.78rem;color:var(--texto-medio);margin:.8rem 0 0;max-width:62ch;">
+        Reanudar retoma en la tarea 3 con lo que ya hay en staging: no vuelve a leer el archivo ni
+        repite lo hecho. Es la diferencia entre perder cinco minutos y perder cuarenta.
+      </p>
+    </div>
+  </section>
+
+  <!-- ENLACES -->
+  <section class="plano" id="plano-enlaces" hidden>
+    <h1 class="encabeza">Que usa cada tarea</h1>
+    <p class="susurro">Lo mas facil de romper de un flujo: cambiar lo que una tarea produce y no darse cuenta de quien lo estaba consumiendo.</p>
+
+    <div class="franja franja--ojo">
+      <span><strong>Cambiar la salida de una tarea afecta a las siguientes.</strong>
+      Si "Guardar en tabla" deja de escribir la columna del importe, "Armar mensaje" no falla al
+      guardarse: falla esta noche, a las tres, sobre diez mil filas.</span>
+    </div>
+
+    <div class="marco">
+      <h2 class="marco__titulo">Cadena de dependencias</h2>
+      <table class="rejilla-datos">
+        <thead><tr><th class="cifra">#</th><th>Tarea</th><th>Toma de</th><th>Produce</th><th>Lo consume</th></tr></thead>
+        <tbody>
+          <tr><td class="cifra">1</td><td>Leer archivo</td><td>fuente "Nomina mensual"</td><td>filas del archivo</td><td>tarea 2</td></tr>
+          <tr><td class="cifra">2</td><td>Guardar en tabla</td><td>salida de la 1</td><td>tabla staging</td><td>tarea 3</td></tr>
+          <tr><td class="cifra">3</td><td>Armar mensaje</td><td>tabla staging</td><td>mensajes</td><td>tareas 4, 5 y 6</td></tr>
+          <tr><td class="cifra">4</td><td>Validar mensaje</td><td>mensajes de la 3</td><td>observaciones</td><td>nadie (solo informa)</td></tr>
+          <tr><td class="cifra">5</td><td>Archivar</td><td>mensajes de la 3</td><td>archivo con huella</td><td>tarea 6</td></tr>
+          <tr><td class="cifra">6</td><td>Pagar</td><td>archivo de la 5</td><td>envios y confirmaciones</td><td>nadie</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:.78rem;color:var(--texto-medio);margin:.8rem 0 0;max-width:64ch;">
+        Tres tareas dependen de la 3. Por eso quitarla del flujo pide confirmacion nombrando
+        cuales se quedarian sin entrada, en vez de un "¿seguro?" generico.
+      </p>
+    </div>
+
+    <div class="marco">
+      <h2 class="marco__titulo">Que pasa si una falla</h2>
+      <table class="rejilla-datos">
+        <thead><tr><th>Si falla</th><th>Se detienen</th><th>Se conserva</th><th>Al reanudar</th></tr></thead>
+        <tbody>
+          <tr><td>Leer archivo</td><td>todas</td><td>nada</td><td>se lee otra vez desde cero</td></tr>
+          <tr><td>Guardar en tabla</td><td>de la 3 en adelante</td><td>las filas ya escritas</td><td>continua donde quedo</td></tr>
+          <tr><td>Armar mensaje</td><td>de la 4 en adelante</td><td>staging completo</td><td>retoma sin releer el archivo</td></tr>
+          <tr><td>Validar mensaje</td><td>de la 5 en adelante</td><td>mensajes armados</td><td>revalida solo lo pendiente</td></tr>
+          <tr><td>Archivar</td><td>la 6</td><td>lo ya archivado</td><td>archiva lo que falta</td></tr>
+          <tr><td>Pagar</td><td>nada mas</td><td>todo lo anterior</td><td>NO reintenta solo: exige decision humana</td></tr>
+        </tbody>
+      </table>
+      <div class="franja franja--mal" style="margin:.9rem 0 0;">
+        <span>La ultima fila es la importante: un pago que fallo no se reintenta automaticamente.
+        Puede haber salido y no saberlo, y reintentar a ciegas es como se paga dos veces.</span>
+      </div>
+      <div style="display:flex;gap:.4rem;margin-top:.9rem;flex-wrap:wrap;">
+        <button class="llave llave--viva" data-obrar="ver-cadena">Resaltar la cadena en el lienzo</button>
+        <button class="llave" data-plano-ir="taller">Volver al diseno</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- VACIO -->
+  <section class="plano" id="plano-vacio" hidden>
+    <h1 class="encabeza">Proceso nuevo</h1>
+    <p class="susurro">Un lienzo en blanco es la pantalla mas dificil. Se empieza por lo que trae los datos.</p>
+    <div class="marco">
+      <div class="yermo">
+        <div class="yermo__signo">◇</div>
+        <div class="yermo__frase">Sin coincidencias en este flujo</div>
+        <p style="margin:.2rem 0 1.1rem;">No hay ninguna tarea todavia. Arrastra una de entrada desde la paleta, o parte de un proceso que ya funcione.</p>
+        <div style="display:flex;gap:.4rem;justify-content:center;flex-wrap:wrap;">
+          <button class="llave llave--viva" data-obrar="desde-plantilla">Partir de uno existente</button>
+          <button class="llave" data-plano-ir="taller">Ir al lienzo</button>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--borde-frio);padding-top:.9rem;margin-top:.4rem;">
+        <h2 class="marco__titulo">Procesos de los que se puede copiar</h2>
+        <table class="rejilla-datos">
+          <thead><tr><th>Proceso</th><th class="cifra">Tareas</th><th>Que hace</th><th>Ultima corrida</th></tr></thead>
+          <tbody>
+            <tr><td>Nomina mensual</td><td class="cifra">6</td><td>archivo → mensajes → pago</td><td><span class="chapa chapa--corre">En curso</span></td></tr>
+            <tr><td>Confirmaciones del banco</td><td class="cifra">3</td><td>archivo → conciliacion</td><td><span class="chapa chapa--fin">Terminada</span></td></tr>
+            <tr><td>Guias de transporte</td><td class="cifra">4</td><td>archivo → tabla → aviso</td><td><span class="chapa chapa--fin">Terminada</span></td></tr>
+            <tr><td>Inventario diario</td><td class="cifra">5</td><td>hoja de calculo → tabla</td><td><span class="chapa chapa--paro">Detenida</span></td></tr>
+            <tr><td>Padron de clientes</td><td class="cifra">2</td><td>servicio web → tabla</td><td>nunca se ejecuto</td></tr>
+            <tr><td>Extracto contable</td><td class="cifra">4</td><td>archivo ancho fijo → tabla</td><td><span class="chapa chapa--paro">Detenida</span></td></tr>
+            <tr><td>Aviso de vencimientos</td><td class="cifra">3</td><td>consulta → correo</td><td><span class="chapa chapa--fin">Terminada</span></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.78rem;color:var(--texto-medio);margin:.7rem 0 0;max-width:62ch;">
+          Copiar trae la cadena de tareas y su configuracion, pero NO las fuentes ni las
+          credenciales: apuntarian al origen del proceso original y se acabaria leyendo el archivo
+          equivocado sin que nadie lo note.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var planos = document.querySelectorAll(".plano");
+    var pastillas = document.querySelectorAll(".pastillas button");
+
+    function ver(nombre) {
+      planos.forEach(function (p) { p.hidden = p.id !== "plano-" + nombre; });
+      pastillas.forEach(function (b) {
+        if (b.dataset.plano === nombre) { b.setAttribute("aria-current", "page"); }
+        else { b.removeAttribute("aria-current"); }
+      });
+      if (nombre === "historia") { pedirHistoria(); }
+      window.scrollTo(0, 0);
+    }
+    pastillas.forEach(function (b) { b.addEventListener("click", function () { ver(b.dataset.plano); }); });
+
+    // El historial recorre sus desenlaces: cargando, con datos, y con el servicio de consulta caido.
+    var tanda = 0;
+    function pedirHistoria() {
+      var c = document.getElementById("historia-cargando");
+      var h = document.getElementById("historia-hay");
+      var r = document.getElementById("historia-rota");
+      c.hidden = false; h.hidden = true; r.hidden = true;
+      setTimeout(function () {
+        c.hidden = true;
+        if (tanda % 3 === 2) { r.hidden = false; } else { h.hidden = false; }
+        tanda += 1;
+      }, 1250);
+    }
+
+    var cronometro = null;
+    function soplar(texto) {
+      var s = document.getElementById("soplo");
+      s.textContent = texto; s.hidden = false;
+      clearTimeout(cronometro);
+      cronometro = setTimeout(function () { s.hidden = true; }, 3000);
+    }
+
+    // Seleccionar un nodo cambia el inspector: es el gesto central del editor.
+    document.querySelectorAll(".nodo").forEach(function (n) {
+      n.addEventListener("click", function () {
+        document.querySelectorAll(".nodo").forEach(function (o) { o.classList.remove("nodo--puesto"); });
+        n.classList.add("nodo--puesto");
+        var titulo = n.querySelector(".nodo__nombre").textContent;
+        document.querySelector(".inspector__titulo").textContent = titulo;
+        soplar("Mostrando el detalle de: " + titulo);
+      });
+    });
+
+    document.addEventListener("click", function (e) {
+      var salto = e.target.getAttribute && e.target.getAttribute("data-plano-ir");
+      if (salto) { ver(salto); return; }
+      var obrar = e.target.getAttribute && e.target.getAttribute("data-obrar");
+      if (!obrar) { return; }
+      if (obrar === "reintentar-historia") { pedirHistoria(); return; }
+      if (obrar === "guardar") { soplar("Proceso guardado. Listo para la proxima ejecucion."); return; }
+      if (obrar === "aplicar") { soplar("Cambios aplicados a la tarea."); return; }
+      if (obrar === "quitar") { soplar("Quitar una tarea pide confirmacion: las siguientes dependen de su salida."); return; }
+      if (obrar === "refrescar") { soplar("Actualizado hace un instante."); return; }
+      if (obrar === "detener") { soplar("Se detendra al terminar la tarea en curso, no a mitad."); return; }
+      if (obrar === "a-cuarentena") { soplar("2 filas a cuarentena. El proceso sigue con las 9.938 restantes."); return; }
+      if (obrar === "reanudar") { soplar("Reanudando desde la tarea 3 con lo que ya hay en staging."); return; }
+      if (obrar === "ajustar-pagina") { ver("taller"); soplar("Abre \"Armar mensaje\": bajar el tamano de pagina reparte mejor la memoria."); return; }
+      if (obrar === "ver-cadena") { ver("taller"); soplar("Cadena resaltada: 3 tareas dependen de \"Armar mensaje\"."); return; }
+      if (obrar === "desde-plantilla") { soplar("Elige un proceso existente para copiar su cadena de tareas."); return; }
+    });
+  })();
+</script>
+
+</body>
+</html>

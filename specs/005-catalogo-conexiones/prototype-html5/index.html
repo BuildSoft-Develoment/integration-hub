@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Conexiones y credenciales — Integration Hub</title>
+<style>
+  :root {
+    --acero: #263238;
+    --acero-claro: #546e7a;
+    --bruma: #eceff1;
+    --nieve: #ffffff;
+    --linde: #cfd8dc;
+    --turquesa: #00695c;
+    --turquesa-halo: #e0f2f1;
+    --bronce: #8d6e63;
+    --bronce-halo: #efebe9;
+    --cereza: #ad1457;
+    --cereza-halo: #fce4ec;
+    --lavanda: #4527a0;
+    --lavanda-halo: #ede7f6;
+    --ambar-fuerte: #ef6c00;
+    --ambar-halo: #fff3e0;
+    --canton: 12px;
+    --alzado: 0 1px 2px rgba(38,50,56,.08), 0 8px 20px rgba(38,50,56,.07);
+    --cifrado: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bruma); color:var(--acero); font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+
+  .alero { display:flex; align-items:center; gap:1rem; padding:.85rem 1.4rem; background:var(--acero); color:#eceff1; }
+  .alero__firma { font-weight:700; }
+  .alero__seccion { color:#b0bec5; font-size:.85rem; }
+  .alero__vano { flex:1; }
+  .alero__atras { color:#b0bec5; font-size:.82rem; text-decoration:none; }
+  .alero__atras:hover { color:#80cbc4; }
+
+  .persianas { display:flex; gap:.4rem; padding:.55rem 1.4rem; background:var(--nieve); border-bottom:1px solid var(--linde); overflow-x:auto; }
+  .persianas button {
+    padding:.4rem .85rem; border:0; border-radius:7px 7px 0 0;
+    background:transparent; color:var(--acero-claro); font:inherit; font-size:.86rem;
+    cursor:pointer; white-space:nowrap; border-bottom:3px solid transparent;
+  }
+  .persianas button:hover { background:var(--bruma); color:var(--acero); }
+  .persianas button[aria-current="page"] { background:var(--turquesa-halo); color:var(--turquesa); border-bottom-color:var(--turquesa); font-weight:600; }
+
+  .patio { max-width:1180px; margin:0 auto; padding:1.4rem; }
+  .estancia[hidden] { display:none; }
+
+  .letrero { margin:0 0 .2rem; font-size:1.34rem; letter-spacing:-.012em; }
+  .glosa { margin:0 0 1.2rem; color:var(--acero-claro); font-size:.89rem; max-width:66ch; }
+
+  .doble { display:grid; grid-template-columns:minmax(0,300px) minmax(0,1fr); gap:1rem; align-items:start; }
+
+  .listado { background:var(--nieve); border:1px solid var(--linde); border-radius:var(--canton); box-shadow:var(--alzado); overflow:hidden; }
+  .listado__cima { padding:.7rem .9rem; border-bottom:1px solid var(--linde); font-size:.86rem; font-weight:650; }
+  .renglon {
+    display:flex; align-items:center; gap:.6rem; width:100%; padding:.65rem .9rem;
+    border:0; border-bottom:1px solid var(--linde); background:transparent;
+    font:inherit; font-size:.86rem; text-align:left; cursor:pointer;
+  }
+  .renglon:hover { background:var(--bruma); }
+  .renglon[aria-current="true"] { background:var(--turquesa-halo); border-left:3px solid var(--turquesa); padding-left:calc(.9rem - 3px); }
+  .renglon__sigla {
+    width:32px; height:32px; border-radius:8px; flex:none;
+    display:grid; place-items:center; font-size:.72rem; font-weight:700; color:#fff;
+  }
+  .s-pg { background:var(--turquesa); } .s-my { background:var(--bronce); }
+  .s-mq { background:var(--lavanda); } .s-or { background:var(--cereza); }
+  .renglon__cuerpo { min-width:0; }
+  .renglon__nombre { font-weight:600; }
+  .renglon__pie { font-size:.76rem; color:var(--acero-claro); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .renglon__latido { width:9px; height:9px; border-radius:50%; flex:none; margin-left:auto; }
+  .l-bien { background:var(--turquesa); } .l-regular { background:var(--ambar-fuerte); } .l-mal { background:var(--cereza); }
+
+  .cuadro { background:var(--nieve); border:1px solid var(--linde); border-radius:var(--canton); box-shadow:var(--alzado); }
+  .cuadro__testera { display:flex; align-items:center; gap:.7rem; padding:.8rem 1rem; border-bottom:1px solid var(--linde); }
+  .cuadro__rotulo { margin:0; font-size:1rem; }
+  .cuadro__vano { flex:1; }
+  .cuadro__cuerpo { padding:1rem; }
+
+  .duo { display:grid; grid-template-columns:1fr 1fr; gap:0 1rem; }
+  .casilla { margin-bottom:.85rem; }
+  .casilla__nombre { display:block; font-size:.79rem; font-weight:600; margin-bottom:.24rem; }
+  .casilla input, .casilla select {
+    width:100%; padding:.48rem .62rem; border:1px solid var(--linde);
+    border-radius:8px; font:inherit; font-size:.87rem; background:var(--nieve);
+  }
+  .casilla input:focus, .casilla select:focus { outline:2px solid var(--turquesa); outline-offset:1px; border-color:var(--turquesa); }
+  .casilla small { display:block; color:var(--acero-claro); font-size:.77rem; margin-top:.2rem; }
+  .casilla input[readonly] { background:var(--bruma); color:var(--acero-claro); font-family:var(--cifrado); }
+
+  .tecla {
+    padding:.45rem .85rem; border:1px solid var(--linde); border-radius:8px;
+    background:var(--nieve); color:var(--acero); font:inherit; font-size:.85rem; cursor:pointer;
+  }
+  .tecla:hover { background:var(--bruma); }
+  .tecla--verde { background:var(--turquesa); border-color:var(--turquesa); color:#fff; }
+  .tecla--verde:hover { background:#004d40; }
+  .tecla--roja { background:var(--cereza); border-color:var(--cereza); color:#fff; }
+  .tecla:focus-visible { outline:2px solid var(--turquesa); outline-offset:2px; }
+  .tecla:disabled { opacity:.45; cursor:not-allowed; }
+
+  .cuadricula { width:100%; border-collapse:collapse; font-size:.85rem; }
+  .cuadricula th, .cuadricula td { padding:.48rem .6rem; border-bottom:1px solid var(--linde); text-align:left; white-space:nowrap; }
+  .cuadricula th { font-size:.71rem; text-transform:uppercase; letter-spacing:.06em; color:var(--acero-claro); background:#f7f9fa; }
+  .cuadricula td.der { text-align:right; font-variant-numeric:tabular-nums; }
+
+  .divisa { display:inline-block; padding:.12rem .48rem; border-radius:5px; font-size:.72rem; font-weight:600; }
+  .divisa--viva { background:var(--turquesa-halo); color:var(--turquesa); }
+  .divisa--lenta { background:var(--ambar-halo); color:var(--ambar-fuerte); }
+  .divisa--muerta { background:var(--cereza-halo); color:var(--cereza); }
+  .divisa--quieta { background:var(--lavanda-halo); color:var(--lavanda); }
+
+  .cartel { display:flex; gap:.6rem; padding:.75rem .95rem; border-radius:9px; font-size:.86rem; margin-bottom:1.1rem; border:1px solid; }
+  .cartel--bien { background:var(--turquesa-halo); border-color:#b2dfdb; color:var(--turquesa); }
+  .cartel--ojo { background:var(--ambar-halo); border-color:#ffe0b2; color:var(--ambar-fuerte); }
+  .cartel--mal { background:var(--cereza-halo); border-color:#f8bbd0; color:var(--cereza); }
+
+  .llano { text-align:center; padding:2.9rem 1rem; color:var(--acero-claro); }
+  .llano__icono { font-size:2.1rem; }
+  .llano__lema { color:var(--acero); font-weight:600; margin:.55rem 0 .3rem; }
+
+  .lonja { height:12px; border-radius:6px; margin-bottom:.6rem; background:linear-gradient(90deg,#dfe6e9 25%,#eef2f3 50%,#dfe6e9 75%); background-size:200% 100%; animation:vaiven2 1.4s infinite; }
+  @keyframes vaiven2 { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .lonja{animation:none} }
+
+  .terminal {
+    background:var(--acero); color:#b2dfdb; border-radius:9px; padding:.85rem 1rem;
+    font-family:var(--cifrado); font-size:.79rem; line-height:1.75; overflow-x:auto;
+  }
+  .terminal .ok { color:#4db6ac; } .terminal .no { color:#f48fb1; } .terminal .t { color:#78909c; }
+
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:1.3rem; z-index:40;
+    background:var(--acero); color:#eceff1; padding:.65rem 1.05rem; border-radius:999px;
+    font-size:.85rem; box-shadow:0 12px 30px rgba(38,50,56,.3); }
+  .toast[hidden] { display:none; }
+
+  @media (max-width:900px) {
+    .doble { grid-template-columns:1fr; }
+    .duo { grid-template-columns:1fr; }
+    .patio { padding:1rem; }
+    .alero { padding:.7rem 1rem; }
+    .persianas { padding:.5rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="alero">
+  <span class="alero__firma">Integration Hub</span>
+  <span class="alero__seccion">Conexiones y credenciales</span>
+  <span class="alero__vano"></span>
+  <a class="alero__atras" data-hub-link href="../../../prototype/index.html">← Volver al hub</a>
+</header>
+
+<nav class="persianas" aria-label="Secciones de conexiones">
+  <button data-estancia="catalogo" aria-current="page">Conexiones</button>
+  <button data-estancia="salud">Prueba de salud</button>
+  <button data-estancia="secretos">Donde viven las claves</button>
+  <button data-estancia="uso">Quien la usa</button>
+  <button data-estancia="rotacion">Rotacion de credenciales</button>
+  <button data-estancia="ninguna">Sin conexiones</button>
+</nav>
+
+<div id="susurro" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="patio">
+
+  <!-- CATALOGO -->
+  <section class="estancia" id="estancia-catalogo">
+    <h1 class="letrero">Conexiones</h1>
+    <p class="glosa">A donde se conecta el Hub para leer o escribir datos. La clave nunca se guarda aqui: se guarda su nombre.</p>
+
+    <div class="cartel cartel--ojo">
+      <span><strong>Una credencial caduca en 6 dias.</strong> La del almacen de mensajeria.
+      Renovarla despues de que caduque significa procesos parados a las tres de la manana.</span>
+    </div>
+
+    <div class="doble">
+      <div class="listado">
+        <div class="listado__cima">5 conexiones</div>
+        <button class="renglon" aria-current="true" data-elegir="Base principal">
+          <span class="renglon__sigla s-pg">PG</span>
+          <span class="renglon__cuerpo"><span class="renglon__nombre">Base principal</span>
+            <span class="renglon__pie">postgres · ih-core:5432</span></span>
+          <span class="renglon__latido l-bien"></span>
+        </button>
+        <button class="renglon" data-elegir="Almacen de mensajeria">
+          <span class="renglon__sigla s-mq">MQ</span>
+          <span class="renglon__cuerpo"><span class="renglon__nombre">Almacen de mensajeria</span>
+            <span class="renglon__pie">artemis · mq-interno:61616</span></span>
+          <span class="renglon__latido l-regular"></span>
+        </button>
+        <button class="renglon" data-elegir="Contabilidad heredada">
+          <span class="renglon__sigla s-or">OR</span>
+          <span class="renglon__cuerpo"><span class="renglon__nombre">Contabilidad heredada</span>
+            <span class="renglon__pie">oracle · conta-old:1521</span></span>
+          <span class="renglon__latido l-mal"></span>
+        </button>
+        <button class="renglon" data-elegir="Padron externo">
+          <span class="renglon__sigla s-my">MY</span>
+          <span class="renglon__cuerpo"><span class="renglon__nombre">Padron externo</span>
+            <span class="renglon__pie">mysql · padron.socio:3306</span></span>
+          <span class="renglon__latido l-bien"></span>
+        </button>
+        <button class="renglon" data-elegir="Archivo historico">
+          <span class="renglon__sigla s-pg">PG</span>
+          <span class="renglon__cuerpo"><span class="renglon__nombre">Archivo historico</span>
+            <span class="renglon__pie">postgres · ih-frio:5432</span></span>
+          <span class="renglon__latido l-bien"></span>
+        </button>
+      </div>
+
+      <div class="cuadro">
+        <div class="cuadro__testera">
+          <h2 class="cuadro__rotulo" id="elegida">Base principal</h2>
+          <span class="cuadro__vano"></span>
+          <span class="divisa divisa--viva">Responde</span>
+        </div>
+        <div class="cuadro__cuerpo">
+          <div class="duo">
+            <label class="casilla"><span class="casilla__nombre">Motor</span>
+              <select><option>PostgreSQL</option><option>MySQL</option><option>Oracle</option><option>SQL Server</option></select></label>
+            <label class="casilla"><span class="casilla__nombre">Servidor</span>
+              <input value="ih-core" /></label>
+            <label class="casilla"><span class="casilla__nombre">Puerto</span>
+              <input value="5432" /></label>
+            <label class="casilla"><span class="casilla__nombre">Base</span>
+              <input value="integration_hub" /></label>
+            <label class="casilla"><span class="casilla__nombre">Usuario</span>
+              <input value="ih_app" /></label>
+            <label class="casilla"><span class="casilla__nombre">Clave</span>
+              <input value="${secreto: base-principal/clave}" readonly />
+              <small>Esto es el NOMBRE de la clave, no la clave. Se resuelve al conectar.</small></label>
+          </div>
+          <div class="duo">
+            <label class="casilla"><span class="casilla__nombre">Conexiones simultaneas</span>
+              <input value="20" />
+              <small>Subirlo no acelera si el cuello esta en el disco del servidor.</small></label>
+            <label class="casilla"><span class="casilla__nombre">Espera maxima</span>
+              <input value="30 s" />
+              <small>Pasado ese tiempo la tarea falla en vez de quedarse colgada.</small></label>
+          </div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.3rem;">
+            <button class="tecla tecla--verde" data-hacer="probar">Probar la conexion</button>
+            <button class="tecla" data-hacer="guardar">Guardar</button>
+            <button class="tecla" data-estancia-ir="uso">Ver quien la usa</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SALUD -->
+  <section class="estancia" id="estancia-salud" hidden>
+    <h1 class="letrero">Prueba de salud</h1>
+    <p class="glosa">Se conecta de verdad y ejecuta una consulta trivial. Si falla, dice en que paso y con que mensaje del motor.</p>
+
+    <div id="salud-probando" hidden>
+      <div class="cuadro">
+        <div class="cuadro__testera"><h2 class="cuadro__rotulo">Cargando… conectando con el servidor</h2></div>
+        <div class="cuadro__cuerpo">
+          <div class="lonja" style="width:82%"></div><div class="lonja" style="width:66%"></div>
+          <div class="lonja" style="width:90%"></div>
+          <p style="font-size:.79rem;color:var(--acero-claro);margin:.6rem 0 0;">
+            La prueba abre una conexion real. En un servidor lento puede tardar varios segundos:
+            el tiempo que tarda aqui es el mismo que tardara un proceso de noche.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div id="salud-mal" hidden>
+      <div class="cartel cartel--mal"><span><strong>Error: no se pudo conectar con Contabilidad heredada.</strong> El servidor acepta la conexion pero rechaza al usuario.</span></div>
+      <div class="cuadro"><div class="cuadro__cuerpo">
+        <div class="terminal"><div><span class="t">11:02:14</span> resolviendo conta-old … <span class="ok">10.20.4.15</span></div>
+<div><span class="t">11:02:14</span> abriendo puerto 1521 … <span class="ok">abierto</span></div>
+<div><span class="t">11:02:15</span> autenticando ih_app … <span class="no">rechazado</span></div>
+<div><span class="t">11:02:15</span> <span class="no">ORA-28001: la contrasena ha caducado</span></div></div>
+        <div class="cartel cartel--ojo" style="margin:.9rem 0 0;">
+          <span>La clave caduco en el servidor, no en el Hub. Cambiarla aqui sin cambiarla alla no
+          arregla nada — y al reves, tampoco.</span>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="tecla tecla--verde" data-estancia-ir="rotacion">Ir a rotacion de credenciales</button>
+          <button class="tecla" data-hacer="probar">Reintentar</button>
+        </div>
+      </div></div>
+    </div>
+
+    <div id="salud-bien" hidden>
+      <div class="cartel cartel--bien"><span><strong>Todo listo: la conexion responde.</strong> Consulta de prueba en 12 ms.</span></div>
+      <div class="cuadro"><div class="cuadro__cuerpo">
+        <table class="cuadricula">
+          <thead><tr><th>Comprobacion</th><th>Resultado</th><th class="der">Tiempo</th></tr></thead>
+          <tbody>
+            <tr><td>Resolver el nombre del servidor</td><td><span class="divisa divisa--viva">Correcta</span></td><td class="der">3 ms</td></tr>
+            <tr><td>Abrir el puerto</td><td><span class="divisa divisa--viva">Correcta</span></td><td class="der">5 ms</td></tr>
+            <tr><td>Autenticar</td><td><span class="divisa divisa--viva">Correcta</span></td><td class="der">18 ms</td></tr>
+            <tr><td>Consulta trivial</td><td><span class="divisa divisa--viva">Correcta</span></td><td class="der">12 ms</td></tr>
+            <tr><td>Permiso de escritura</td><td><span class="divisa divisa--viva">Correcta</span></td><td class="der">9 ms</td></tr>
+            <tr><td>Version del motor</td><td>PostgreSQL 16.2</td><td class="der">—</td></tr>
+          </tbody>
+        </table>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- SECRETOS -->
+  <section class="estancia" id="estancia-secretos" hidden>
+    <h1 class="letrero">Donde viven las claves</h1>
+    <p class="glosa">Ninguna clave se guarda en la definicion de la conexion. Aqui se ve de donde sale cada una.</p>
+
+    <div class="cartel cartel--bien">
+      <span><strong>Una definicion sin claves se puede exportar, versionar y revisar.</strong>
+      Es la razon de fondo: si la clave viviera dentro, copiar una conexion a otro entorno la
+      llevaria consigo.</span>
+    </div>
+
+    <div class="cuadro">
+      <div class="cuadro__testera"><h2 class="cuadro__rotulo">Referencias en uso</h2></div>
+      <div class="cuadro__cuerpo" style="overflow-x:auto;">
+        <table class="cuadricula">
+          <thead><tr><th>Referencia</th><th>Conexion</th><th>Almacen</th><th>Caduca</th><th>Situacion</th></tr></thead>
+          <tbody>
+            <tr><td style="font-family:var(--cifrado);font-size:.8rem;">base-principal/clave</td><td>Base principal</td><td>boveda interna</td><td>en 88 dias</td><td><span class="divisa divisa--viva">Vigente</span></td></tr>
+            <tr><td style="font-family:var(--cifrado);font-size:.8rem;">mensajeria/clave</td><td>Almacen de mensajeria</td><td>boveda interna</td><td>en 6 dias</td><td><span class="divisa divisa--lenta">Por caducar</span></td></tr>
+            <tr><td style="font-family:var(--cifrado);font-size:.8rem;">conta-old/clave</td><td>Contabilidad heredada</td><td>boveda interna</td><td>caducada</td><td><span class="divisa divisa--muerta">Caducada</span></td></tr>
+            <tr><td style="font-family:var(--cifrado);font-size:.8rem;">padron/clave</td><td>Padron externo</td><td>del proveedor</td><td>en 41 dias</td><td><span class="divisa divisa--viva">Vigente</span></td></tr>
+            <tr><td style="font-family:var(--cifrado);font-size:.8rem;">frio/clave</td><td>Archivo historico</td><td>boveda interna</td><td>en 120 dias</td><td><span class="divisa divisa--viva">Vigente</span></td></tr>
+            <tr><td style="font-family:var(--cifrado);font-size:.8rem;">banco/huella-ssh</td><td>—</td><td>boveda interna</td><td>sin caducidad</td><td><span class="divisa divisa--quieta">Sin usar</span></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.79rem;color:var(--acero-claro);margin:.8rem 0 0;max-width:64ch;">
+          La ultima referencia no la usa nadie. Puede ser un resto de una prueba, o puede ser que
+          alguien la vaya a necesitar el mes que viene: por eso se marca en vez de borrarse sola.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- USO -->
+  <section class="estancia" id="estancia-uso" hidden>
+    <h1 class="letrero">Quien la usa</h1>
+    <p class="glosa">Antes de tocar una conexion conviene saber que se para si se equivoca uno.</p>
+
+    <div class="cartel cartel--ojo">
+      <span><strong>La base principal la usan 5 procesos y 3 tareas sueltas.</strong>
+      Cambiar su servidor sin coordinar deja todo eso sin destino en la proxima ejecucion.</span>
+    </div>
+
+    <div class="cuadro">
+      <div class="cuadro__testera"><h2 class="cuadro__rotulo">Dependencias de "Base principal"</h2></div>
+      <div class="cuadro__cuerpo" style="overflow-x:auto;">
+        <table class="cuadricula">
+          <thead><tr><th>Quien</th><th>Para que</th><th>Cuando corre</th><th>Si falla</th></tr></thead>
+          <tbody>
+            <tr><td>Nomina mensual</td><td>guardar filas y archivar</td><td>diario 03:00</td><td>el proceso entero se detiene</td></tr>
+            <tr><td>Confirmaciones del banco</td><td>conciliar</td><td>diario 06:00</td><td>quedan pagos sin conciliar</td></tr>
+            <tr><td>Guias de transporte</td><td>guardar filas</td><td>diario 05:30</td><td>el proceso se detiene</td></tr>
+            <tr><td>Inventario diario</td><td>guardar filas</td><td>diario 04:00</td><td>el proceso se detiene</td></tr>
+            <tr><td>Extracto contable</td><td>guardar filas</td><td>diario 03:15</td><td>el proceso se detiene</td></tr>
+            <tr><td>Consulta de auditoria</td><td>leer sucesos</td><td>bajo demanda</td><td>las pantallas no cargan</td></tr>
+            <tr><td>Panel de pagos</td><td>leer estado</td><td>bajo demanda</td><td>las pantallas no cargan</td></tr>
+            <tr><td>Volcado de auditoria</td><td>escribir sucesos</td><td>continuo</td><td>la cola crece, nada se pierde</td></tr>
+          </tbody>
+        </table>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="tecla" data-estancia-ir="catalogo">Volver a la conexion</button>
+          <button class="tecla tecla--roja" data-hacer="desactivar">Desactivar la conexion</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROTACION -->
+  <section class="estancia" id="estancia-rotacion" hidden>
+    <h1 class="letrero">Rotacion de credenciales</h1>
+    <p class="glosa">Cambiar una clave sin parar los procesos exige un orden. Este es.</p>
+
+    <div class="cuadro" style="margin-bottom:1rem;">
+      <div class="cuadro__testera"><h2 class="cuadro__rotulo">El orden que funciona</h2></div>
+      <div class="cuadro__cuerpo">
+        <table class="cuadricula">
+          <thead><tr><th class="der">Paso</th><th>Que se hace</th><th>Donde</th><th>Si se salta</th></tr></thead>
+          <tbody>
+            <tr><td class="der">1</td><td>Crear la clave nueva sin borrar la vieja</td><td>servidor de destino</td><td>corte inmediato</td></tr>
+            <tr><td class="der">2</td><td>Guardar la nueva en la boveda con el mismo nombre</td><td>boveda</td><td>el Hub sigue usando la vieja</td></tr>
+            <tr><td class="der">3</td><td>Probar la conexion desde aqui</td><td>Hub</td><td>se descubre el fallo de noche</td></tr>
+            <tr><td class="der">4</td><td>Esperar a que no haya procesos en curso</td><td>—</td><td>una tarea a medias se cae</td></tr>
+            <tr><td class="der">5</td><td>Retirar la clave vieja</td><td>servidor de destino</td><td>queda una puerta abierta</td></tr>
+          </tbody>
+        </table>
+        <div class="cartel cartel--ojo" style="margin:.9rem 0 0;">
+          <span>El paso 4 es el que mas se salta. Un cambio de clave a mitad de la nomina no
+          rompe lo ya hecho, pero deja la corrida a medias y hay que reanudarla a mano.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cuadro">
+      <div class="cuadro__testera"><h2 class="cuadro__rotulo">Rotar "conta-old/clave"</h2><span class="cuadro__vano"></span>
+        <span class="divisa divisa--muerta">Caducada</span></div>
+      <div class="cuadro__cuerpo">
+        <div class="duo">
+          <label class="casilla"><span class="casilla__nombre">Referencia</span>
+            <input value="conta-old/clave" readonly /></label>
+          <label class="casilla"><span class="casilla__nombre">Clave nueva</span>
+            <input type="password" value="••••••••••" />
+            <small>Se guarda en la boveda; no queda en esta pantalla ni en los registros.</small></label>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+          <button class="tecla tecla--verde" data-hacer="guardar-clave">Guardar en la boveda</button>
+          <button class="tecla" data-hacer="probar">Probar antes de guardar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NINGUNA -->
+  <section class="estancia" id="estancia-ninguna" hidden>
+    <h1 class="letrero">Sin conexiones</h1>
+    <p class="glosa">Lo que se ve al empezar de cero, o cuando un filtro no encuentra nada.</p>
+    <div class="cuadro">
+      <div class="llano">
+        <div class="llano__icono">🔌</div>
+        <div class="llano__lema">Sin coincidencias</div>
+        <p style="margin:.2rem 0 .4rem;">No hay ninguna conexion que encaje con el filtro actual.</p>
+        <p style="margin:0 0 1.2rem;font-size:.83rem;">Si es un entorno nuevo, empieza por la base principal: casi todo lo demas depende de ella.</p>
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;">
+          <button class="tecla tecla--verde" data-hacer="crear">Crear la primera conexion</button>
+          <button class="tecla" data-hacer="limpiar">Quitar filtros</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var estancias = document.querySelectorAll(".estancia");
+    var persianas = document.querySelectorAll(".persianas button");
+
+    function entrar(nombre) {
+      estancias.forEach(function (e) { e.hidden = e.id !== "estancia-" + nombre; });
+      persianas.forEach(function (b) {
+        if (b.dataset.estancia === nombre) { b.setAttribute("aria-current", "page"); }
+        else { b.removeAttribute("aria-current"); }
+      });
+      if (nombre === "salud") { probarSalud(); }
+      window.scrollTo(0, 0);
+    }
+    persianas.forEach(function (b) { b.addEventListener("click", function () { entrar(b.dataset.estancia); }); });
+
+    // La prueba recorre sus desenlaces: conectando, con clave caducada, y correcta.
+    var vez = 0;
+    function probarSalud() {
+      var p = document.getElementById("salud-probando");
+      var m = document.getElementById("salud-mal");
+      var b = document.getElementById("salud-bien");
+      p.hidden = false; m.hidden = true; b.hidden = true;
+      setTimeout(function () {
+        p.hidden = true;
+        if (vez % 2 === 0) { m.hidden = false; } else { b.hidden = false; }
+        vez += 1;
+      }, 1400);
+    }
+
+    var plazo = null;
+    function susurrar(texto) {
+      var s = document.getElementById("susurro");
+      s.textContent = texto; s.hidden = false;
+      clearTimeout(plazo);
+      plazo = setTimeout(function () { s.hidden = true; }, 3000);
+    }
+
+    // Elegir una conexion del listado cambia el detalle: es el gesto central de esta pantalla.
+    document.querySelectorAll(".renglon").forEach(function (r) {
+      r.addEventListener("click", function () {
+        document.querySelectorAll(".renglon").forEach(function (o) { o.removeAttribute("aria-current"); });
+        r.setAttribute("aria-current", "true");
+        document.getElementById("elegida").textContent = r.dataset.elegir;
+        susurrar("Mostrando: " + r.dataset.elegir);
+      });
+    });
+
+    document.addEventListener("click", function (e) {
+      var ir = e.target.getAttribute && e.target.getAttribute("data-estancia-ir");
+      if (ir) { entrar(ir); return; }
+      var hacer = e.target.getAttribute && e.target.getAttribute("data-hacer");
+      if (!hacer) { return; }
+      if (hacer === "probar") { entrar("salud"); return; }
+      if (hacer === "guardar") { susurrar("Conexion guardada. La clave sigue en la boveda."); return; }
+      if (hacer === "guardar-clave") { susurrar("Clave guardada. Prueba la conexion antes de retirar la vieja."); return; }
+      if (hacer === "desactivar") { susurrar("Desactivar pide confirmacion: 8 dependencias se quedarian sin destino."); return; }
+      if (hacer === "crear") { susurrar("Empieza por el motor y el servidor; la clave se pide despues."); return; }
+      if (hacer === "limpiar") { susurrar("Filtros quitados."); return; }
+    });
+  })();
+</script>
+
+</body>
+</html>

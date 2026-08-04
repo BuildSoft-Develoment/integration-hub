@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Programacion de procesos — Integration Hub</title>
+<style>
+  :root {
+    --grafito-hondo: #1f2933;
+    --grafito-suave: #616e7c;
+    --lino: #f7f5f2;
+    --lino-alto: #ffffff;
+    --cerco: #dcd7d0;
+    --indigo-fuerte: #3730a3;
+    --indigo-suave: #eceafd;
+    --pino: #14532d;
+    --pino-suave: #e7f4ec;
+    --calabaza: #9a3412;
+    --calabaza-suave: #fdf0e7;
+    --vino: #881337;
+    --vino-suave: #fdeef2;
+    --arco: 11px;
+    --realce: 0 1px 2px rgba(31,41,51,.07), 0 9px 22px rgba(31,41,51,.06);
+    --digitos: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--lino); color:var(--grafito-hondo); font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+
+  .dintel { display:flex; align-items:center; gap:1rem; padding:.9rem 1.5rem .4rem; }
+  .dintel__sello { font-weight:700; }
+  .dintel__zona { color:var(--grafito-suave); font-size:.85rem; }
+  .dintel__fuga { flex:1; }
+  .dintel__salir { color:var(--grafito-suave); font-size:.82rem; text-decoration:none; }
+  .dintel__salir:hover { color:var(--indigo-fuerte); }
+
+  .cintillo { display:flex; gap:.9rem; padding:0 1.5rem; border-bottom:1px solid var(--cerco); overflow-x:auto; }
+  .cintillo button {
+    padding:.55rem .2rem .6rem; border:0; background:none; cursor:pointer;
+    font:inherit; font-size:.87rem; color:var(--grafito-suave);
+    border-bottom:2px solid transparent; white-space:nowrap;
+  }
+  .cintillo button:hover { color:var(--grafito-hondo); }
+  .cintillo button[aria-current="page"] { color:var(--indigo-fuerte); border-bottom-color:var(--indigo-fuerte); font-weight:600; }
+
+  .recinto { max-width:1150px; margin:0 auto; padding:1.5rem; }
+  .tabla-vista[hidden] { display:none; }
+
+  .epigrafe { margin:0 0 .2rem; font-size:1.35rem; letter-spacing:-.012em; }
+  .apostilla { margin:0 0 1.25rem; color:var(--grafito-suave); font-size:.89rem; max-width:66ch; }
+
+  .agenda { display:grid; gap:.55rem; }
+  .cita {
+    display:grid; grid-template-columns:5.5rem minmax(0,1fr) auto; gap:.9rem; align-items:center;
+    background:var(--lino-alto); border:1px solid var(--cerco); border-left:4px solid var(--indigo-fuerte);
+    border-radius:var(--arco); padding:.7rem .9rem; box-shadow:var(--realce);
+  }
+  .cita--pronto { border-left-color:var(--calabaza); }
+  .cita--pasada { border-left-color:var(--cerco); opacity:.72; }
+  .cita__hora { font-family:var(--digitos); font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .cita__cuando { font-size:.73rem; color:var(--grafito-suave); }
+  .cita__que { font-weight:650; font-size:.93rem; }
+  .cita__nota { font-size:.79rem; color:var(--grafito-suave); }
+
+  .mes { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; background:var(--cerco); border:1px solid var(--cerco); border-radius:var(--arco); overflow:hidden; }
+  .mes__dia-nombre { background:var(--lino-alto); padding:.4rem; text-align:center; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--grafito-suave); }
+  .celda { background:var(--lino-alto); min-height:76px; padding:.35rem .4rem; }
+  .celda--fuera { background:#faf8f6; color:#b8b0a6; }
+  .celda--hoy { background:var(--indigo-suave); }
+  .celda__num { font-size:.76rem; font-variant-numeric:tabular-nums; color:var(--grafito-suave); }
+  .celda--hoy .celda__num { color:var(--indigo-fuerte); font-weight:700; }
+  .pica { display:block; font-size:.68rem; padding:.1rem .28rem; border-radius:4px; margin-top:.18rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pica--ok { background:var(--pino-suave); color:var(--pino); }
+  .pica--ojo { background:var(--calabaza-suave); color:var(--calabaza); }
+  .pica--mal { background:var(--vino-suave); color:var(--vino); }
+
+  .tarjeton { background:var(--lino-alto); border:1px solid var(--cerco); border-radius:var(--arco); box-shadow:var(--realce); margin-bottom:1.1rem; }
+  .tarjeton__frente { display:flex; align-items:center; gap:.7rem; padding:.75rem 1rem; border-bottom:1px solid var(--cerco); }
+  .tarjeton__mote { margin:0; font-size:.97rem; }
+  .tarjeton__fuga { flex:1; }
+  .tarjeton__hondo { padding:1rem; }
+
+  .rejon { width:100%; border-collapse:collapse; font-size:.85rem; }
+  .rejon th, .rejon td { padding:.48rem .6rem; border-bottom:1px solid var(--cerco); text-align:left; white-space:nowrap; }
+  .rejon th { font-size:.71rem; text-transform:uppercase; letter-spacing:.06em; color:var(--grafito-suave); background:#faf8f6; }
+  .rejon td.der { text-align:right; font-variant-numeric:tabular-nums; }
+
+  .sello { display:inline-block; padding:.12rem .48rem; border-radius:5px; font-size:.72rem; font-weight:600; }
+  .sello--activo { background:var(--pino-suave); color:var(--pino); }
+  .sello--pausa { background:var(--calabaza-suave); color:var(--calabaza); }
+  .sello--roto { background:var(--vino-suave); color:var(--vino); }
+  .sello--nunca { background:var(--indigo-suave); color:var(--indigo-fuerte); }
+
+  .boton {
+    padding:.45rem .85rem; border:1px solid var(--cerco); border-radius:8px;
+    background:var(--lino-alto); color:var(--grafito-hondo); font:inherit; font-size:.85rem; cursor:pointer;
+  }
+  .boton:hover { background:#f2efeb; }
+  .boton--indigo { background:var(--indigo-fuerte); border-color:var(--indigo-fuerte); color:#fff; }
+  .boton--indigo:hover { background:#2c2585; }
+  .boton:focus-visible { outline:2px solid var(--indigo-fuerte); outline-offset:2px; }
+  .boton:disabled { opacity:.45; cursor:not-allowed; }
+
+  .campo { margin-bottom:.85rem; }
+  .campo__rotulo { display:block; font-size:.79rem; font-weight:600; margin-bottom:.24rem; }
+  .campo input, .campo select {
+    width:100%; padding:.48rem .62rem; border:1px solid var(--cerco);
+    border-radius:8px; font:inherit; font-size:.87rem; background:var(--lino-alto);
+  }
+  .campo input:focus, .campo select:focus { outline:2px solid var(--indigo-fuerte); outline-offset:1px; }
+  .campo small { display:block; color:var(--grafito-suave); font-size:.77rem; margin-top:.2rem; }
+  .trio { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:0 1rem; }
+
+  .listel { display:flex; gap:.6rem; padding:.72rem .95rem; border-radius:9px; font-size:.86rem; margin-bottom:1.1rem; border:1px solid; }
+  .listel--verde { background:var(--pino-suave); border-color:#c3e4d0; color:var(--pino); }
+  .listel--naranja { background:var(--calabaza-suave); border-color:#f3d7c1; color:var(--calabaza); }
+  .listel--vino { background:var(--vino-suave); border-color:#f5c9d5; color:var(--vino); }
+
+  .baldio { text-align:center; padding:2.9rem 1rem; color:var(--grafito-suave); }
+  .baldio__glifo { font-size:2.1rem; }
+  .baldio__voz { color:var(--grafito-hondo); font-weight:600; margin:.55rem 0 .3rem; }
+
+  .tira-carga { height:12px; border-radius:6px; margin-bottom:.6rem; background:linear-gradient(90deg,#eae5df 25%,#f5f2ee 50%,#eae5df 75%); background-size:200% 100%; animation:pasar 1.4s infinite; }
+  @keyframes pasar { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .tira-carga{animation:none} }
+
+  .toast { position:fixed; right:1.3rem; bottom:1.3rem; z-index:40; max-width:24rem;
+    background:var(--grafito-hondo); color:#f4f2ef; padding:.68rem 1rem; border-radius:9px;
+    font-size:.85rem; box-shadow:0 12px 30px rgba(31,41,51,.3); }
+  .toast[hidden] { display:none; }
+
+  @media (max-width:820px) {
+    .recinto { padding:1rem; }
+    .dintel { padding:.75rem 1rem .3rem; }
+    .cintillo { padding:0 1rem; }
+    .cita { grid-template-columns:4.6rem minmax(0,1fr); }
+    .cita > :last-child { grid-column:1 / -1; }
+    .celda { min-height:58px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="dintel">
+  <span class="dintel__sello">Integration Hub</span>
+  <span class="dintel__zona">Programacion de procesos</span>
+  <span class="dintel__fuga"></span>
+  <a class="dintel__salir" data-hub-link href="../../../prototype/index.html">← Volver al hub</a>
+</header>
+
+<nav class="cintillo" aria-label="Secciones de programacion">
+  <button data-tabla="agenda" aria-current="page">Lo que viene</button>
+  <button data-tabla="mes">Vista de mes</button>
+  <button data-tabla="pauta">Definir la pauta</button>
+  <button data-tabla="solapes">Solapes y colas</button>
+  <button data-tabla="saltadas">Ejecuciones saltadas</button>
+  <button data-tabla="ninguna">Sin programacion</button>
+</nav>
+
+<div id="aldabon" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="recinto">
+
+  <!-- AGENDA -->
+  <section class="tabla-vista" id="tabla-agenda">
+    <h1 class="epigrafe">Lo que viene</h1>
+    <p class="apostilla">Las proximas ejecuciones, en orden. Lo que va a pasar en las proximas horas importa mas que lo que paso ayer.</p>
+
+    <div class="listel listel--naranja">
+      <span><strong>Tres procesos arrancan entre las 03:00 y las 03:15.</strong>
+      Comparten la base principal, asi que van a competir. Separarlos veinte minutos suele bastar.</span>
+    </div>
+
+    <div class="agenda">
+      <div class="cita cita--pronto">
+        <div><div class="cita__hora">03:00</div><div class="cita__cuando">manana</div></div>
+        <div><div class="cita__que">Nomina mensual</div><div class="cita__nota">cada dia · dura unos 38 minutos</div></div>
+        <div><span class="sello sello--activo">Activa</span></div>
+      </div>
+      <div class="cita cita--pronto">
+        <div><div class="cita__hora">03:15</div><div class="cita__cuando">manana</div></div>
+        <div><div class="cita__que">Extracto contable</div><div class="cita__nota">cada dia · dura unos 4 minutos</div></div>
+        <div><span class="sello sello--roto">Fallo ayer</span></div>
+      </div>
+      <div class="cita">
+        <div><div class="cita__hora">04:00</div><div class="cita__cuando">manana</div></div>
+        <div><div class="cita__que">Inventario diario</div><div class="cita__nota">cada dia · dura unos 12 minutos</div></div>
+        <div><span class="sello sello--activo">Activa</span></div>
+      </div>
+      <div class="cita">
+        <div><div class="cita__hora">05:30</div><div class="cita__cuando">manana</div></div>
+        <div><div class="cita__que">Guias de transporte</div><div class="cita__nota">de lunes a viernes · dura unos 3 minutos</div></div>
+        <div><span class="sello sello--activo">Activa</span></div>
+      </div>
+      <div class="cita">
+        <div><div class="cita__hora">06:00</div><div class="cita__cuando">manana</div></div>
+        <div><div class="cita__que">Confirmaciones del banco</div><div class="cita__nota">cada dia · dura unos 9 minutos</div></div>
+        <div><span class="sello sello--activo">Activa</span></div>
+      </div>
+      <div class="cita">
+        <div><div class="cita__hora">02:00</div><div class="cita__cuando">sabado</div></div>
+        <div><div class="cita__que">Padron de clientes</div><div class="cita__nota">semanal, sabados · nunca se ejecuto</div></div>
+        <div><span class="sello sello--nunca">Sin estrenar</span></div>
+      </div>
+      <div class="cita cita--pasada">
+        <div><div class="cita__hora">10:14</div><div class="cita__cuando">hoy, en curso</div></div>
+        <div><div class="cita__que">Nomina mensual</div><div class="cita__nota">lanzada a mano · lleva 41 minutos</div></div>
+        <div><span class="sello sello--pausa">Corriendo</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MES -->
+  <section class="tabla-vista" id="tabla-mes" hidden>
+    <h1 class="epigrafe">Vista de mes</h1>
+    <p class="apostilla">Agosto. Sirve para ver los huecos: los dias sin ninguna marca son los que nadie mira hasta que falta un dato.</p>
+
+    <div class="tarjeton">
+      <div class="tarjeton__frente"><h2 class="tarjeton__mote">Agosto 2026</h2><span class="tarjeton__fuga"></span>
+        <button class="boton" data-obra="mes-anterior">Anterior</button>
+        <button class="boton" data-obra="mes-siguiente">Siguiente</button></div>
+      <div class="tarjeton__hondo">
+        <div class="mes">
+          <div class="mes__dia-nombre">Lun</div><div class="mes__dia-nombre">Mar</div><div class="mes__dia-nombre">Mie</div>
+          <div class="mes__dia-nombre">Jue</div><div class="mes__dia-nombre">Vie</div><div class="mes__dia-nombre">Sab</div><div class="mes__dia-nombre">Dom</div>
+
+          <div class="celda celda--fuera"><div class="celda__num">28</div></div>
+          <div class="celda celda--fuera"><div class="celda__num">29</div></div>
+          <div class="celda celda--fuera"><div class="celda__num">30</div><span class="pica pica--ok">5 corridas</span></div>
+          <div class="celda celda--fuera"><div class="celda__num">31</div><span class="pica pica--mal">1 sin archivo</span></div>
+          <div class="celda"><div class="celda__num">1</div><span class="pica pica--ok">5 corridas</span></div>
+          <div class="celda"><div class="celda__num">2</div><span class="pica pica--ojo">2 retenidas</span></div>
+          <div class="celda"><div class="celda__num">3</div><span class="pica pica--ok">5 corridas</span></div>
+
+          <div class="celda celda--hoy"><div class="celda__num">4</div><span class="pica pica--ojo">1 en curso</span><span class="pica pica--ok">4 hechas</span></div>
+          <div class="celda"><div class="celda__num">5</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">6</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">7</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">8</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">9</div><span class="pica pica--ok">4 previstas</span></div>
+          <div class="celda"><div class="celda__num">10</div><span class="pica pica--ok">4 previstas</span></div>
+
+          <div class="celda"><div class="celda__num">11</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">12</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">13</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">14</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">15</div><span class="pica pica--ojo">festivo</span></div>
+          <div class="celda"><div class="celda__num">16</div><span class="pica pica--ok">4 previstas</span></div>
+          <div class="celda"><div class="celda__num">17</div><span class="pica pica--ok">4 previstas</span></div>
+
+          <div class="celda"><div class="celda__num">18</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">19</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">20</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">21</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">22</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">23</div><span class="pica pica--ok">4 previstas</span></div>
+          <div class="celda"><div class="celda__num">24</div><span class="pica pica--ok">4 previstas</span></div>
+
+          <div class="celda"><div class="celda__num">25</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">26</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">27</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">28</div><span class="pica pica--ok">5 previstas</span></div>
+          <div class="celda"><div class="celda__num">29</div><span class="pica pica--ojo">cierre de mes</span></div>
+          <div class="celda"><div class="celda__num">30</div><span class="pica pica--ok">4 previstas</span></div>
+          <div class="celda"><div class="celda__num">31</div><span class="pica pica--ok">4 previstas</span></div>
+        </div>
+        <div class="listel listel--naranja" style="margin:1rem 0 0;">
+          <span>El 15 es festivo y ninguna pauta lo contempla: los cinco procesos van a intentar
+          leer archivos que nadie va a depositar. Se ve aqui, no en la incidencia del dia 16.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAUTA -->
+  <section class="tabla-vista" id="tabla-pauta" hidden>
+    <h1 class="epigrafe">Definir la pauta</h1>
+    <p class="apostilla">Cada cuanto corre un proceso, y que hacer cuando el momento llega y el anterior sigue trabajando.</p>
+
+    <div class="tarjeton">
+      <div class="tarjeton__frente"><h2 class="tarjeton__mote">Nomina mensual</h2><span class="tarjeton__fuga"></span>
+        <span class="sello sello--activo">Activa</span></div>
+      <div class="tarjeton__hondo">
+        <div class="trio">
+          <label class="campo"><span class="campo__rotulo">Frecuencia</span>
+            <select><option>Cada dia</option><option>De lunes a viernes</option><option>Cada semana</option><option>Cada hora</option></select></label>
+          <label class="campo"><span class="campo__rotulo">Hora</span>
+            <input value="03:00" />
+            <small>Hora del servidor, no la del navegador.</small></label>
+          <label class="campo"><span class="campo__rotulo">Si coincide con el anterior</span>
+            <select><option>Saltar esta vez</option><option>Encolar y esperar</option><option>Lanzar igualmente</option></select>
+            <small>"Lanzar igualmente" puede duplicar trabajo; solo para procesos que no escriben.</small></label>
+        </div>
+        <div class="trio">
+          <label class="campo"><span class="campo__rotulo">En dias festivos</span>
+            <select><option>Correr igual</option><option>Saltar</option><option>Mover al siguiente laborable</option></select></label>
+          <label class="campo"><span class="campo__rotulo">Si no hay archivo</span>
+            <select><option>Reintentar en 1 hora</option><option>Marcar como saltada</option><option>Fallar</option></select></label>
+          <label class="campo"><span class="campo__rotulo">Intentos maximos</span>
+            <input value="3" /></label>
+        </div>
+        <div class="listel listel--verde" style="margin:.3rem 0 .9rem;">
+          <span><strong>Todo listo: manana a las 03:00, y despues cada dia a la misma hora.</strong>
+          Se calcula al guardar y se ensena antes de confirmar — una expresion horaria mal escrita
+          no se descubre hasta que no corre nada durante una semana.</span>
+        </div>
+
+        <h3 style="margin:1.1rem 0 .5rem;font-size:.9rem;">Las proximas diez, con esta pauta</h3>
+        <table class="rejon">
+          <thead><tr><th>Cuando</th><th>Dia</th><th>Nota</th></tr></thead>
+          <tbody>
+            <tr><td>05 ago 03:00</td><td>miercoles</td><td>—</td></tr>
+            <tr><td>06 ago 03:00</td><td>jueves</td><td>—</td></tr>
+            <tr><td>07 ago 03:00</td><td>viernes</td><td>—</td></tr>
+            <tr><td>08 ago 03:00</td><td>sabado</td><td>—</td></tr>
+            <tr><td>09 ago 03:00</td><td>domingo</td><td>—</td></tr>
+            <tr><td>10 ago 03:00</td><td>lunes</td><td>—</td></tr>
+            <tr><td>11 ago 03:00</td><td>martes</td><td>—</td></tr>
+            <tr><td>12 ago 03:00</td><td>miercoles</td><td>—</td></tr>
+            <tr><td>13 ago 03:00</td><td>jueves</td><td>—</td></tr>
+            <tr><td>15 ago 03:00</td><td>sabado</td><td>festivo: correra igual con la pauta actual</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.78rem;color:var(--grafito-suave);margin:.6rem 0 1rem;max-width:62ch;">
+          Diez fechas concretas dicen mas que "cada dia a las tres". Aqui se ve, por ejemplo, que
+          el 14 falta — la pauta lo salta por una excepcion que alguien puso hace meses.
+        </p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+          <button class="boton boton--indigo" data-obra="guardar-pauta">Guardar la pauta</button>
+          <button class="boton" data-obra="pausar">Pausar</button>
+          <button class="boton" data-tabla-ir="solapes">Ver solapes</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SOLAPES -->
+  <section class="tabla-vista" id="tabla-solapes" hidden>
+    <h1 class="epigrafe">Solapes y colas</h1>
+    <p class="apostilla">Que pasa cuando llega la hora y el proceso anterior sigue corriendo. Es la decision que mas cuesta cuando ya paso.</p>
+
+    <div id="solapes-cargando" hidden>
+      <div class="tarjeton"><div class="tarjeton__hondo">
+        <div class="tira-carga" style="width:88%"></div><div class="tira-carga" style="width:70%"></div>
+        <div class="tira-carga" style="width:92%"></div>
+      </div></div>
+    </div>
+
+    <div id="solapes-hay" hidden>
+      <div class="listel listel--naranja"><span><strong>Un solape previsto manana.</strong> "Nomina mensual" dura 38 minutos de media y "Extracto contable" arranca a los 15.</span></div>
+      <div class="tarjeton">
+        <div class="tarjeton__frente"><h2 class="tarjeton__mote">Ventana de las 03:00</h2></div>
+        <div class="tarjeton__hondo" style="overflow-x:auto;">
+          <table class="rejon">
+            <thead><tr><th>Proceso</th><th class="der">Arranca</th><th class="der">Dura</th><th class="der">Acaba</th><th>Comparte</th><th>Si coincide</th></tr></thead>
+            <tbody>
+              <tr><td>Nomina mensual</td><td class="der">03:00</td><td class="der">38 m</td><td class="der">03:38</td><td>base principal</td><td>—</td></tr>
+              <tr><td>Extracto contable</td><td class="der">03:15</td><td class="der">4 m</td><td class="der">03:19</td><td>base principal</td><td><span class="sello sello--pausa">Encola</span></td></tr>
+              <tr><td>Inventario diario</td><td class="der">04:00</td><td class="der">12 m</td><td class="der">04:12</td><td>base principal</td><td>sin conflicto</td></tr>
+              <tr><td>Guias de transporte</td><td class="der">05:30</td><td class="der">3 m</td><td class="der">05:33</td><td>base principal</td><td>sin conflicto</td></tr>
+              <tr><td>Confirmaciones del banco</td><td class="der">06:00</td><td class="der">9 m</td><td class="der">06:09</td><td>base principal</td><td>sin conflicto</td></tr>
+            </tbody>
+          </table>
+          <p style="font-size:.79rem;color:var(--grafito-suave);margin:.8rem 0 0;max-width:64ch;">
+            "Encola" significa que el extracto esperara hasta las 03:38 y correra despues. No se
+            pierde, pero su resultado llega 23 minutos tarde: si alguien lo espera a las 03:30,
+            conviene saberlo antes.
+          </p>
+          <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+            <button class="boton boton--indigo" data-obra="separar">Mover el extracto a las 04:30</button>
+            <button class="boton" data-tabla-ir="pauta">Editar la pauta</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="solapes-roto" hidden>
+      <div class="listel listel--vino"><span><strong>Error: no se pudo calcular la agenda.</strong> El servicio de programacion no responde. Las pautas guardadas siguen vigentes.</span></div>
+      <div class="tarjeton"><div class="tarjeton__hondo">
+        <button class="boton boton--indigo" data-obra="reintentar-solapes">Reintentar</button>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- SALTADAS -->
+  <section class="tabla-vista" id="tabla-saltadas" hidden>
+    <h1 class="epigrafe">Ejecuciones saltadas</h1>
+    <p class="apostilla">Las que debieron correr y no corrieron. Una saltada silenciosa es peor que un fallo: el fallo avisa.</p>
+
+    <div class="tarjeton">
+      <div class="tarjeton__frente"><h2 class="tarjeton__mote">Ultimos 14 dias</h2></div>
+      <div class="tarjeton__hondo" style="overflow-x:auto;">
+        <table class="rejon">
+          <thead><tr><th>Cuando debio correr</th><th>Proceso</th><th>Por que no corrio</th><th>Que se hizo</th></tr></thead>
+          <tbody>
+            <tr><td>31 jul 03:00</td><td>Nomina mensual</td><td>el archivo no estaba</td><td>reintento a las 04:00, tampoco</td></tr>
+            <tr><td>31 jul 03:15</td><td>Extracto contable</td><td>clave del servidor caducada</td><td>sigue sin correr</td></tr>
+            <tr><td>28 jul 05:30</td><td>Guias de transporte</td><td>domingo, la pauta es de lunes a viernes</td><td>nada, es lo previsto</td></tr>
+            <tr><td>27 jul 05:30</td><td>Guias de transporte</td><td>sabado, la pauta es de lunes a viernes</td><td>nada, es lo previsto</td></tr>
+            <tr><td>25 jul 04:00</td><td>Inventario diario</td><td>el anterior seguia corriendo</td><td>encolada, corrio a las 04:26</td></tr>
+            <tr><td>22 jul 03:15</td><td>Extracto contable</td><td>el anterior seguia corriendo</td><td>encolada, corrio a las 03:41</td></tr>
+          </tbody>
+        </table>
+        <div class="listel listel--vino" style="margin:.9rem 0 0;">
+          <span>La del 31 de julio a las 03:15 lleva <strong>cuatro dias sin correr</strong> y nadie
+          lo ha mirado. Las saltadas por pauta (fin de semana) son normales; esta no.</span>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="boton boton--indigo" data-obra="lanzar-ahora">Lanzar el extracto ahora</button>
+          <button class="boton" data-obra="exportar">Exportar la lista</button>
+          <button class="boton" data-obra="avisar">Avisarme si vuelve a saltarse</button>
+        </div>
+        <p style="font-size:.79rem;color:var(--grafito-suave);margin:.8rem 0 0;max-width:64ch;">
+          Un aviso por saltada repetida es mas util que uno por cada fallo: los fallos se ven en
+          la agenda del dia siguiente, pero una saltada no aparece en ningun sitio salvo aqui, y
+          por eso lleva cuatro dias sin que nadie la mire.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- NINGUNA -->
+  <section class="tabla-vista" id="tabla-ninguna" hidden>
+    <h1 class="epigrafe">Sin programacion</h1>
+    <p class="apostilla">Un proceso sin pauta no corre solo. No es un error, pero conviene que sea a proposito.</p>
+    <div class="tarjeton">
+      <div class="baldio">
+        <div class="baldio__glifo">🗓</div>
+        <div class="baldio__voz">Sin coincidencias</div>
+        <p style="margin:.2rem 0 .4rem;">No hay ninguna ejecucion programada en el periodo elegido.</p>
+        <p style="margin:0 0 1.2rem;font-size:.83rem;">Los procesos existen y se pueden lanzar a mano; simplemente nadie les puso hora.</p>
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;">
+          <button class="boton boton--indigo" data-tabla-ir="pauta">Poner una pauta</button>
+          <button class="boton" data-obra="limpiar">Quitar filtros</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var vistas = document.querySelectorAll(".tabla-vista");
+    var solapas = document.querySelectorAll(".cintillo button");
+
+    function abrir(nombre) {
+      vistas.forEach(function (v) { v.hidden = v.id !== "tabla-" + nombre; });
+      solapas.forEach(function (b) {
+        if (b.dataset.tabla === nombre) { b.setAttribute("aria-current", "page"); }
+        else { b.removeAttribute("aria-current"); }
+      });
+      if (nombre === "solapes") { calcularSolapes(); }
+      window.scrollTo(0, 0);
+    }
+    solapas.forEach(function (b) { b.addEventListener("click", function () { abrir(b.dataset.tabla); }); });
+
+    // El calculo de solapes recorre sus desenlaces: cargando, con datos, y servicio caido.
+    var pase = 0;
+    function calcularSolapes() {
+      var c = document.getElementById("solapes-cargando");
+      var h = document.getElementById("solapes-hay");
+      var r = document.getElementById("solapes-roto");
+      c.hidden = false; h.hidden = true; r.hidden = true;
+      setTimeout(function () {
+        c.hidden = true;
+        if (pase % 3 === 2) { r.hidden = false; } else { h.hidden = false; }
+        pase += 1;
+      }, 1350);
+    }
+
+    var demora = null;
+    function llamar(texto) {
+      var a = document.getElementById("aldabon");
+      a.textContent = texto; a.hidden = false;
+      clearTimeout(demora);
+      demora = setTimeout(function () { a.hidden = true; }, 3200);
+    }
+
+    document.addEventListener("click", function (e) {
+      var ir = e.target.getAttribute && e.target.getAttribute("data-tabla-ir");
+      if (ir) { abrir(ir); return; }
+      var obra = e.target.getAttribute && e.target.getAttribute("data-obra");
+      if (!obra) { return; }
+      if (obra === "reintentar-solapes") { calcularSolapes(); return; }
+      if (obra === "guardar-pauta") { llamar("Pauta guardada. La proxima sera manana a las 03:00."); return; }
+      if (obra === "pausar") { llamar("Pausar no cancela lo que ya esta corriendo."); return; }
+      if (obra === "separar") { llamar("Extracto movido a las 04:30. Ya no coincide con la nomina."); return; }
+      if (obra === "lanzar-ahora") { llamar("Lanzar a mano no cambia la pauta: manana volvera a su hora."); return; }
+      if (obra === "avisar") { llamar("Aviso puesto: te llegara si vuelve a saltarse dos veces seguidas."); return; }
+      if (obra === "exportar") { llamar("Preparando la lista para descargar."); return; }
+      if (obra === "limpiar") { llamar("Filtros quitados."); return; }
+      if (obra === "mes-anterior") { llamar("Julio 2026."); return; }
+      if (obra === "mes-siguiente") { llamar("Septiembre 2026."); return; }
+    });
+  })();
+</script>
+
+</body>
+</html>

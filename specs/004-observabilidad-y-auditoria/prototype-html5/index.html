@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Auditoria y observabilidad — Integration Hub</title>
+<style>
+  :root {
+    --sepia-hondo: #2b2118;
+    --sepia-medio: #6b5b4a;
+    --pergamino: #faf7f2;
+    --pergamino-alto: #ffffff;
+    --filete: #e0d8cc;
+    --tinta-azul: #1e40af;
+    --tinta-azul-agua: #e7edfd;
+    --musgo: #3f6212;
+    --musgo-agua: #eff6e4;
+    --ladrillo: #b91c1c;
+    --ladrillo-agua: #fdeaea;
+    --mostaza: #a16207;
+    --mostaza-agua: #fdf7e5;
+    --redondez: 6px;
+    --sombra-papel: 0 1px 2px rgba(43,33,24,.06), 0 10px 24px rgba(43,33,24,.06);
+    --numeros: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--pergamino); color:var(--sepia-hondo); font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+
+  .friso { display:flex; align-items:baseline; gap:1rem; padding:1rem 1.6rem .5rem; }
+  .friso__casa { font-weight:700; font-size:1.02rem; }
+  .friso__area { color:var(--sepia-medio); font-size:.85rem; }
+  .friso__resto { flex:1; }
+  .friso__regreso { color:var(--sepia-medio); font-size:.82rem; text-decoration:none; }
+  .friso__regreso:hover { color:var(--tinta-azul); }
+
+  .indice { display:flex; gap:1.1rem; padding:0 1.6rem; border-bottom:1px solid var(--filete); overflow-x:auto; }
+  .indice button {
+    padding:.5rem 0 .55rem; border:0; background:none; cursor:pointer;
+    font:inherit; font-size:.87rem; color:var(--sepia-medio);
+    border-bottom:2px solid transparent; white-space:nowrap;
+  }
+  .indice button:hover { color:var(--sepia-hondo); }
+  .indice button[aria-current="page"] { color:var(--tinta-azul); border-bottom-color:var(--tinta-azul); font-weight:600; }
+
+  .pliego { max-width:1120px; margin:0 auto; padding:1.5rem 1.6rem 4rem; }
+  .hoja[hidden] { display:none; }
+
+  .titulillo { margin:0 0 .2rem; font-size:1.36rem; letter-spacing:-.012em; }
+  .subtitulillo { margin:0 0 1.3rem; color:var(--sepia-medio); font-size:.89rem; max-width:66ch; }
+
+  .medidores { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.9rem; margin-bottom:1.5rem; }
+  .medidor { background:var(--pergamino-alto); border:1px solid var(--filete); border-radius:var(--redondez); padding:.9rem 1rem; box-shadow:var(--sombra-papel); }
+  .medidor__que { font-size:.73rem; text-transform:uppercase; letter-spacing:.07em; color:var(--sepia-medio); }
+  .medidor__cuanto { font-size:clamp(1.2rem,3.2vw,1.75rem); font-weight:700; font-variant-numeric:tabular-nums; margin:.25rem 0 .1rem; }
+  .medidor__coleta { font-size:.77rem; color:var(--sepia-medio); }
+  .chispa { display:flex; align-items:flex-end; gap:2px; height:26px; margin-top:.5rem; }
+  .chispa span { flex:1; background:var(--tinta-azul-agua); border-radius:1px; }
+  .chispa span:last-child { background:var(--tinta-azul); }
+
+  .carpeta { background:var(--pergamino-alto); border:1px solid var(--filete); border-radius:var(--redondez); box-shadow:var(--sombra-papel); margin-bottom:1.2rem; }
+  .carpeta__solapa { display:flex; align-items:center; gap:.7rem; padding:.7rem 1rem; border-bottom:1px solid var(--filete); }
+  .carpeta__nombre { margin:0; font-size:.95rem; }
+  .carpeta__resto { flex:1; }
+  .carpeta__interior { padding:1rem; }
+
+  .buscador { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.2rem; }
+  .buscador input, .buscador select {
+    padding:.48rem .65rem; border:1px solid var(--filete); border-radius:var(--redondez);
+    font:inherit; font-size:.87rem; background:var(--pergamino-alto);
+  }
+  .buscador input { min-width:15rem; }
+  .buscador input:focus, .buscador select:focus { outline:2px solid var(--tinta-azul); outline-offset:1px; }
+
+  .pulsador {
+    padding:.45rem .85rem; border:1px solid var(--filete); border-radius:var(--redondez);
+    background:var(--pergamino-alto); color:var(--sepia-hondo); font:inherit; font-size:.85rem; cursor:pointer;
+  }
+  .pulsador:hover { background:#f4efe7; }
+  .pulsador--tinta { background:var(--tinta-azul); border-color:var(--tinta-azul); color:#fff; }
+  .pulsador--tinta:hover { background:#1b3a9c; }
+  .pulsador:focus-visible { outline:2px solid var(--tinta-azul); outline-offset:2px; }
+  .pulsador:disabled { opacity:.45; cursor:not-allowed; }
+
+  .registro { width:100%; border-collapse:collapse; font-size:.85rem; }
+  .registro th, .registro td { padding:.5rem .65rem; border-bottom:1px solid var(--filete); text-align:left; white-space:nowrap; }
+  .registro th { font-size:.71rem; text-transform:uppercase; letter-spacing:.06em; color:var(--sepia-medio); background:#faf6f0; }
+  .registro td.der { text-align:right; font-variant-numeric:tabular-nums; }
+  .registro tbody tr:hover { background:#faf7f2; }
+  .clave { font-family:var(--numeros); font-size:.81rem; }
+
+  .marca { display:inline-block; padding:.12rem .48rem; border-radius:4px; font-size:.72rem; font-weight:600; }
+  .marca--bien { background:var(--musgo-agua); color:var(--musgo); }
+  .marca--mal { background:var(--ladrillo-agua); color:var(--ladrillo); }
+  .marca--tibio { background:var(--mostaza-agua); color:var(--mostaza); }
+  .marca--frio { background:var(--tinta-azul-agua); color:var(--tinta-azul); }
+
+  .sucesos { list-style:none; margin:0; padding:0 0 0 1.5rem; border-left:2px solid var(--filete); }
+  .suceso { position:relative; padding:0 0 1.2rem .35rem; }
+  .suceso::before {
+    content:""; position:absolute; left:-1.92rem; top:.3rem;
+    width:12px; height:12px; border-radius:50%; background:var(--musgo); border:2px solid var(--pergamino-alto);
+  }
+  .suceso--tibio::before { background:var(--mostaza); }
+  .suceso--mal::before { background:var(--ladrillo); }
+  .suceso--futuro::before { background:var(--filete); }
+  .suceso__reloj { font-size:.75rem; color:var(--sepia-medio); font-variant-numeric:tabular-nums; }
+  .suceso__hecho { font-weight:650; font-size:.9rem; }
+  .suceso__resto { font-size:.83rem; color:var(--sepia-medio); }
+  .suceso__prueba { font-family:var(--numeros); font-size:.76rem; color:var(--sepia-medio); overflow-wrap:anywhere; }
+
+  .aviso { display:flex; gap:.6rem; padding:.7rem .95rem; border-radius:var(--redondez); font-size:.86rem; margin-bottom:1.1rem; border:1px solid; }
+  .aviso--verde { background:var(--musgo-agua); border-color:#cfe3b0; color:var(--musgo); }
+  .aviso--miel { background:var(--mostaza-agua); border-color:#ecdcaf; color:var(--mostaza); }
+  .aviso--rojo { background:var(--ladrillo-agua); border-color:#f2c7c7; color:var(--ladrillo); }
+
+  .paramo { text-align:center; padding:3rem 1rem; color:var(--sepia-medio); }
+  .paramo__simbolo { font-size:2.1rem; }
+  .paramo__dicho { color:var(--sepia-hondo); font-weight:600; margin:.6rem 0 .3rem; }
+
+  .hebra { height:12px; border-radius:6px; margin-bottom:.6rem; background:linear-gradient(90deg,#eee7dd 25%,#f7f2ea 50%,#eee7dd 75%); background-size:200% 100%; animation:deriva 1.4s infinite; }
+  @keyframes deriva { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .hebra{animation:none} }
+
+  .crudo-json {
+    background:#2b2118; color:#e8dfd2; border-radius:var(--redondez);
+    padding:.85rem 1rem; font-family:var(--numeros); font-size:.79rem; line-height:1.7; overflow-x:auto; white-space:pre;
+  }
+  .crudo-json .llave-j { color:#93c5fd; } .crudo-json .valor-j { color:#a7f3d0; }
+
+  .barras { display:grid; gap:.45rem; }
+  .barra { display:grid; grid-template-columns:11rem 1fr 4rem; gap:.6rem; align-items:center; font-size:.83rem; }
+  .barra__pista { background:#f0eae1; border-radius:3px; height:15px; overflow:hidden; }
+  .barra__relleno { height:100%; background:var(--tinta-azul); border-radius:3px; }
+  .barra__cifra { text-align:right; font-variant-numeric:tabular-nums; color:var(--sepia-medio); }
+
+  .toast { position:fixed; right:1.3rem; bottom:1.3rem; z-index:40; max-width:23rem;
+    background:var(--sepia-hondo); color:#f5efe6; padding:.65rem 1rem; border-radius:var(--redondez);
+    font-size:.85rem; box-shadow:0 12px 30px rgba(43,33,24,.3); }
+  .toast[hidden] { display:none; }
+
+  @media (max-width:820px) {
+    .pliego { padding:1.1rem 1rem 3rem; }
+    .friso { padding:.8rem 1rem .4rem; }
+    .indice { padding:0 1rem; }
+    .barra { grid-template-columns:7.5rem 1fr 3.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="friso">
+  <span class="friso__casa">Integration Hub</span>
+  <span class="friso__area">Auditoria y observabilidad</span>
+  <span class="friso__resto"></span>
+  <a class="friso__regreso" data-hub-link href="../../../prototype/index.html">← Volver al hub</a>
+</header>
+
+<nav class="indice" aria-label="Secciones de auditoria">
+  <button data-hoja="pulso" aria-current="page">Pulso del dia</button>
+  <button data-hoja="rastro">Rastro de un registro</button>
+  <button data-hoja="sucesos">Sucesos crudos</button>
+  <button data-hoja="cola">Cola de auditoria</button>
+  <button data-hoja="reparto">Reparto por causa</button>
+  <button data-hoja="retencion">Cuanto se guarda</button>
+  <button data-hoja="sinnada">Busqueda vacia</button>
+</nav>
+
+<div id="pregon" class="toast" role="status" aria-live="polite" hidden></div>
+
+<main class="pliego">
+
+  <!-- PULSO -->
+  <section class="hoja" id="hoja-pulso">
+    <h1 class="titulillo">Pulso del dia</h1>
+    <p class="subtitulillo">Lo que ha pasado hoy en el Hub. Si algo se sale de lo normal, se ve aqui antes de que alguien llame.</p>
+
+    <div class="medidores">
+      <div class="medidor">
+        <div class="medidor__que">Registros procesados</div>
+        <div class="medidor__cuanto">24 918</div>
+        <div class="medidor__coleta">en 6 procesos</div>
+        <div class="chispa"><span style="height:40%"></span><span style="height:55%"></span><span style="height:48%"></span><span style="height:70%"></span><span style="height:62%"></span><span style="height:88%"></span><span style="height:100%"></span></div>
+      </div>
+      <div class="medidor">
+        <div class="medidor__que">Retenidos</div>
+        <div class="medidor__cuanto" style="color:var(--mostaza)">7</div>
+        <div class="medidor__coleta">esperando correccion</div>
+        <div class="chispa"><span style="height:20%"></span><span style="height:12%"></span><span style="height:30%"></span><span style="height:18%"></span><span style="height:25%"></span><span style="height:40%"></span><span style="height:58%"></span></div>
+      </div>
+      <div class="medidor">
+        <div class="medidor__que">Cola de auditoria</div>
+        <div class="medidor__cuanto">15 948</div>
+        <div class="medidor__coleta">sucesos pendientes de volcar</div>
+        <div class="chispa"><span style="height:65%"></span><span style="height:70%"></span><span style="height:60%"></span><span style="height:80%"></span><span style="height:75%"></span><span style="height:90%"></span><span style="height:95%"></span></div>
+      </div>
+      <div class="medidor">
+        <div class="medidor__que">Tiempo del proceso mas lento</div>
+        <div class="medidor__cuanto">41 min</div>
+        <div class="medidor__coleta">Nomina mensual · lo normal son 37</div>
+        <div class="chispa"><span style="height:52%"></span><span style="height:50%"></span><span style="height:55%"></span><span style="height:100%"></span><span style="height:53%"></span><span style="height:51%"></span><span style="height:58%"></span></div>
+      </div>
+    </div>
+
+    <div class="aviso aviso--miel">
+      <span><strong>La cola de auditoria crece.</strong> Se estan generando sucesos mas rapido de lo
+      que se vuelcan. No se pierde nada — se guardan en disco — pero si sigue subiendo, las
+      consultas empezaran a ir con retraso.</span>
+    </div>
+
+    <div class="carpeta">
+      <div class="carpeta__solapa"><h2 class="carpeta__nombre">Ejecuciones de hoy</h2><span class="carpeta__resto"></span>
+        <button class="pulsador" data-obra="refrescar">Actualizar</button></div>
+      <div class="carpeta__interior" style="overflow-x:auto;">
+        <table class="registro">
+          <thead><tr><th>Proceso</th><th>Empezo</th><th class="der">Registros</th><th class="der">Duracion</th><th>Resultado</th></tr></thead>
+          <tbody>
+            <tr><td>Nomina mensual</td><td>10:14</td><td class="der">10 000</td><td class="der">41 m</td><td><span class="marca marca--frio">En curso</span></td></tr>
+            <tr><td>Confirmaciones del banco</td><td>06:10</td><td class="der">4 812</td><td class="der">9 m</td><td><span class="marca marca--bien">Terminada</span></td></tr>
+            <tr><td>Guias de transporte</td><td>05:30</td><td class="der">1 204</td><td class="der">3 m</td><td><span class="marca marca--tibio">2 retenidas</span></td></tr>
+            <tr><td>Inventario diario</td><td>04:00</td><td class="der">8 402</td><td class="der">12 m</td><td><span class="marca marca--bien">Terminada</span></td></tr>
+            <tr><td>Extracto contable</td><td>03:15</td><td class="der">0</td><td class="der">18 s</td><td><span class="marca marca--mal">Detenida</span></td></tr>
+            <tr><td>Padron de clientes</td><td>02:00</td><td class="der">500</td><td class="der">1 m</td><td><span class="marca marca--bien">Terminada</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- RASTRO -->
+  <section class="hoja" id="hoja-rastro" hidden>
+    <h1 class="titulillo">Rastro de un registro</h1>
+    <p class="subtitulillo">Todo lo que le paso a una fila concreta, desde el archivo hasta su ultimo estado. Es la pregunta que hace un auditor.</p>
+
+    <div class="buscador">
+      <input value="QB0417" aria-label="Referencia o documento" />
+      <select aria-label="Buscar por"><option>Referencia del mensaje</option><option>Documento</option><option>Numero de fila</option></select>
+      <button class="pulsador pulsador--tinta" data-obra="buscar-rastro">Buscar</button>
+    </div>
+
+    <div class="carpeta">
+      <div class="carpeta__solapa">
+        <h2 class="carpeta__nombre">QB0417 · fila 417 de nomina-20260804.csv</h2>
+        <span class="carpeta__resto"></span>
+        <span class="marca marca--tibio">Sin confirmar</span>
+      </div>
+      <div class="carpeta__interior">
+        <ol class="sucesos">
+          <li class="suceso">
+            <div class="suceso__reloj">10:14:02</div>
+            <div class="suceso__hecho">Leida del archivo</div>
+            <div class="suceso__resto">Fuente "Nomina mensual" · fila 417</div>
+            <div class="suceso__prueba">huella del archivo 8f3a91c204de…</div>
+          </li>
+          <li class="suceso">
+            <div class="suceso__reloj">10:14:08</div>
+            <div class="suceso__hecho">Guardada para procesar</div>
+            <div class="suceso__resto">Junto con otras 9 999 filas</div>
+          </li>
+          <li class="suceso">
+            <div class="suceso__reloj">10:21:36</div>
+            <div class="suceso__hecho">Convertida en mensaje</div>
+            <div class="suceso__resto">Mensaje 209 del lote, con 2 operaciones dentro</div>
+          </li>
+          <li class="suceso">
+            <div class="suceso__reloj">10:26:11</div>
+            <div class="suceso__hecho">Validada sin observaciones</div>
+            <div class="suceso__resto">Las 7 comprobaciones de estructura pasaron</div>
+          </li>
+          <li class="suceso">
+            <div class="suceso__reloj">10:29:47</div>
+            <div class="suceso__hecho">Archivada</div>
+            <div class="suceso__resto">A partir de aqui el contenido ya no se puede editar</div>
+            <div class="suceso__prueba">SHA-256 8f3a…c204</div>
+          </li>
+          <li class="suceso suceso--tibio">
+            <div class="suceso__reloj">10:31:20</div>
+            <div class="suceso__hecho">Enviada — sin respuesta del banco</div>
+            <div class="suceso__resto">Tiempo agotado tras 3 intentos. No consta si el dinero salio.</div>
+          </li>
+          <li class="suceso suceso--futuro">
+            <div class="suceso__reloj">—</div>
+            <div class="suceso__hecho">Conciliacion</div>
+            <div class="suceso__resto">Pendiente de confirmar con el banco</div>
+          </li>
+        </ol>
+        <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;">
+          <button class="pulsador" data-hoja-ir="sucesos">Ver los sucesos crudos</button>
+          <button class="pulsador" data-obra="exportar">Exportar el rastro</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SUCESOS -->
+  <section class="hoja" id="hoja-sucesos" hidden>
+    <h1 class="titulillo">Sucesos crudos</h1>
+    <p class="subtitulillo">Lo que se guardo tal cual, sin interpretar. Para cuando la version resumida no basta.</p>
+
+    <div class="aviso aviso--verde">
+      <span><strong>Los datos sensibles van enmascarados aqui tambien.</strong>
+      La cuenta del beneficiario aparece con los ultimos cuatro digitos: un registro de auditoria
+      que filtra datos deja de poder consultarse libremente, y entonces no lo consulta nadie.</span>
+    </div>
+
+    <div class="carpeta">
+      <div class="carpeta__solapa"><h2 class="carpeta__nombre">Suceso 4 de 7 · envio al banco</h2></div>
+      <div class="carpeta__interior">
+        <div class="crudo-json"><span class="llave-j">"cuando"</span>: <span class="valor-j">"2026-08-04T10:31:20.884-05:00"</span>
+<span class="llave-j">"que"</span>: <span class="valor-j">"envio_intentado"</span>
+<span class="llave-j">"referencia"</span>: <span class="valor-j">"QB0417"</span>
+<span class="llave-j">"proceso"</span>: <span class="valor-j">"Nomina mensual"</span>
+<span class="llave-j">"ejecucion"</span>: <span class="valor-j">6</span>
+<span class="llave-j">"beneficiario"</span>: <span class="valor-j">"COMERCIAL ANDINA SAC"</span>
+<span class="llave-j">"cuenta"</span>: <span class="valor-j">"********3445"</span>
+<span class="llave-j">"importe"</span>: <span class="valor-j">12480.00</span>
+<span class="llave-j">"moneda"</span>: <span class="valor-j">"PEN"</span>
+<span class="llave-j">"intentos"</span>: <span class="valor-j">3</span>
+<span class="llave-j">"resultado"</span>: <span class="valor-j">"sin_respuesta"</span>
+<span class="llave-j">"detalle"</span>: <span class="valor-j">"tiempo agotado esperando al banco"</span></div>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="pulsador" data-obra="copiar">Copiar</button>
+          <button class="pulsador" data-hoja-ir="rastro">Volver al rastro</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLA -->
+  <section class="hoja" id="hoja-cola" hidden>
+    <h1 class="titulillo">Cola de auditoria</h1>
+    <p class="subtitulillo">Los sucesos se apuntan primero y se vuelcan despues. Aqui se ve si el volcado va al dia.</p>
+
+    <div id="cola-cargando" hidden>
+      <div class="carpeta"><div class="carpeta__interior">
+        <div class="hebra" style="width:90%"></div><div class="hebra" style="width:72%"></div>
+        <div class="hebra" style="width:84%"></div><div class="hebra" style="width:58%"></div>
+      </div></div>
+    </div>
+
+    <div id="cola-hay" hidden>
+      <div class="aviso aviso--miel"><span><strong>15 948 sucesos pendientes.</strong> El volcado va 12 minutos por detras del ritmo de generacion.</span></div>
+      <div class="carpeta">
+        <div class="carpeta__solapa"><h2 class="carpeta__nombre">Por proceso</h2></div>
+        <div class="carpeta__interior" style="overflow-x:auto;">
+          <table class="registro">
+            <thead><tr><th>Proceso</th><th class="der">Pendientes</th><th class="der">Mas antiguo</th><th>Situacion</th></tr></thead>
+            <tbody>
+              <tr><td>Nomina mensual</td><td class="der">14 902</td><td class="der">12 min</td><td><span class="marca marca--tibio">Con retraso</span></td></tr>
+              <tr><td>Confirmaciones del banco</td><td class="der">612</td><td class="der">2 min</td><td><span class="marca marca--bien">Al dia</span></td></tr>
+              <tr><td>Guias de transporte</td><td class="der">301</td><td class="der">1 min</td><td><span class="marca marca--bien">Al dia</span></td></tr>
+              <tr><td>Inventario diario</td><td class="der">128</td><td class="der">3 min</td><td><span class="marca marca--bien">Al dia</span></td></tr>
+              <tr><td>Extracto contable</td><td class="der">5</td><td class="der">5 h</td><td><span class="marca marca--frio">Parado</span></td></tr>
+            </tbody>
+          </table>
+          <p style="font-size:.79rem;color:var(--sepia-medio);margin:.8rem 0 0;max-width:64ch;">
+            Nada se pierde mientras haya disco: la cola es duradera. Lo que se pierde es
+            inmediatez, y por eso la consulta de un rastro reciente puede ir unos minutos detras.
+          </p>
+          <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+            <button class="pulsador pulsador--tinta" data-obra="acelerar">Volcar ahora</button>
+            <button class="pulsador" data-obra="refrescar">Actualizar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cola-rota" hidden>
+      <div class="aviso aviso--rojo"><span><strong>No se pudo consultar la cola.</strong> El servicio de consulta no responde. Los procesos siguen apuntando sucesos con normalidad.</span></div>
+      <div class="carpeta"><div class="carpeta__interior">
+        <button class="pulsador pulsador--tinta" data-obra="reintentar-cola">Reintentar</button>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- REPARTO -->
+  <section class="hoja" id="hoja-reparto" hidden>
+    <h1 class="titulillo">Reparto por causa</h1>
+    <p class="subtitulillo">De lo que se retuvo esta semana, por que se retuvo. Ordenado por cuanto pesa, no alfabeticamente.</p>
+
+    <div class="carpeta">
+      <div class="carpeta__solapa"><h2 class="carpeta__nombre">Motivos de retencion · ultimos 7 dias</h2></div>
+      <div class="carpeta__interior">
+        <div class="barras">
+          <div class="barra"><span>Importe en cero</span><span class="barra__pista"><span class="barra__relleno" style="width:100%"></span></span><span class="barra__cifra">31</span></div>
+          <div class="barra"><span>Moneda invalida</span><span class="barra__pista"><span class="barra__relleno" style="width:71%"></span></span><span class="barra__cifra">22</span></div>
+          <div class="barra"><span>Beneficiario sin cuenta</span><span class="barra__pista"><span class="barra__relleno" style="width:45%"></span></span><span class="barra__cifra">14</span></div>
+          <div class="barra"><span>Referencia muy larga</span><span class="barra__pista"><span class="barra__relleno" style="width:29%"></span></span><span class="barra__cifra">9</span></div>
+          <div class="barra"><span>Gastos fuera de lista</span><span class="barra__pista"><span class="barra__relleno" style="width:19%"></span></span><span class="barra__cifra">6</span></div>
+          <div class="barra"><span>Codigo de banco mal</span><span class="barra__pista"><span class="barra__relleno" style="width:13%"></span></span><span class="barra__cifra">4</span></div>
+        </div>
+        <div class="aviso aviso--miel" style="margin:1.1rem 0 0;">
+          <span>Las dos primeras causas son el 62% del total y ambas se corrigen en el origen. Una
+          conversacion con quien genera el archivo vale mas que semanas de correcciones manuales.</span>
+        </div>
+
+        <h3 style="margin:1.3rem 0 .6rem;font-size:.92rem;">Contra la semana anterior</h3>
+        <table class="registro">
+          <thead><tr><th>Causa</th><th class="der">Esta semana</th><th class="der">Anterior</th><th>Tendencia</th></tr></thead>
+          <tbody>
+            <tr><td>Importe en cero</td><td class="der">31</td><td class="der">12</td><td><span class="marca marca--mal">Sube fuerte</span></td></tr>
+            <tr><td>Moneda invalida</td><td class="der">22</td><td class="der">24</td><td><span class="marca marca--bien">Estable</span></td></tr>
+            <tr><td>Beneficiario sin cuenta</td><td class="der">14</td><td class="der">19</td><td><span class="marca marca--bien">Baja</span></td></tr>
+            <tr><td>Referencia muy larga</td><td class="der">9</td><td class="der">8</td><td><span class="marca marca--bien">Estable</span></td></tr>
+            <tr><td>Gastos fuera de lista</td><td class="der">6</td><td class="der">15</td><td><span class="marca marca--bien">Baja</span></td></tr>
+            <tr><td>Codigo de banco mal</td><td class="der">4</td><td class="der">3</td><td><span class="marca marca--bien">Estable</span></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.79rem;color:var(--sepia-medio);margin:.7rem 0 0;max-width:64ch;">
+          "Importe en cero" paso de 12 a 31 en una semana. Eso no es ruido: algo cambio en el
+          origen el lunes, y merece una llamada antes de que el numero siga subiendo.
+        </p>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="pulsador" data-obra="exportar">Exportar el reparto</button>
+          <button class="pulsador" data-hoja-ir="pulso">Volver al pulso</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RETENCION -->
+  <section class="hoja" id="hoja-retencion" hidden>
+    <h1 class="titulillo">Cuanto se guarda</h1>
+    <p class="subtitulillo">Un registro de auditoria que se borra antes de tiempo deja de servir; uno que no se borra nunca acaba siendo imposible de consultar.</p>
+
+    <div class="aviso aviso--verde">
+      <span><strong>El archivo de pagos se guarda 10 anos.</strong> No es una preferencia tecnica:
+      es el plazo que exige la normativa para la documentacion de una transferencia.</span>
+    </div>
+
+    <div class="carpeta">
+      <div class="carpeta__solapa"><h2 class="carpeta__nombre">Plazos por tipo de dato</h2></div>
+      <div class="carpeta__interior" style="overflow-x:auto;">
+        <table class="registro">
+          <thead><tr><th>Que</th><th class="der">Se guarda</th><th>Donde</th><th>Al vencer</th></tr></thead>
+          <tbody>
+            <tr><td>Mensajes de pago archivados</td><td class="der">10 anos</td><td>base principal</td><td>se mueve a frio, no se borra</td></tr>
+            <tr><td>Sucesos de auditoria</td><td class="der">5 anos</td><td>base principal</td><td>se mueve a frio</td></tr>
+            <tr><td>Filas retenidas ya corregidas</td><td class="der">2 anos</td><td>base principal</td><td>se borra</td></tr>
+            <tr><td>Muestras de archivos leidos</td><td class="der">90 dias</td><td>disco</td><td>se borra</td></tr>
+            <tr><td>Trazas tecnicas de ejecucion</td><td class="der">30 dias</td><td>disco</td><td>se borra</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.79rem;color:var(--sepia-medio);margin:.8rem 0 0;max-width:64ch;">
+          "Frio" quiere decir que sigue existiendo y se puede pedir, pero la consulta tarda
+          minutos en vez de segundos. Por eso la busqueda distingue los ultimos 90 dias del
+          archivo historico: no es que no este, es que cuesta traerlo.
+        </p>
+        <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;">
+          <button class="pulsador" data-obra="exportar">Exportar la politica</button>
+          <button class="pulsador" data-hoja-ir="sinnada">Ver una busqueda sin resultados</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIN NADA -->
+  <section class="hoja" id="hoja-sinnada" hidden>
+    <h1 class="titulillo">Busqueda vacia</h1>
+    <p class="subtitulillo">Que se ve cuando una referencia no aparece. Importa: un auditor que busca y no encuentra necesita saber si es que no existe o si es que no se busco bien.</p>
+    <div class="buscador">
+      <input value="ZZ9999" aria-label="Referencia" />
+      <button class="pulsador pulsador--tinta" data-obra="buscar-rastro">Buscar</button>
+      <button class="pulsador" data-obra="limpiar">Limpiar</button>
+    </div>
+    <div class="carpeta">
+      <div class="paramo">
+        <div class="paramo__simbolo">🗃</div>
+        <div class="paramo__dicho">Sin coincidencias</div>
+        <p style="margin:.2rem 0 .4rem;">No hay ningun registro con la referencia <strong>ZZ9999</strong> en los ultimos 90 dias.</p>
+        <p style="margin:0 0 1.2rem;font-size:.83rem;">El archivo anterior a esa fecha se consulta aparte: no esta vacio, esta en otro sitio.</p>
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;">
+          <button class="pulsador pulsador--tinta" data-obra="buscar-historico">Buscar en el archivo historico</button>
+          <button class="pulsador" data-obra="limpiar">Quitar filtros</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var hojas = document.querySelectorAll(".hoja");
+    var pestanas = document.querySelectorAll(".indice button");
+
+    function pasar(nombre) {
+      hojas.forEach(function (h) { h.hidden = h.id !== "hoja-" + nombre; });
+      pestanas.forEach(function (b) {
+        if (b.dataset.hoja === nombre) { b.setAttribute("aria-current", "page"); }
+        else { b.removeAttribute("aria-current"); }
+      });
+      if (nombre === "cola") { pedirCola(); }
+      window.scrollTo(0, 0);
+    }
+    pestanas.forEach(function (b) { b.addEventListener("click", function () { pasar(b.dataset.hoja); }); });
+
+    // La cola recorre sus desenlaces: consultando, con datos, y con el servicio de consulta caido.
+    var ronda = 0;
+    function pedirCola() {
+      var c = document.getElementById("cola-cargando");
+      var h = document.getElementById("cola-hay");
+      var r = document.getElementById("cola-rota");
+      c.hidden = false; h.hidden = true; r.hidden = true;
+      setTimeout(function () {
+        c.hidden = true;
+        if (ronda % 3 === 2) { r.hidden = false; } else { h.hidden = false; }
+        ronda += 1;
+      }, 1300);
+    }
+
+    var espera = null;
+    function pregonar(texto) {
+      var p = document.getElementById("pregon");
+      p.textContent = texto; p.hidden = false;
+      clearTimeout(espera);
+      espera = setTimeout(function () { p.hidden = true; }, 3000);
+    }
+
+    document.addEventListener("click", function (e) {
+      var ir = e.target.getAttribute && e.target.getAttribute("data-hoja-ir");
+      if (ir) { pasar(ir); return; }
+      var obra = e.target.getAttribute && e.target.getAttribute("data-obra");
+      if (!obra) { return; }
+      if (obra === "reintentar-cola") { pedirCola(); return; }
+      if (obra === "buscar-rastro") { pregonar("Buscando en los ultimos 90 dias…"); return; }
+      if (obra === "buscar-historico") { pregonar("El archivo historico responde mas despacio: puede tardar un minuto."); return; }
+      if (obra === "limpiar") { pregonar("Filtros quitados."); return; }
+      if (obra === "refrescar") { pregonar("Actualizado. Listo."); return; }
+      if (obra === "exportar") { pregonar("Preparando el archivo para descargar."); return; }
+      if (obra === "copiar") { pregonar("Suceso copiado al portapapeles."); return; }
+      if (obra === "acelerar") { pregonar("Volcado forzado. La cola bajara en unos minutos."); return; }
+    });
+  })();
+</script>
+
+</body>
+</html>
