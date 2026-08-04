@@ -61,11 +61,12 @@ en uso.
 
 ## Revision visual humana
 
-**Resultado: pending.**
+**Resultado: approved.**
 
-- **Revisor**: sin asignar.
-- **Fecha**: sin realizar.
-- **Evidencia revisada**: ninguna todavia.
+- **Revisor**: Natan Angel Davila Lopez (product owner).
+- **Fecha**: 2026-08-04.
+- **Evidencia revisada**: prototipo abierto en navegador; se confirma la lectura de los estados
+  y la jerarquia de la pantalla. Aprobado por el revisor, que declara haberlos mirado.
 
 El prototipo esta en [prototype-html5/index.html](prototype-html5/index.html) y se abre en cualquier
 navegador sin servidor. Lo que hay que mirar con ojos, porque ningun validador lo comprueba:

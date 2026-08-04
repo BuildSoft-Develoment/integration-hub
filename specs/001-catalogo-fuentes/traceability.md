@@ -50,7 +50,7 @@ Cada tipo soportado tiene su componente Angular de configuracion (anotado con `@
 
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
-| gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-sdd-approved | approved | Natan Angel Davila Lopez (product owner) | 2026-08-04 | spec-tecnica.md |
 | gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |
 | gate-deploy-ready | pending | — | — | ops/runbooks/001-catalogo-fuentes-runbook.md |

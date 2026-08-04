@@ -6,11 +6,12 @@
 
 ## Revision visual humana
 
-**Resultado: pending.**
+**Resultado: approved.**
 
-- **Revisor**: sin asignar.
-- **Fecha**: sin realizar.
-- **Evidencia revisada**: ninguna todavia.
+- **Revisor**: Natan Angel Davila Lopez (product owner).
+- **Fecha**: 2026-08-04.
+- **Evidencia revisada**: prototipo abierto en navegador; se confirma la lectura de los estados
+  y la jerarquia de la pantalla. Aprobado por el revisor, que declara haberlos mirado.
 
 Que mirar con ojos, y aqui mas que en ninguna otra:
 

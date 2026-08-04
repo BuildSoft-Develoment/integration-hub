@@ -33,14 +33,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { listIncludedFeatures } from "./_lib/feature-filter.mjs";
 import { resolveStrict } from "./_lib/strict-mode.mjs";
+import { parseHumanReviewFields, isNonHumanReviewer } from "./_lib/prototype-state.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const root = resolve(args.root || ".");
 const strict = resolveStrict(args); // --strict | CHECK_STRICT=1 | --warn override
 const featureFilter = args.feature || null;
 
-// Revisores que NO cuentan como humano (anti self-approval).
-const NON_HUMAN_REVIEWERS = /\b(agente|agent|ia\b|a\.?i\.?|claude|gpt|codex|copilot|gemini|cursor|opencode|bot|automatico|automatic|sistema|script)\b/i;
 
 const features = listIncludedFeatures(root).filter((s) => !featureFilter || s.startsWith(featureFilter));
 const findings = [];
@@ -110,14 +109,11 @@ for (const slug of features) {
       findings.push({ slug, kind: "no-human-review-section", message: "prototype-validation.md sin seccion '## Revision visual humana' (obligatoria v12.60)." });
     } else {
       const sec = reviewSection[1];
-      const resultMatch = sec.match(/Resultado\s*:\s*(approved|aprobado|blocked|bloqueado|pending|pendiente)/i);
-      const result = resultMatch ? resultMatch[1].toLowerCase() : null;
+      // El PARSEO se comparte con prototype-state (una sola copia de los regex); el JUICIO sobre si
+      // la aprobacion vale sigue siendo de este validador, que es el autoritativo.
+      const { result, reviewer, fecha, evidencia } = parseHumanReviewFields(sec);
       if (result === "approved" || result === "aprobado") {
-        // Exigir revisor humano + fecha + evidencia.
-        const reviewer = (sec.match(/Revisor\s*:\s*(.+)/i) || [])[1] || "";
-        const fecha = (sec.match(/Fecha\s*:\s*(.+)/i) || [])[1] || "";
-        const evidencia = (sec.match(/Evidencia\s+revisada\s*:\s*(.+)/i) || [])[1] || "";
-        if (!reviewer.trim() || NON_HUMAN_REVIEWERS.test(reviewer)) {
+        if (!reviewer.trim() || isNonHumanReviewer(reviewer)) {
           findings.push({ slug, kind: "self-approval", message: `revision visual 'approved' pero Revisor invalido ('${reviewer.trim() || "(vacio)"}'). Debe ser un humano real, no agente/IA.` });
         }
         if (!fecha.trim() || /<|placeholder|TBD|YYYY/i.test(fecha)) {

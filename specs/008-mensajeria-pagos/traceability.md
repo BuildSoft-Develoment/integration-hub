@@ -80,16 +80,17 @@ feature: se deja en `-` en vez de atribuirse trazabilidad ajena.
 > **La exencion de Fase 2 caduco.** Decia que `gate-spdd-approved` y `gate-prototype-ready` "no
 > aplican" por ser reingenieria. Aplicaba mientras no hubiera artefactos que revisar; el 2026-08-04
 > se construyeron el prototipo navegable y los documentos de producto e interfaz, asi que ahora hay
-> algo concreto que un humano puede aprobar o rechazar. Se declaran `pending` — que es la verdad —
-> en lugar de N/A, que era una forma de no tener que mirarlos.
+> algo concreto que un humano puede aprobar o rechazar. Se declararon `pending` en lugar de N/A, que
+> era una forma de no tener que mirarlos, y el 2026-08-04 los aprobo el product owner tras revisar
+> los prototipos.
 
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
-| gate-prototype-ready | pending | — | — | prototype-html5/index.html |
-| gate-html5-product-quality | pending | — | — | prototype-validation.md |
-| gate-prototype-human-visual-review | pending | — | — | prototype-html5/decisiones-ux.md |
-| gate-spdd-approved | pending | — | — | product-design.md, spdd-frontend.md, ui-test-cases.md |
-| gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-prototype-ready | approved | Natan Angel Davila Lopez (product owner) | 2026-08-04 | prototype-html5/index.html |
+| gate-html5-product-quality | approved | Natan Angel Davila Lopez (product owner) | 2026-08-04 | prototype-validation.md |
+| gate-prototype-human-visual-review | approved | Natan Angel Davila Lopez (product owner) | 2026-08-04 | prototype-html5/decisiones-ux.md |
+| gate-spdd-approved | approved | Natan Angel Davila Lopez (product owner) | 2026-08-04 | product-design.md, spdd-frontend.md, ui-test-cases.md |
+| gate-sdd-approved | approved | Natan Angel Davila Lopez (product owner) | 2026-08-04 | spec-tecnica.md |
 | gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |
 | gate-deploy-ready | pending | — | — | spec-tecnica.md |

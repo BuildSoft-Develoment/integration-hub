@@ -15,6 +15,7 @@
 832813390  platform-app/src/main/resources/db/migration/V102__task_execution_moves_money.sql
 -250136797  platform-app/src/main/resources/db/migration/V103__source_definition_money_critical.sql
 -741357203  platform-app/src/main/resources/db/migration/V104__audit_record_event_gateway_reference_width.sql
+-1328615876  platform-app/src/main/resources/db/migration/V106__missing_fk_indexes.sql
 -1145117046  platform-app/src/main/resources/db/migration/V11__process_execution_async_request_payload.sql
 -1353625134  platform-app/src/main/resources/db/migration/V13__process_task_suspension.sql
 339653798  platform-app/src/main/resources/db/migration/V15__staging_record_index_mt101_scale.sql
@@ -59,6 +60,7 @@
 -222301611  platform-app/src/main/resources/db/migration/V93__staging_record_sheet_row_index.sql
 -524610294  platform-app/src/main/resources/db/migration/V96__plugin_descriptor_version_config_schemas.sql
 1693305782  platform-app/src/main/resources/db/migration/V97__system_theme_setting_branding.sql
+849355588  vertical-swift-mt101/src/main/resources/db/migration-mt101/V105__mt101_fragment_record_fk_index.sql
 598736224  vertical-swift-mt101/src/main/resources/db/migration-mt101/V12__payments_mt101_schema.sql
 -1263650121  vertical-swift-mt101/src/main/resources/db/migration-mt101/V14__mt101_massive_fragments.sql
 1190716205  vertical-swift-mt101/src/main/resources/db/migration-mt101/V17__mt101_archive_status_sync.sql

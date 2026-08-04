@@ -57,6 +57,37 @@ export const STATE_META = {
 // Revisores que NO cuentan como humano (espejo de check-prototype-visible-product).
 const NON_HUMAN_REVIEWERS = /\b(agente|agent|ia\b|a\.?i\.?|claude|gpt|codex|copilot|gemini|cursor|opencode|bot|automatico|automatic|sistema|script)\b/i;
 
+/**
+ * Lee los campos de la seccion `## Revision visual humana`.
+ *
+ * <h3>Por que vive aqui y no en cada validador</h3>
+ * Habia DOS copias de estos regex —este modulo y `check-prototype-visible-product.mjs`— y las dos
+ * compartian el mismo punto ciego: la plantilla que el propio repositorio genera escribe
+ * `- **Revisor**: nombre`, con el enfasis ENTRE la palabra y los dos puntos, y `Revisor\s*:` no casa
+ * con eso. Resultado: el revisor salia vacio SIEMPRE y la revision visual humana no podia aprobarse
+ * ni con la firma delante. Es el espejo del gate que siempre pasa, y peor de detectar: un rojo
+ * permanente se confunde con trabajo pendiente.
+ *
+ * Dos copias del mismo parseo garantizan dos versiones del mismo fallo, asi que hay una sola.
+ */
+export function parseHumanReviewFields(body) {
+  const etiqueta = (nombre) => new RegExp(`${nombre}\\*{0,2}\\s*:\\s*\\*{0,2}\\s*(.+)`, "i");
+  const resultRaw = (body.match(
+    /Resultado\*{0,2}\s*:\s*\*{0,2}\s*(approved|aprobado|blocked|bloqueado|pending|pendiente)/i,
+  ) || [])[1];
+  return {
+    result: resultRaw ? resultRaw.toLowerCase() : null,
+    reviewer: ((body.match(etiqueta("Revisor")) || [])[1] || "").trim(),
+    fecha: ((body.match(etiqueta("Fecha")) || [])[1] || "").trim(),
+    evidencia: ((body.match(etiqueta("Evidencia\\s+revisada")) || [])[1] || "").trim(),
+  };
+}
+
+/** Un revisor que no sea persona no vale como aprobacion. Compartido con el validador anti-trampa. */
+export function isNonHumanReviewer(reviewer) {
+  return NON_HUMAN_REVIEWERS.test(reviewer || "");
+}
+
 // Umbrales nivel 2 (espejo de QUALITY_THRESHOLDS.level2 en check-html5-prototype-quality).
 const LEVEL2 = { htmlLines: 250, cssTokens: 6, mediaQueries: 1, distinctViews: 4, mockRecords: 6, buttons: 5 };
 
@@ -139,11 +170,7 @@ function humanReview(root, slug) {
   const sec = val.match(/##\s*Revision\s+visual\s+humana([\s\S]*?)(?=\n##\s|$)/i);
   if (!sec) return { hasSection: false, approved: false, result: null, reviewer: null };
   const body = sec[1];
-  const resultRaw = (body.match(/Resultado\s*:\s*(approved|aprobado|blocked|bloqueado|pending|pendiente)/i) || [])[1];
-  const result = resultRaw ? resultRaw.toLowerCase() : null;
-  const reviewer = ((body.match(/Revisor\s*:\s*(.+)/i) || [])[1] || "").trim();
-  const fecha = ((body.match(/Fecha\s*:\s*(.+)/i) || [])[1] || "").trim();
-  const evidencia = ((body.match(/Evidencia\s+revisada\s*:\s*(.+)/i) || [])[1] || "").trim();
+  const { result, reviewer, fecha, evidencia } = parseHumanReviewFields(body);
   const approved = (result === "approved" || result === "aprobado")
     && !!reviewer && !NON_HUMAN_REVIEWERS.test(reviewer)
     && !!fecha && !/<|placeholder|TBD|YYYY/i.test(fecha)
