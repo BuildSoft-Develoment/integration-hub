@@ -177,7 +177,9 @@ function analyzePhase2() {
   }
   const reNote = reCount > 0 ? ` (${reCount} reingenieria excluida(s))` : "";
   const withPrototype = features.filter((f) => f.gates.includes("gate-prototype-ready") || existsSync(join(root, "specs", f.slug, "prototype-html5", "index.html"))).length;
-  const withSpddApproved = features.filter((f) => f.gates.includes("gate-spdd-approved")).length;
+  // Aprobado es `approved` en la fila del gate. Antes bastaba con que el nombre apareciera en el
+  // fichero, asi que la etiqueta "SPDD aprobado" contaba features donde el gate seguia pendiente.
+  const withSpddApproved = features.filter((f) => (f.gateStatus || {})["gate-spdd-approved"] === "approved").length;
   const total = features.length;
   // v12.62: la fase 2 NO se completa (no avanza a fase 3) hasta que todos los
   // prototipos esten human-approved (revision visual humana real).
@@ -235,22 +237,40 @@ function analyzePhase5() {
   // Criterio correcto: cada RF con `Codigo` declarado en su matriz tiene >=1
   // @trace en codigo. Se escanea el codigo fuente (independiente de la BD).
   // Fuente unica: ci/scripts/_lib/source-roots.mjs.
+  // Este contador tenia DOS fallos, y el segundo escondia al primero:
+  //
+  // 1) El regex no admitia la forma cualificada `@trace spec <slug> RF-013`, que es la que usa el
+  //    cosechador y la casa entera. Al terminar de migrar las anotaciones a esa forma, el contador
+  //    dejo de reconocer ninguna y anuncio "0/66 RF con @trace" con 341 anotaciones en el arbol.
+  //    Un contador que llega a cero justo cuando el dato mejora.
+  // 2) Comparaba codigos PELADOS: `RF-003` cubierto en cualquier feature daba por cubierto el
+  //    RF-003 de las otras siete. Como los RF se numeran por spec, eso inflaba el numerador con
+  //    coincidencias de nombre.
+  //
+  // Ahora la clave es `slug:CODIGO`. Una anotacion sin cualificar no se puede atribuir a ninguna
+  // feature, asi que NO cuenta y se reporta aparte: sin eso volveria el verde por coincidencia.
   const srcDirs = SOURCE_ROOTS;
   let codeFiles = 0;
   const tracedCodes = new Set();
-  const tagRe = /@(?:trace|covers|implements)\s+((?:RF-\d+|RNF-\d+|HU-\d+)(?:\s*,\s*(?:RF-\d+|RNF-\d+|HU-\d+))*)/gi;
+  let sinCualificar = 0;
+  const tagRe = /@(?:trace|covers|implements)\s+(?:spec\s+([0-9]{3}-[a-z0-9-]+)\s+)?((?:RF-\d+|RNF-\d+|HU-\d+)(?:\s*,\s*(?:RF-\d+|RNF-\d+|HU-\d+))*)/gi;
   for (const d of srcDirs) {
     const abs = join(root, d);
     if (!existsSync(abs)) continue;
-    const files = walkDir(abs).filter((f) => /\.(ts|tsx|js|jsx|java|kt|py|go|rs|cs)$/.test(f));
+    // `.sql` incluido: las migraciones llevan @trace desde siempre (RF-013 de 008 esta declarado en
+    // la cabecera de V12__payments_mt101_schema.sql y en ninguna clase). El cosechador ya las lee;
+    // este contador no, y por eso reportaba ese RF como sin trazar.
+    const files = walkDir(abs).filter((f) => /\.(ts|tsx|js|jsx|java|kt|py|go|rs|cs|sql)$/.test(f));
     codeFiles += files.length;
     for (const f of files) {
       try {
         const t = readFileSync(f, "utf8");
         let m;
         while ((m = tagRe.exec(t)) !== null) {
-          for (const code of m[1].toUpperCase().split(",").map((s) => s.trim()).filter(Boolean)) {
-            tracedCodes.add(code);
+          const slug = m[1] ? m[1].toLowerCase() : null;
+          for (const code of m[2].toUpperCase().split(",").map((s) => s.trim()).filter(Boolean)) {
+            if (slug) tracedCodes.add(`${slug}:${code}`);
+            else sinCualificar += 1;
           }
         }
       } catch {}
@@ -272,7 +292,7 @@ function analyzePhase5() {
       const cells = line.split("|").map((c) => c.trim());
       const codigo = (cells[7] || "").toLowerCase();
       if (codigo && !["-", "—", "n/a", "na", "tbd", "pendiente"].includes(codigo)) {
-        declared.push(rfm[1].toUpperCase());
+        declared.push(`${slug}:${rfm[1].toUpperCase()}`);
       }
     }
   }
@@ -281,9 +301,12 @@ function analyzePhase5() {
   let status;
   if (totalRF === 0) status = "partial"; // hay codigo pero ninguna matriz declara Codigo aun
   else status = tracedRF === totalRF ? "complete" : "partial";
+  const notaSinCualificar = sinCualificar
+    ? `; ${sinCualificar} anotacion(es) sin \`spec <slug>\` NO cuentan (no se sabe de que feature son)`
+    : "";
   const detail = totalRF === 0
     ? `${codeFiles} archivos codigo (ninguna matriz declara Codigo)`
-    : `${tracedRF}/${totalRF} RF con @trace en codigo (${codeFiles} archivos)`;
+    : `${tracedRF}/${totalRF} RF con @trace en codigo (${codeFiles} archivos)${notaSinCualificar}`;
   return { id: 5, name: "Construccion", status, detail };
 }
 
@@ -421,10 +444,19 @@ function listFeatures() {
     const tracePath = join(specsRoot, slug, "traceability.md");
     const gates = [];
     const missing = [];
+    // `gates` recoge los nombres MENCIONADOS en el fichero (los usan los checks que solo preguntan
+    // "¿esta contemplado este gate?"). `gateStatus` es otra cosa y hacia falta separarlas: dice en
+    // que ESTADO esta cada uno, leyendo la fila de la tabla. Contar menciones como aprobaciones hacia
+    // que anadir una fila honesta `| gate-spdd-approved | pending |` subiera el marcador de aprobados.
+    const gateStatus = {};
     if (existsSync(tracePath)) {
       const text = readFileSync(tracePath, "utf8");
       const gateMatches = text.match(/gate-[a-z0-9-]+/g) || [];
       for (const g of new Set(gateMatches)) gates.push(g);
+      for (const line of text.split("\n")) {
+        const m = line.match(/^\|\s*(gate-[a-z0-9-]+)\s*\|\s*([a-z]+)\s*\|/i);
+        if (m) gateStatus[m[1].toLowerCase()] = m[2].toLowerCase();
+      }
     }
     // v12.139: features de reingenieria (codigo ya construido) quedan exentas de
     // los artefactos de Fase 2 (prototipo/SPDD/product-design). El resto del set
@@ -443,7 +475,7 @@ function listFeatures() {
     if (gates.includes("gate-qa-passed")) phase = 6;
     if (gates.includes("gate-deploy-ready")) phase = 7;
     if (gates.includes("gate-operations-ready")) phase = 8;
-    features.push({ slug, phase, gates, missing, reengineering });
+    features.push({ slug, phase, gates, gateStatus, missing, reengineering });
   }
   return features;
 }
@@ -504,8 +536,13 @@ function getTemplateVersion() {
   } catch { return "(error)"; }
 }
 
+// El tope era 8 y el arbol es mas hondo que eso: `platform-app/src/main/java/com/integrationhub/
+// platform/api/resource/...` ya son 9 niveles. Cortaba en silencio 86 ficheros ANOTADOS -entre ellos
+// todos los Resource de la API- y el panel contaba su cobertura sin haberlos abierto. El guardia
+// sigue existiendo (recursion desbocada), pero con margen para un arbol Java real; quien excluye de
+// verdad es shouldIgnorePath (target/, node_modules/, ...), no la profundidad.
 function walkDir(dir, depth = 0) {
-  if (depth > 8) return [];
+  if (depth > 24) return [];
   if (!existsSync(dir)) return [];
   // v12.56: usar ignore-paths._lib para excluir target/, bin/main/, *.class, etc.
   const ignoreCfg = loadIgnoreConfig(root);

@@ -77,10 +77,18 @@ Ademas, **RF-012** (schemas ISO 20022) pertenece al vertical `vertical-iso20022`
 feature: se deja en `-` en vez de atribuirse trazabilidad ajena.
 
 ## Gates
-> Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.
+> **La exencion de Fase 2 caduco.** Decia que `gate-spdd-approved` y `gate-prototype-ready` "no
+> aplican" por ser reingenieria. Aplicaba mientras no hubiera artefactos que revisar; el 2026-08-04
+> se construyeron el prototipo navegable y los documentos de producto e interfaz, asi que ahora hay
+> algo concreto que un humano puede aprobar o rechazar. Se declaran `pending` — que es la verdad —
+> en lugar de N/A, que era una forma de no tener que mirarlos.
 
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
+| gate-prototype-ready | pending | — | — | prototype-html5/index.html |
+| gate-html5-product-quality | pending | — | — | prototype-validation.md |
+| gate-prototype-human-visual-review | pending | — | — | prototype-html5/decisiones-ux.md |
+| gate-spdd-approved | pending | — | — | product-design.md, spdd-frontend.md, ui-test-cases.md |
 | gate-sdd-approved | pending | — | — | spec-tecnica.md |
 | gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |

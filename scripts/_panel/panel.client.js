@@ -1346,7 +1346,29 @@
       if(!pp.project_ready){
         var msg = '';
         if(pp.ready_features && pp.ready_features.length){ msg += '✓ Avance 2→3 habilitado SOLO para '+pp.ready_features.length+' feature(s) con prototipo human-approved'; }
-        if(pp.blocked_features && pp.blocked_features.length){ msg += (msg?' · ':'')+'⚠ '+pp.blocked_features.length+' feature(s) bloqueadas o sin prototipo: '+pp.blocked_features.map(esc).join(', '); }
+        // El texto anterior decia "bloqueadas O sin prototipo" y no decia cual de las dos. Con las 8
+        // features con prototipo hecho y pendientes de firma, el lector concluia que faltaban los 8
+        // prototipos. Un aviso que junta dos causas con una "o" obliga a ir al codigo para saber que
+        // pasa — que es justo lo contrario de lo que hace un panel. Se separan por estado.
+        if(pp.blocked_features && pp.blocked_features.length){
+          var porEstado = {};
+          (ps.features||[]).forEach(function(f){
+            if(pp.blocked_features.indexOf(f.slug) === -1) return;
+            var k = f.state || 'sin-estado';
+            (porEstado[k] = porEstado[k] || []).push(f.slug);
+          });
+          var ROTULO = {
+            'human-review-pending': 'con prototipo, esperando revision visual humana',
+            'visible-product': 'con prototipo, pendiente de marcarlo como producto visible',
+            'auto-quality': 'con prototipo, pendiente de superar la calidad automatica',
+            'exists': 'con prototipo recien creado, sin evaluar',
+            'none': 'SIN prototipo'
+          };
+          var trozos = Object.keys(porEstado).map(function(k){
+            return porEstado[k].length+' '+(ROTULO[k] || k)+': '+porEstado[k].map(esc).join(', ');
+          });
+          msg += (msg?' · ':'')+'⚠ '+trozos.join(' · ');
+        }
         if(!msg){ msg = '⚠ Avance fase 2 → 3 BLOQUEADO'; }
         html += '<div class="proto-advance-warn">'+msg+'</div>';
       } else {
