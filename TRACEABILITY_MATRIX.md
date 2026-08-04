@@ -27,35 +27,40 @@
 
 ## Matriz global
 
+<!-- auto:start name=matriz-global -->
+<!-- Generado por: npm run generate:matriz. No editar a mano dentro de esta zona.
+     Las columnas "Req. global" y "Backlog (HU)" NO se derivan: se conservan de la version
+     anterior porque son criterio humano. Editarlas aqui SI vale; sobreviven a la regeneracion. -->
+
 | Feature | RF | Req. global | Backlog (HU) | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
-|---|---|---|---|---|---|---|---|---|--- | --- | --- |
-| 001-catalogo-fuentes | RF-001 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions | source_definition | SourceCatalogService | SourceCatalogServiceTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-editor + source-type-form/* | source-editor.readonly.spec.ts |
-| 001-catalogo-fuentes | RF-002 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions/{sourceDefinitionId}/activation/{active} | source_definition | SourceDefinitionResource | SourceCatalogServiceTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-toolbar, source-list | source-catalog-command.service.spec.ts |
-| 001-catalogo-fuentes | RF-003 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions | source_definition | JsonConfigurationMapper | JsonConfigurationMapperTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-type-form/source-{filesystem,ftp,sftp,rest}-form | - (sin spec por tipo) |
-| 001-catalogo-fuentes | RF-004 | no funcional 2 (seguridad/secretos) | Administrar fuentes | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-type-form (campos ${secret:...}) | - |
-| 001-catalogo-fuentes | RF-005 | funcional 3 (FILE_READ) | Administrar fuentes | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | - (insumo backend FILE_READ) | - |
-| 001-catalogo-fuentes | RF-006 | fuentes cloud (object stores) | Administrar fuentes | POST /api/source-definitions | source_definition (s3/gcs/azure-blob) | S3SourceProvider | - | En progreso (WIP, ADR-006) | specs/001-catalogo-fuentes/spec-tecnica.md | source-object-store + source-{s3,gcs,azure-blob}-form (WIP) | - |
-| 001-catalogo-fuentes | RF-007 | credenciales cloud (nativas/${secret}) | Administrar fuentes | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | - | En progreso (WIP, ADR-006) | specs/001-catalogo-fuentes/spec-tecnica.md | source-object-store (bloque auth) | - |
-| 001-catalogo-fuentes | RF-008 | descarga por streaming | Administrar fuentes | POST /api/source-definitions/test | source_definition | SourcePayload | - | En progreso (WIP, ADR-006) | specs/001-catalogo-fuentes/spec-tecnica.md | - (insumo backend FILE_READ) | - |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 001-catalogo-fuentes | RF-001 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions | source_definition | SourceCatalogService | SourceCatalogServiceTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-editor.component + source-type-form/* | source-editor.readonly.spec.ts |
+| 001-catalogo-fuentes | RF-002 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions/{sourceDefinitionId}/activation/{active} | source_definition | SourceDefinitionResource | SourceCatalogServiceTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-toolbar.component, source-list.component | source-catalog-command.service.spec.ts |
+| 001-catalogo-fuentes | RF-003 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions | source_definition | JsonConfigurationMapper | JsonConfigurationMapperTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-type-form/source-{filesystem,ftp,sftp,rest}-form | - (sin spec dedicada por tipo) |
+| 001-catalogo-fuentes | RF-004 | no funcional 2 (seguridad/secretos) | Administrar fuentes | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | source-type-form (campos `${secret:...}`) | - |
+| 001-catalogo-fuentes | RF-005 | funcional 3 (FILE_READ) | Administrar fuentes | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md | - (insumo backend de FILE_READ) | - |
+| 001-catalogo-fuentes | RF-006 | fuentes cloud (object stores) | Administrar fuentes | POST /api/source-definitions | source_definition (`s3`/`gcs`/`azure-blob`) | S3SourceProvider | - | front+back (JVM); native/QA/gate pendiente | specs/001-catalogo-fuentes/spec-tecnica.md (cloud) | source-{s3,gcs,azure-blob}-form (hecho) | - |
+| 001-catalogo-fuentes | RF-007 | credenciales cloud (nativas/${secret}) | Administrar fuentes | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | - | front+back (JVM); native/QA/gate pendiente | specs/001-catalogo-fuentes/spec-tecnica.md (cloud) | source-{s3,gcs,azure-blob}-form (auth) | - |
+| 001-catalogo-fuentes | RF-008 | descarga por streaming | Administrar fuentes | POST /api/source-definitions/test | source_definition | SourcePayload | - | hecho (streaming); native/QA pendiente | specs/001-catalogo-fuentes/spec-tecnica.md (cloud) | - (insumo backend de FILE_READ) | - |
 | 002-catalogo-readers | RF-001 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md | reader-editor + reader-type-form/* | reader-catalog.store.spec.ts |
-| 002-catalogo-readers | RF-002 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions | reader_definition | ReaderCatalogService | ReaderFieldSupportTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md | reader-{csv,txt,excel,json,xml}-form + reader-field-definitions-editor | reader-editor-state.service.spec.ts |
+| 002-catalogo-readers | RF-002 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions | reader_definition | ReaderCatalogService | ReaderFieldSupportTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md | reader-field-definitions-editor + reader-{csv,txt,excel,json,xml}-form | reader-editor-state.service.spec.ts |
 | 002-catalogo-readers | RF-003 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions | reader_definition | TxtReaderProvider | TxtReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md | reader.providers.ts (toConfigurationObject) | reader-catalog-command.service.spec.ts |
 | 002-catalogo-readers | RF-004 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions/{readerDefinitionId}/activation/{active} | reader_definition | XlsxReaderProvider | ExcelReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md | reader-toolbar, reader-list | reader-catalog-query.store.spec.ts |
 | 002-catalogo-readers | RF-005 | funcional 3 (Process Designer) | Configurar readers | GET /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md | - (insumo Process Designer) | - |
-| 003-diseno-y-ejecucion-procesos | RF-001 | funcional 3 (procesos) | Disenar y ejecutar procesos | POST /api/process-definitions | process_definition | ProcessDefinitionResource | CatalogAndExecutionResourceIT | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md | process-editor + process-flow-* | process-editor.store.spec.ts |
+| 003-diseno-y-ejecucion-procesos | RF-001 | funcional 3 (procesos) | Disenar y ejecutar procesos | POST /api/process-definitions | process_definition | ProcessDefinitionResource | CatalogAndExecutionResourceIT | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md | process-editor + process-flow-* + process-task-list/modal | process-editor.store.spec.ts |
 | 003-diseno-y-ejecucion-procesos | RF-002 | funcional 3 (tipos de tarea) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | DbWriteTaskProvider | DbWriteTaskProviderTest | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md | process-task-form/* (6 tipos) + tasks/*.provider.ts | process-flow-sync.service.spec.ts |
 | 003-diseno-y-ejecucion-procesos | RF-003 | funcional 3 (activar) | Disenar y ejecutar procesos | POST /api/process-definitions/{processDefinitionId}/activation/{active} | process_definition | ProcessSchedulerService | CatalogAndExecutionResourceIT | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md | process-toolbar, process-list | process-catalog.store.spec.ts |
 | 003-diseno-y-ejecucion-procesos | RF-004 | funcional 4 (ejecutar manual/scheduler) | Disenar y ejecutar procesos | POST /api/process-definitions | process_execution | StreamingPipelineService | StreamingPipelineServiceTest | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md | process-editor-actions (trigger) | process-flow-api.service.spec.ts |
 | 003-diseno-y-ejecucion-procesos | RF-005 | funcional 6 (linaje/reproceso) | Disenar y ejecutar procesos | GET /api/query/process-executions | process_execution | ProcessExecutionService | FileReadTaskFastPathTest | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md | - (insumo Observabilidad 004) | - |
-| 003-diseno-y-ejecucion-procesos | RF-006 | motor dinamico (taskRef) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | process-task-runtime-panel | - |
-| 003-diseno-y-ejecucion-procesos | RF-007 | motor dinamico (inputs tipados) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | process-task-binding-board | - |
-| 003-diseno-y-ejecucion-procesos | RF-008 | motor dinamico (metadata transversal) | Disenar y ejecutar procesos | POST /api/process-definitions | - | TaskOutputSupport | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | process-task-binding-context.service | - |
-| 003-diseno-y-ejecucion-procesos | RF-009 | motor dinamico (executionMode) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | process-task-runtime-panel | - |
-| 003-diseno-y-ejecucion-procesos | RF-010 | motor dinamico (batch/checkpoint) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskOutputRegistry | TaskOutputRegistryTest | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | process-task-runtime-panel | - |
-| 003-diseno-y-ejecucion-procesos | RF-011 | motor dinamico (fan-in/out) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | process-flow-* | - |
-| 003-diseno-y-ejecucion-procesos | RF-012 | motor dinamico (mapping comun) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskInputResolver | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | process-task-binding-board | - |
-| 003-diseno-y-ejecucion-procesos | RF-013 | motor dinamico (alto volumen >1M) | Disenar y ejecutar procesos | POST /api/process-definitions | - | StreamingPipelineService | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md | - | - |
-| 004-observabilidad-y-auditoria | RF-001 | funcional 5 (consultar ejecuciones/auditoria) | Auditar y reprocesar | GET /api/query/process-executions | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md | execution-list, audit-list (+toolbars) | execution-catalog.store.spec.ts |
+| 003-diseno-y-ejecucion-procesos | RF-006 | motor dinamico (taskRef) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| 003-diseno-y-ejecucion-procesos | RF-007 | motor dinamico (inputs tipados) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | process-task-binding-board | - |
+| 003-diseno-y-ejecucion-procesos | RF-008 | motor dinamico (metadata transversal) | Disenar y ejecutar procesos | POST /api/process-definitions | - | TaskOutputSupport | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | process-task-binding-context.service | - |
+| 003-diseno-y-ejecucion-procesos | RF-009 | motor dinamico (executionMode) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| 003-diseno-y-ejecucion-procesos | RF-010 | motor dinamico (batch/checkpoint) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskOutputRegistry | TaskOutputRegistryTest | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| 003-diseno-y-ejecucion-procesos | RF-011 | motor dinamico (fan-in/out) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | process-flow-* | - |
+| 003-diseno-y-ejecucion-procesos | RF-012 | motor dinamico (mapping comun) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | TaskInputResolver | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | process-task-binding-board | - |
+| 003-diseno-y-ejecucion-procesos | RF-013 | motor dinamico (alto volumen >1M) | Disenar y ejecutar procesos | POST /api/process-definitions | - | StreamingPipelineService | - | En progreso (WIP, ADR-004) | specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md (motor) | - | - |
+| 004-observabilidad-y-auditoria | RF-001 | funcional 5 (consultar ejecuciones/auditoria) | Auditar y reprocesar | GET /api/query/process-executions | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md | execution-list, execution-toolbar, audit-list, audit-toolbar | execution-catalog.store.spec.ts |
 | 004-observabilidad-y-auditoria | RF-002 | funcional 5 (detalle tarea/archivo) | Auditar y reprocesar | GET /api/query/process-executions/{processExecutionId}/tasks | process_task_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md | execution-editor + execution-task-list + execution-files-panel | execution-detail.store.spec.ts |
 | 004-observabilidad-y-auditoria | RF-003 | funcional 5 (overview/relacionadas) | Auditar y reprocesar | GET /api/query/process-executions/{processExecutionId}/children | process_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md | execution-lineage | execution-editor.store.spec.ts |
 | 004-observabilidad-y-auditoria | RF-004 | funcional 5 (resumen operativo) | Auditar y reprocesar | GET /api/query/overview-summary | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md | overview-metric-card + overview-table-card | overview.store.spec.ts |
@@ -102,79 +107,6 @@
 | 008-mensajeria-pagos | RF-023 | funcional 11 (money-path) | Mensajeria de pagos | POST /api/payment-validation-rules | payment_validation_rule | PaymentValidationRuleResource | PaymentValidationRuleResourceIT | Implementado | specs/008-mensajeria-pagos/tdd-evidence.md | - | - |
 | 008-mensajeria-pagos | RF-024 | funcional 12 (cuarentena y correccion) | Mensajeria de pagos | POST /api/query/mt101-quarantine/rebuild-runs/request | mt101_rebuild_run | Mt101CorrectiveLifecycleService | Mt101CorrectiveLifecycleServiceTest | Implementado | specs/008-mensajeria-pagos/tdd-evidence.md | mt101-quarantine | mt101-quarantine.component.spec.ts |
 
-Reglas:
-- Una fila por requerimiento por feature, agrupadas por feature.
-- `Codigo`, `Test` y `BD`: UN artefacto atomico verificable por celda (sin listas separadas
-  por coma) para que `check:trace-drift` resuelva el enlace contra el repo.
-- `Endpoint`: ruta documental para lectura humana; no se ingiere como enlace de traza.
-- `Estado`: valores cortos y consistentes (`En diseno SDD`, `En desarrollo`, `Prototipo validado`, `Implementado`, `En QA`, `Cerrado`).
-- Celdas sin dato: usa `-`.
-- El detalle por feature vive en `specs/<feature>/`; este archivo es el resumen.
+<!-- auto:end -->
 
-## Estado de gates por feature
 
-> **Siete de las ocho** features (001-007) estan declaradas con `origin: reingenieria` en su
-> `spec-funcional.md` (codigo ya construido y operativo). Por la metodologia
-> (CONSTITUTION.md, Principio 4 — excepcion de reingenieria), la **Fase 2 (UX/UI ·
-> prototipo · SPDD) no aplica**, por lo que el `gate-spdd-approved` queda **n/a**. El
-> resto de la metodologia (spec-funcional, spec-tecnica, traceability, api-contract,
-> spec-tareas, tdd-evidence, BD, trazabilidad) se mantiene exigible.
->
-> **`008-mensajeria-pagos` no entra en esa excepcion**: declara `origin: nuevo`, asi que la
-> Fase 2 SI le aplica y `gate-spdd-approved` NO es n/a para ella. Hoy le faltan los cuatro
-> artefactos de Fase 2 (`prototype.md`, `prototype-validation.md`, `product-design.md`,
-> `spdd-frontend.md`) y ademas `ui-test-cases.md` del set base. Es el unico bloqueador de
-> artefactos canonicos vivo del proyecto, y es trabajo real pendiente — no se resuelve
-> reetiquetando la feature como reingenieria.
-
-| Feature | Gate | Estado | Evidencia |
-|---|---|---|---|
-| 001-catalogo-fuentes | gate-spdd-approved | n/a (reingenieria) | specs/001-catalogo-fuentes/spec-funcional.md (origin: reingenieria) |
-| 002-catalogo-readers | gate-spdd-approved | n/a (reingenieria) | specs/002-catalogo-readers/spec-funcional.md (origin: reingenieria) |
-| 003-diseno-y-ejecucion-procesos | gate-spdd-approved | n/a (reingenieria) | specs/003-diseno-y-ejecucion-procesos/spec-funcional.md (origin: reingenieria) |
-| 004-observabilidad-y-auditoria | gate-spdd-approved | n/a (reingenieria) | specs/004-observabilidad-y-auditoria/spec-funcional.md (origin: reingenieria) |
-| 005-catalogo-conexiones | gate-spdd-approved | n/a (reingenieria) | specs/005-catalogo-conexiones/spec-funcional.md (origin: reingenieria) |
-| 006-programacion-procesos | gate-spdd-approved | n/a (reingenieria) | specs/006-programacion-procesos/spec-funcional.md (origin: reingenieria) |
-| 007-tema-del-sistema | gate-spdd-approved | n/a (reingenieria) | specs/007-tema-del-sistema/spec-funcional.md (origin: reingenieria) |
-
-## Requerimientos sin implementacion
-
-Las siete features de reingenieria (001-007) tienen codigo asociado en produccion. Su pendiente es
-de validacion, no de implementacion: captura formal de evidencia RED-GREEN (estado `pending` en cada
-`tdd-evidence.md`) y, en 005/006, cobertura de pruebas dedicada (`Test = -`).
-
-`008-mensajeria-pagos` es distinta —`origin: nuevo`, no reingenieria— y si tiene requisitos sin
-implementar. Son trabajo real, no papeleo:
-
-| RF | Estado | Que falta |
-|---|---|---|
-| RF-015 | No implementado | linaje UETR extremo a extremo |
-| RF-020 | No implementado | enmascarado de datos sensibles en logs |
-| RF-021 | No implementado | retencion y purga del archivado |
-
-Y dos que NO cuentan como deuda de esta feature, para que nadie los sume por error:
-
-- `RF-018` — **Futuro**: alcance declarado y pospuesto de forma explicita.
-- `RF-012` — **Otro vertical**: pertenece a PAIN001/ISO 20022, que es una vertical DISTINTA de
-  SWIFT MT101. No se implementa aqui.
-- `RF-001` — **Retirado**: `MT101_BUILD`, absorbido por `RF-022` (`MT101_BUILD_FROM_TABLE`). Se
-  conserva tachado en su sitio en vez de borrarse, para que quien lo encuentre en codigo o
-  documentacion antigua sepa que desaparecio y por que.
-
-## Decisiones transversales
-
-- La correlacion operativa base entre auditoria, trazas y ejecucion es `processExecutionId`.
-- Los secretos se referencian con el contrato `${secret:...}` y nunca se persisten en claro
-  (ver `001-catalogo-fuentes` RF-004 y ADR-002).
-- El motor usa el patron providers + registries (source/reader/task) para extensibilidad
-  sin acoplar flujos (ver ADR-001 y ADR-002).
-
-## Preguntas abiertas globales
-
-- Confirmar con el equipo el mapeo definitivo entre la numeracion local `RF-001..RF-005`
-  por feature y los requerimientos globales `funcional 1..7 / no funcional 1..5` del
-  documento de analisis, para fijar la trazabilidad bidireccional.
-- El contrato `contracts/api/openapi.yaml` ya publica las 16 rutas reales (`@Path` de
-  `platform-app`), generado desde los `specs/<feature>/api-contract.md` con
-  `npm run generate:openapi`. Pendiente de fase 4/7: enriquecer cada operacion con
-  request/response schemas y parametros completos (hoy documenta ruta + 200 minimo).
