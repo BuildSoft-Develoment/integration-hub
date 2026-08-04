@@ -28,11 +28,19 @@ package com.integrationhub.platform.provider.task;
  * <p><b>Por que no se saca la suite a un perfil aparte.</b> Porque esconderia el problema y dejaria
  * la compatibilidad multi-BD fuera del build base: lo contrario de lo que exige una homologacion
  * bancaria. El arreglo es calibrar el timeout, no dejar de medir.</p>
+ *
+ * <p><b>2026-08-03: de 8 a 10 minutos.</b> Los 288 s de la tabla de arriba median cuando el puerto
+ * 1521 quedaba escuchando, que NO es cuando Oracle esta listo (ver
+ * {@link CompatibilityJdbcContainers}). Arrancando la imagen a mano y esperando el
+ * "DATABASE IS READY TO USE!" real, con la imagen recien descargada y el disco saturado, tardo
+ * <b>485 s</b> — por encima de los 480 s que concedia esta constante. El numero anterior no estaba
+ * mal calculado: media otra cosa. Se sube a 10 min para dejar margen sobre la peor medicion
+ * observada, no para tapar nada.</p>
  */
 public final class CompatibilityContainerTimeouts {
 
     /** Segundos que se le conceden a un contenedor de compatibilidad para quedar sano. */
-    public static final int STARTUP_SECONDS = 8 * 60;
+    public static final int STARTUP_SECONDS = 10 * 60;
 
     private CompatibilityContainerTimeouts() {
     }

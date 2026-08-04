@@ -46,7 +46,14 @@ public final class CompatibilityJdbcContainers {
             .withEnv("APP_USER", USERNAME)
             .withEnv("APP_USER_PASSWORD", PASSWORD)
             .withExposedPorts(1521)
-            .waitingFor(Wait.forListeningPort()
+            // El puerto 1521 NO es senal de que Oracle este listo: lo abre el listener de TNS casi de
+            // inmediato, mientras la PDB FREEPDB1 tarda MINUTOS mas en registrarse con el. Con
+            // `Wait.forListeningPort()`, start() volvia enseguida y el test se estrellaba contra
+            // `ORA-12514: el servicio FREEPDB1 no esta registrado con el listener`.
+            // Medido el 2026-08-03 arrancando la imagen a mano: el puerto responde casi al instante y
+            // el "DATABASE IS READY TO USE!" llega a los 485 s. Se espera esa senal, que es la unica
+            // que significa lo que el test necesita.
+            .waitingFor(Wait.forLogMessage(".*DATABASE IS READY TO USE.*\\n", 1)
                     .withStartupTimeout(Duration.ofSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS)));
 
     private static boolean oracleServiceReady;
@@ -82,7 +89,12 @@ public final class CompatibilityJdbcContainers {
             }
 
             SQLException lastError = null;
-            var deadline = System.nanoTime() + Duration.ofMinutes(5).toNanos();
+            // Red de seguridad, no la espera principal: con la senal de log de arriba el contenedor ya
+            // llega listo y este bucle acierta al primer intento. El plazo sale de la constante
+            // compartida y no de un 5 hardcodeado, que era MENOR que el propio timeout de arranque
+            // (300 s frente a 480 s): la espera de respaldo se rendia antes que la principal.
+            var deadline = System.nanoTime()
+                    + Duration.ofSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS).toNanos();
             while (System.nanoTime() < deadline) {
                 try (Connection ignored = dataSource.getConnection()) {
                     oracleServiceReady = true;
