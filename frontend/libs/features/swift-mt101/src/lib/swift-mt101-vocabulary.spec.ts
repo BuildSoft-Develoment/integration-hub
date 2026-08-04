@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import { vocabularyKey, vocabularyTone } from '@integration-hub/core/i18n';
-import { SWIFT_MT101_MESSAGES } from './swift-mt101-i18n';
+import { I18nService, resolveVocabulary, vocabularyKey, vocabularyTone } from '@integration-hub/core/i18n';
+import { SWIFT_MT101_MESSAGES, provideSwiftMt101I18n } from './swift-mt101-i18n';
 
 /**
  * El vertical debe saber nombrar SUS propios estados.
@@ -38,7 +39,58 @@ function estadosDeDespacho(): string[] {
   return [...new Set([...terminales, ...enVuelo])];
 }
 
+/**
+ * Stages del recorrido por registro, derivados de `Mt101RowTimelineService`.
+ *
+ * <p>Ese servicio no emite una lista cerrada: COMPONE parte de los nombres concatenando un prefijo
+ * con el estado del fragmento o del archivo (`"RECORD_" + status`). El vocabulario es abierto, y por
+ * eso `PAYMENT_STATUS_REJECTED` llego a produccion sin etiqueta y se vio crudo en el timeline de
+ * cuarentena: mi barrido anterior derivaba de los emisores de eventos de auditoria, y estos hitos no
+ * pasan por ahi.</p>
+ *
+ * <p>Se derivan las dos formas: los literales y el producto prefijo x estado. Enumerar a mano las
+ * combinaciones seria repetir el mismo error con un envoltorio distinto.</p>
+ */
+function stagesDelTimeline(): string[] {
+  const src = readFileSync(
+    join(REPO, 'vertical-swift-mt101/src/main/java/com/integrationhub/vertical/swift/mt101/service/Mt101RowTimelineService.java'),
+    'utf8',
+  );
+
+  // Los literales: se descartan los que acaban en `_`, que son prefijos de concatenacion.
+  const literales = [...src.matchAll(/"((?:RECORD|CORRECTIVE_RECORD|PAYMENT)_[A-Z_]{3,})"/g)]
+    .map((m) => m[1])
+    .filter((s) => !s.endsWith('_'));
+
+  // Cada prefijo se concatena con un dominio DISTINTO, y cruzarlos todos contra todos generaria
+  // combinaciones imposibles (`PAYMENT_STATUS_VALIDATED` no existe: el archivo no se "valida").
+  const compuestos = [
+    ...['BUILT', 'VALIDATED', 'SENT', 'REJECTED'].flatMap((e) => [`RECORD_${e}`, `CORRECTIVE_RECORD_${e}`]),
+    ...['CONFIRMED', 'REJECTED'].map((e) => `PAYMENT_STATUS_${e}`),
+  ];
+
+  return [...new Set([...literales, ...compuestos])];
+}
+
 describe('vocabulario del vertical SWIFT MT101', () => {
+  it('el recorrido por registro sabe nombrar TODOS los hitos que compone', () => {
+    const stages = stagesDelTimeline();
+    expect(stages.length, 'no se pudieron derivar los hitos del timeline').toBeGreaterThan(8);
+
+    // Se resuelve por el CAMINO REAL en vez de mirar un diccionario: algunos hitos los declara el
+    // motor (RECORD_INGESTED) y otros el vertical, y comprobar solo uno de los dos dejaria un hueco
+    // -o exigiria una lista a mano de quien declara que, que es justo lo que envejece.
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [...provideSwiftMt101I18n()] });
+    const i18n = TestBed.inject(I18nService);
+
+    const sinEtiqueta = stages.filter((s) => resolveVocabulary(i18n, 'recordStage', s).startsWith('⚠'));
+    expect(
+      sinEtiqueta,
+      'el timeline los mostraria marcados:\n  ' + sinEtiqueta.join('\n  '),
+    ).toEqual([]);
+  });
+
   it('deriva los estados de despacho del codigo Java', () => {
     const estados = estadosDeDespacho();
     expect(estados.length, 'no se pudo derivar el dominio de despacho').toBeGreaterThan(3);

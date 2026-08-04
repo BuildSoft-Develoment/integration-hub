@@ -89,6 +89,21 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'recordStage.PAY_CONFLICT_RESOLVED': 'Conflicto resuelto',
   'recordStage.STAGING_ROW_CORRECTED': 'Fila de staging corregida',
 
+  // Mt101RowTimelineService COMPONE parte de estos nombres: "RECORD_" + estado del fragmento,
+  // "CORRECTIVE_RECORD_" + estado, "PAYMENT_STATUS_" + estado del archivo. Es decir, el vocabulario
+  // es abierto: un estado de fragmento nuevo produce un stage nuevo sin que nadie lo declare. De ahi
+  // que faltara PAYMENT_STATUS_REJECTED y se viera crudo en el timeline de cuarentena. Estas cubren
+  // las combinaciones que el codigo puede generar hoy; el arreglo de fondo es que el servicio emita
+  // el hito estructurado (tipo + estado) en vez de una cadena concatenada.
+  'recordStage.RECORD_SENT': 'Mensaje enviado',
+  'recordStage.CORRECTIVE_RECORD_BUILT': 'Correctivo construido',
+  'recordStage.CORRECTIVE_RECORD_VALIDATED': 'Correctivo validado',
+  'recordStage.CORRECTIVE_RECORD_SENT': 'Correctivo enviado',
+  'recordStage.CORRECTIVE_RECORD_REJECTED': 'Correctivo rechazado',
+  'recordStage.PAYMENT_STATUS_REJECTED': 'El banco lo rechazo',
+  'recordStage.PAYMENT_RECONCILED': 'Pago conciliado',
+  'recordStage.PAYMENT_UNMATCHED': 'Pago sin correspondencia',
+
   'recordStatus.BUILT': 'Construido',
   'recordStatus.VALIDATED': 'Validado',
   'recordStatus.ARCHIVED': 'Archivado',
@@ -99,6 +114,8 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   // resolver antes de dar el pago por bueno.
   'recordStatus.UNMATCHED': 'Sin correspondencia',
   'recordStatus.REJECTED': 'Rechazado',
+  'recordStatus.SENT': 'Enviado',
+  'recordStatus.RECONCILED': 'Conciliado',
 
   'mt101.format': 'Formato de salida',
   'mt101.debitAccountMode': 'Modo cuenta debito',
@@ -390,6 +407,15 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'recordStage.PAY_CONFLICT_RESOLVED': 'Conflict resolved',
   'recordStage.STAGING_ROW_CORRECTED': 'Staging row corrected',
 
+  'recordStage.RECORD_SENT': 'Message sent',
+  'recordStage.CORRECTIVE_RECORD_BUILT': 'Corrective built',
+  'recordStage.CORRECTIVE_RECORD_VALIDATED': 'Corrective validated',
+  'recordStage.CORRECTIVE_RECORD_SENT': 'Corrective sent',
+  'recordStage.CORRECTIVE_RECORD_REJECTED': 'Corrective rejected',
+  'recordStage.PAYMENT_STATUS_REJECTED': 'Rejected by the bank',
+  'recordStage.PAYMENT_RECONCILED': 'Payment reconciled',
+  'recordStage.PAYMENT_UNMATCHED': 'Payment unmatched',
+
   'recordStatus.BUILT': 'Built',
   'recordStatus.VALIDATED': 'Validated',
   'recordStatus.ARCHIVED': 'Archived',
@@ -398,6 +424,8 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'recordStatus.CORRECTED': 'Corrected',
   'recordStatus.UNMATCHED': 'Unmatched',
   'recordStatus.REJECTED': 'Rejected',
+  'recordStatus.SENT': 'Sent',
+  'recordStatus.RECONCILED': 'Reconciled',
 
   'mt101.format': 'Output format',
   'mt101.debitAccountMode': 'Debit account mode',
