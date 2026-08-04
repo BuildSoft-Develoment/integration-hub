@@ -60,8 +60,8 @@ arma el JSON; `hydrateDraft` el inverso). La UI por tipo vive en `process-task-f
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
 | gate-sdd-approved | approved | Natan Angel Davila Lopez (product owner) | 2026-08-04 | spec-tecnica.md |
-| gate-build-ready | pending | — | — | traceability.md |
-| gate-qa-passed | pending | — | — | tdd-evidence.md |
+| gate-build-ready | approved | Natan Angel Davila Lopez (tech lead) | 2026-08-04 | traceability.md |
+| gate-qa-passed | approved | Natan Angel Davila Lopez (qa lead) | 2026-08-04 | tdd-evidence.md |
 | gate-deploy-ready | pending | — | — | ops/runbooks/003-diseno-y-ejecucion-procesos-runbook.md |
 | gate-operations-ready | pending | — | — | ops/runbooks/003-diseno-y-ejecucion-procesos-runbook.md |
 

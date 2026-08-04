@@ -336,6 +336,11 @@ function analyzePhase7() {
   //   2. Existe al menos un gate-deploy-ready approved (en alguna feature).
   let releaseNotesValid = 0;
   let releaseNotesTotal = 0;
+  // Las notas de bootstrap/plantilla no describen un release de producto, asi que no se les exige
+  // vinculacion a RF/HU. El codigo ya las saltaba, pero el DENOMINADOR seguia contandolas: el panel
+  // decia "1/5 release notes vinculadas" junto a un COMPLETA y parecia que cuatro se habian colado
+  // sin mirar. La regla era correcta; el mensaje invitaba a desconfiar de ella.
+  let releaseNotesExentas = 0;
   for (const dir of ["releases", "ops/release-notes"]) {
     const abs = join(root, dir);
     if (!existsSync(abs)) continue;
@@ -345,7 +350,10 @@ function analyzePhase7() {
     for (const f of files) {
       try {
         const text = readFileSync(join(abs, f), "utf8");
-        if (/^---\s*\n[\s\S]*?\bkind\s*:\s*(bootstrap|scaffolding|template-only)\b/m.test(text)) continue;
+        if (/^---\s*\n[\s\S]*?\bkind\s*:\s*(bootstrap|scaffolding|template-only)\b/m.test(text)) {
+          releaseNotesExentas += 1;
+          continue;
+        }
         if (/\b(RF|RNF|HU)-\d+/.test(text) || /specs\/\d{3,}-/.test(text)) releaseNotesValid += 1;
       } catch { /* skip */ }
     }
@@ -353,10 +361,10 @@ function analyzePhase7() {
   // Detectar gate-deploy-ready approved.
   const deployApproved = countApprovedGates("gate-deploy-ready");
   if (releaseNotesValid > 0 && deployApproved > 0) {
-    return { id: 7, name: "Despliegue", status: "complete", detail: `${releaseNotesValid}/${releaseNotesTotal} release notes vinculadas + ${deployApproved} feature(s) con gate-deploy-ready approved` };
+    return { id: 7, name: "Despliegue", status: "complete", detail: `${releaseNotesValid}/${releaseNotesTotal - releaseNotesExentas} release notes de producto vinculadas (${releaseNotesExentas} de bootstrap exentas) + ${deployApproved} feature(s) con gate-deploy-ready approved` };
   }
   if (releaseNotesValid > 0 || deployApproved > 0) {
-    return { id: 7, name: "Despliegue", status: "partial", detail: `${releaseNotesValid}/${releaseNotesTotal} release notes vinculadas, ${deployApproved} gates approved (necesita ambos)` };
+    return { id: 7, name: "Despliegue", status: "partial", detail: `${releaseNotesValid}/${releaseNotesTotal - releaseNotesExentas} release notes de producto vinculadas (${releaseNotesExentas} de bootstrap exentas), ${deployApproved} gates approved (necesita ambos)` };
   }
   return { id: 7, name: "Despliegue", status: "not-started", detail: `0 release notes vinculadas a RF/HU` };
 }
