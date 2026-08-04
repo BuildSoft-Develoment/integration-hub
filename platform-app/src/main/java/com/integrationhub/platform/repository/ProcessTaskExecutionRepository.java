@@ -69,4 +69,35 @@ public class ProcessTaskExecutionRepository implements PanacheRepository<Process
                 .page(0, Math.max(limit, 1))
                 .list();
     }
+
+    /**
+     * Cierra las tareas que se quedaron en {@code RUNNING} cuando el nodo que las ejecutaba perdio el
+     * lease. Devuelve cuantas cerro.
+     *
+     * <p><b>Por que hace falta.</b> La recuperacion solo tocaba {@code process_execution}: reencolaba
+     * la ejecucion y dejaba las filas de tarea del intento abortado en {@code RUNNING} para siempre.
+     * En la base de dev habia 27 asi, dentro de ejecuciones ya terminadas en {@code FAILED} — nadie
+     * las iba a cerrar nunca, y cualquier recuento de "tareas en ejecucion" las sumaba.</p>
+     *
+     * <p><b>Por que ABORTED y no FAILED.</b> No fallaron: se quedaron sin nodo. Contarlas como fallos
+     * ensucia la unica cifra que sirve para saber si un proceso va mal, y ademas miente sobre lo que
+     * paso. Es la misma distincion que el producto sostiene entre "rechazado" y "sin confirmar".</p>
+     *
+     * <p><b>Por que se excluye {@code movesMoney}.</b> Una tarea que movio dinero y quedo huerfana es
+     * la EVIDENCIA de que hubo un efecto no idempotente: {@code hasStartedMoneyMovement} la lee para
+     * enrutar la ejecucion a {@code NEEDS_RECONCILIATION}. Cerrarla aqui la disfrazaria de tarea
+     * terminada y borraria el rastro de lo unico que no se puede reejecutar a ciegas. Esas se quedan
+     * como estan y las resuelve una persona.</p>
+     */
+    public int abortOrphanedTasks(Long processExecutionId, java.time.LocalDateTime now) {
+        if (processExecutionId == null) {
+            return 0;
+        }
+        return update("status = ?1, finishedAt = ?2, details = ?3 "
+                        + "where processExecution.id = ?4 and status = ?5 and movesMoney = false",
+                com.integrationhub.platform.spi.execution.ExecutionStatus.ABORTED, now,
+                "Aborted: the node running this task lost its lease; the execution was recovered",
+                processExecutionId,
+                com.integrationhub.platform.spi.execution.ExecutionStatus.RUNNING);
+    }
 }

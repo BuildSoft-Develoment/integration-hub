@@ -25,7 +25,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-// @covers RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 003-diseno-y-ejecucion-procesos RF-005 (transiciones de estado por ejecucion, con el
+// linaje que permite el reproceso; incluye la ruta a NEEDS_RECONCILIATION del money-path)
 class ProcessExecutionStateServiceTest {
 
     private final ProcessDefinitionRepository processDefinitionRepository = mock(ProcessDefinitionRepository.class);
@@ -96,6 +97,72 @@ class ProcessExecutionStateServiceTest {
 
         assertEquals(1, recovered);
         verify(processExecutionRepository).recoverExpiredRunning(eq(30L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any());
+    }
+
+    @Test
+    void recoverDejaDeReencolarCuandoSeAgotanLosIntentos() {
+        // Sin tope, una ejecucion en un nodo inestable se recupera para siempre y REPITE sus tareas
+        // cada vez. Medido en dev: una llego a 8 intentos y su DB_WRITE escribio dos veces completo,
+        // dejando 26.000 filas de staging para un fichero de 10.000 registros.
+        var execution = pendingExecution(40L);
+        execution.executionAttempt = ProcessExecutionStateService.MAX_RECOVERY_ATTEMPTS;
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(40L));
+        when(processExecutionRepository.hasStartedMoneyMovement(40L)).thenReturn(false);
+        when(processExecutionRepository.findById(40L)).thenReturn(execution);
+        when(processExecutionRepository.recoverExpiredRunning(eq(40L), any(), any(), any())).thenReturn(1);
+
+        service.recoverExpiredExecutions(50);
+
+        // A FAILED, no a PENDING: reencolarla otra vez es justo lo que hay que cortar.
+        verify(processExecutionRepository).recoverExpiredRunning(eq(40L), eq(ExecutionStatus.FAILED), any(), any());
+    }
+
+    @Test
+    void recoverSigueReencolandoMientrasQuedenIntentos() {
+        // El tope no puede convertir un corte puntual de red en una ejecucion muerta.
+        var execution = pendingExecution(41L);
+        execution.executionAttempt = 1;
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(41L));
+        when(processExecutionRepository.hasStartedMoneyMovement(41L)).thenReturn(false);
+        when(processExecutionRepository.findById(41L)).thenReturn(execution);
+        when(processExecutionRepository.recoverExpiredRunning(eq(41L), any(), any(), any())).thenReturn(1);
+
+        service.recoverExpiredExecutions(50);
+
+        verify(processExecutionRepository).recoverExpiredRunning(eq(41L), eq(ExecutionStatus.PENDING), any(), any());
+    }
+
+    @Test
+    void elTopeDeIntentosNoPisaLaRutaDelDinero() {
+        // Aunque se agoten los intentos, una ejecucion que ya inicio un pago NO puede acabar en
+        // FAILED: FAILED se lee como "no salio", y aqui no se sabe. Manda NEEDS_RECONCILIATION.
+        var execution = pendingExecution(42L);
+        execution.executionAttempt = ProcessExecutionStateService.MAX_RECOVERY_ATTEMPTS + 3;
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(42L));
+        when(processExecutionRepository.hasStartedMoneyMovement(42L)).thenReturn(true);
+        when(processExecutionRepository.findById(42L)).thenReturn(execution);
+        when(processExecutionRepository.recoverExpiredRunning(eq(42L), any(), any(), any())).thenReturn(1);
+
+        service.recoverExpiredExecutions(50);
+
+        verify(processExecutionRepository)
+                .recoverExpiredRunning(eq(42L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any());
+    }
+
+    @Test
+    void recoverCierraLasTareasQueQuedaronCorriendoDelIntentoAbortado() {
+        // Sin esto quedan filas en RUNNING para siempre dentro de una ejecucion ya terminada: 27 en
+        // la base de dev. Nadie las cerrara nunca y cualquier recuento de "en ejecucion" las suma.
+        var execution = pendingExecution(43L);
+        execution.executionAttempt = 1;
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(43L));
+        when(processExecutionRepository.hasStartedMoneyMovement(43L)).thenReturn(false);
+        when(processExecutionRepository.findById(43L)).thenReturn(execution);
+        when(processExecutionRepository.recoverExpiredRunning(eq(43L), any(), any(), any())).thenReturn(1);
+
+        service.recoverExpiredExecutions(50);
+
+        verify(processTaskExecutionRepository).abortOrphanedTasks(eq(43L), any());
     }
 
     @Test

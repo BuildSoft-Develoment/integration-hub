@@ -25,6 +25,21 @@ import java.util.Map;
 @ApplicationScoped
 public class ProcessExecutionStateService implements ExecutionReconciliationGateway {
 
+    /**
+     * Cuantas veces se reencola una ejecucion huerfana antes de dejar de intentarlo.
+     *
+     * <p><b>Por que hay tope.</b> `execution_attempt` se incrementaba en cada reclamo y no lo leia
+     * NADIE, asi que una ejecucion en un nodo inestable se recuperaba indefinidamente. Y cada
+     * recuperacion no reanuda: vuelve a empezar por la primera tarea. Medido en la base de dev, una
+     * ejecucion llego a 8 intentos y su `DB_WRITE` completo dos veces, dejando 26.000 filas de
+     * staging para un fichero de 10.000 registros; el paso siguiente construyo 13.000 mensajes de
+     * pago a partir de ellas. Un bucle de recuperacion no es solo ruido: fabrica datos.</p>
+     *
+     * <p>Tres es deliberadamente bajo. Lo que arregla un reintento es un corte puntual; a la cuarta
+     * el problema es el entorno, y seguir reejecutando el proceso entero no lo mejora — lo agrava.</p>
+     */
+    public static final int MAX_RECOVERY_ATTEMPTS = 3;
+
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final ProcessTaskDefinitionRepository processTaskDefinitionRepository;
     private final ProcessExecutionRepository processExecutionRepository;
@@ -161,16 +176,37 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
         var recovered = 0;
         for (var id : expiredIds) {
             var startedPay = processExecutionRepository.hasStartedMoneyMovement(id);
-            var target = startedPay ? ExecutionStatus.NEEDS_RECONCILIATION : ExecutionStatus.PENDING;
-            var detail = startedPay
-                    ? "Recovered orphaned execution (lease expired) that already started a money-movement task; "
-                            + "NEEDS_RECONCILIATION (no blind re-run; resolve via STATUS/RECONCILE)"
-                    : "Recovered orphaned execution (lease expired); re-queued for a fresh atomic claim";
+            var execution = processExecutionRepository.findById(id);
+            var agotada = execution != null && execution.executionAttempt >= MAX_RECOVERY_ATTEMPTS;
+
+            // El dinero manda sobre el tope: si ya hubo un efecto no idempotente, agotar intentos NO
+            // la convierte en FAILED. FAILED se lee como "no salio", y aqui justamente no se sabe.
+            ExecutionStatus target;
+            String detail;
+            if (startedPay) {
+                target = ExecutionStatus.NEEDS_RECONCILIATION;
+                detail = "Recovered orphaned execution (lease expired) that already started a money-movement task; "
+                        + "NEEDS_RECONCILIATION (no blind re-run; resolve via STATUS/RECONCILE)";
+            } else if (agotada) {
+                target = ExecutionStatus.FAILED;
+                detail = "Recovery attempts exhausted (" + execution.executionAttempt + " of "
+                        + MAX_RECOVERY_ATTEMPTS + "): the execution is no longer re-queued. Each attempt re-ran the "
+                        + "process from its first task, so check the destination for data written more than once.";
+            } else {
+                target = ExecutionStatus.PENDING;
+                detail = "Recovered orphaned execution (lease expired); re-queued for a fresh atomic claim";
+            }
+
             if (processExecutionRepository.recoverExpiredRunning(id, target, detail, now) == 1) {
                 recovered++;
-                var execution = processExecutionRepository.findById(id);
+                // Las tareas del intento abortado se cierran ANTES de auditar, para que el evento
+                // describa un estado ya coherente y no una foto a medias.
+                processTaskExecutionRepository.abortOrphanedTasks(id, now);
+                execution = processExecutionRepository.findById(id);
                 auditService.record(execution, null, "PROCESS_RECOVERED", target.name(), detail, Map.of(
-                        "processDefinitionId", execution.processDefinition.id, "startedPay", startedPay));
+                        "processDefinitionId", execution.processDefinition.id,
+                        "startedPay", startedPay,
+                        "attempt", execution.executionAttempt));
             }
         }
         return recovered;
