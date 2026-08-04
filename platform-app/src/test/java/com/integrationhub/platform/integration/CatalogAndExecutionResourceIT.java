@@ -24,6 +24,10 @@ import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+// @covers spec 003-diseno-y-ejecucion-procesos RF-003 (activa el proceso y ejecuta; la matriz de 003
+// declara este IT para ese RF)
+// @covers spec 004-observabilidad-y-auditoria RF-002, RF-004, RF-005 (detalle por tarea, resumen
+// operativo agregado y correlacion de la auditoria con la ejecucion que la produjo)
 @QuarkusTest
 @TestProfile(IntegrationTestProfile.class)
 @QuarkusTestResource(PostgresTestResource.class)
@@ -166,6 +170,16 @@ class CatalogAndExecutionResourceIT {
             assertTrue(countRows("audit_spool") >= 4,
                     "el productor debe haber encolado >=4 tramas de auditoria en el spool");
 
+            // RF-005 de 004: contar tramas no demuestra que se pueda correlacionar la evidencia con
+            // la ejecucion que la produjo. AuditService escribe `trace_id = "exec-" + id`, y ese es
+            // el hilo por el que un auditor llega de la ejecucion a su auditoria. Se comprueba que
+            // TODAS las tramas de esta corrida lo lleven: una sola sin trace_id ya seria evidencia
+            // huerfana, invisible para la consulta que este requisito promete.
+            assertEquals(countRows("audit_spool"),
+                    countRowsWhere("audit_spool", "trace_id = 'exec-" + executionId.longValue() + "'"),
+                    "toda trama de auditoria de esta ejecucion debe quedar correlacionada por trace_id"
+                            + " exec-" + executionId.longValue());
+
             given()
                     .when()
                             .get("/api/query/overview-summary")
@@ -301,6 +315,16 @@ class CatalogAndExecutionResourceIT {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery("SELECT count(*) FROM " + tableName)) {
+            resultSet.next();
+            return resultSet.getInt(1);
+        }
+    }
+
+    private int countRowsWhere(String tableName, String whereClause) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                     "SELECT count(*) FROM " + tableName + " WHERE " + whereClause)) {
             resultSet.next();
             return resultSet.getInt(1);
         }

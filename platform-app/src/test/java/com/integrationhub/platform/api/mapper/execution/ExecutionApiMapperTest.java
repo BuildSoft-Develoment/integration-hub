@@ -10,7 +10,11 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-// @covers RF-002 (reingenieria: prueba que cubre el/los RF en produccion)
+// Declaraba RF-002 y ningun RF-002 de ninguna spec describe esto (los candidatos son tipos de tarea,
+// layout de readers, activar fuentes...). Se reasigna a los dos requisitos que este test si ejercita,
+// uno por feature, en vez de cualificar un codigo que no correspondia.
+// @covers spec 003-diseno-y-ejecucion-procesos RF-004 (toStartResponse: lo que devuelve el disparo manual)
+// @covers spec 004-observabilidad-y-auditoria RF-001 (toResponse: la ejecucion tal como se consulta)
 class ExecutionApiMapperTest {
 
     private final ExecutionApiMapper mapper = new ExecutionApiMapper();

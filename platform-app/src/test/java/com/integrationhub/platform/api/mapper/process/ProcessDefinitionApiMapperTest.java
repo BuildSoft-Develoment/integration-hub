@@ -16,7 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-001 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 003-diseno-y-ejecucion-procesos RF-001 (la definicion se representa con sus tareas
+// ORDENADAS y sin las inactivas: es lo que hace util "mantener definiciones con tareas ordenadas")
 class ProcessDefinitionApiMapperTest {
 
     private final ProcessDefinitionApiMapper mapper = new ProcessDefinitionApiMapper();

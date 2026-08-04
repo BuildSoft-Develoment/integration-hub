@@ -35,7 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-004, RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 003-diseno-y-ejecucion-procesos RF-004, RF-005 (la matriz de 003 declara esta clase
+// y este test para RF-004)
 class StreamingPipelineServiceTest {
 
     @Test

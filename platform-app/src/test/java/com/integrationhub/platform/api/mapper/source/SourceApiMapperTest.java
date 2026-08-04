@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-001 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 001-catalogo-fuentes RF-001 (representacion de la fuente por tipo, con su estado)
 class SourceApiMapperTest {
 
     private final SourceApiMapper mapper = new SourceApiMapper();

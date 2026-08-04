@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// @covers RF-001 (reingenieria: prueba que cubre el/los RF en produccion)
+// @covers spec 002-catalogo-readers RF-001 (representacion del reader por formato, con su estado)
 class ReaderApiMapperTest {
 
     private final ReaderApiMapper mapper = new ReaderApiMapper();

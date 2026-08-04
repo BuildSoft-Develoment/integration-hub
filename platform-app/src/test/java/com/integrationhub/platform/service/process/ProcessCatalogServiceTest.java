@@ -32,7 +32,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-// @covers RF-001 (reingenieria: prueba que cubre el/los RF en produccion)
+// Esta clase toca dos features a la vez, asi que lo declara en dos lineas en vez de mezclarlas:
+// crear/mantener/activar definiciones es de 003, y fijar la frecuencia con su proximo disparo es de
+// 006. Una sola linea con los tres codigos no diria de cual es cada uno.
+// @covers spec 003-diseno-y-ejecucion-procesos RF-001, RF-003 (create persiste definicion y tareas;
+// setActive habilita la ejecucion)
+// @covers spec 006-programacion-procesos RF-001 (schedule_every fija next_run_at, y en blanco lo limpia)
 class ProcessCatalogServiceTest {
 
     private final ProcessDefinitionRepository processDefinitionRepository = mock(ProcessDefinitionRepository.class);

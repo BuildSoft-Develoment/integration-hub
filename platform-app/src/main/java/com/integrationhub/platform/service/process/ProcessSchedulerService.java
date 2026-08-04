@@ -1,7 +1,8 @@
 package com.integrationhub.platform.service.process;
 
 // @trace spec 006-programacion-procesos RF-002, RF-004 (la matriz de 006 declara esta clase para ambos)
-// @trace RF-003 (reingenieria: clase que implementa el/los RF en produccion)
+// @trace spec 003-diseno-y-ejecucion-procesos RF-003 (la matriz de 003 declara esta clase; el RF-003
+// de 006 es otro requisito -consultar programaciones- y lo sirve ProcessScheduleQueryService)
 
 import com.integrationhub.platform.repository.ProcessDefinitionRepository;
 import com.integrationhub.platform.service.execution.AuditService;

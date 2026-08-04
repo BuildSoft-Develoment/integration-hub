@@ -20,7 +20,7 @@ v0.4.0
 - Resumen en una linea: plataforma Quarkus operativa (194 archivos Java) con motor de ejecucion de tareas multi-provider (REST, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, NOTIFICATION) sobre fuentes filesystem/ftp/sftp/rest y readers txt/csv/xls/xlsx/json/xml; se esta instanciando la capa de gobernanza (memoria viva, trazabilidad RF->codigo->test, gates con firma humana) sin perder lo que ya corre.
 - Ultima actualizacion (auto):
 <!-- auto:start name=ultima-actualizacion -->
-2026-08-04 05:04
+2026-08-04 15:31
 <!-- auto:end -->
 
 ## Features y su estado
@@ -37,7 +37,7 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 | 005-catalogo-conexiones | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 | 006-programacion-procesos | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 | 007-tema-del-sistema | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
-| 008-mensajeria-pagos | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-operations-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending |
+| 008-mensajeria-pagos | Bloqueado: gate-build-ready | gate-build-ready=pending; gate-deploy-ready=pending; gate-html5-product-quality=pending; gate-operations-ready=pending; gate-prototype-human-visual-review=pending; gate-prototype-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=pending |
 <!-- auto:end -->
 
 ## Gates pendientes
@@ -86,9 +86,13 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 - `gate-spdd-approved` en `specs/007-tema-del-sistema` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-07-31)
 - `gate-build-ready` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
 - `gate-deploy-ready` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-html5-product-quality` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
 - `gate-operations-ready` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-prototype-human-visual-review` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-prototype-ready` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
 - `gate-qa-passed` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
 - `gate-sdd-approved` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
+- `gate-spdd-approved` en `specs/008-mensajeria-pagos` — pending (ultimo: Natan Angel Davila Lopez, 2026-07-31)
 <!-- auto:end -->
 
 ## Sesiones recientes

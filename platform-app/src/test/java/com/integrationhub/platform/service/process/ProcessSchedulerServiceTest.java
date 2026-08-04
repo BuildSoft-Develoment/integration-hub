@@ -11,7 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 
-// @covers RF-002, RF-003 (reingenieria: prueba que cubre el/los RF en produccion)
+// Declaraba tambien RF-003 y se ha retirado: esta clase solo prueba `parseEvery`, y ni el RF-003 de
+// 006 (consultar programaciones vigentes) ni el de 003 (activar un proceso) pasan por aqui. Cubrirlos
+// desde este fichero era un verde que no miraba nada; ambos siguen cubiertos donde toca.
+// @covers spec 006-programacion-procesos RF-002 (parsear la frecuencia es lo que decide cuando vence
+// el disparo automatico)
 class ProcessSchedulerServiceTest {
 
     private final ProcessSchedulerService service = new ProcessSchedulerService(

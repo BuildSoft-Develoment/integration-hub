@@ -25,7 +25,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-// @covers RF-001 (reingenieria: prueba que cubre el/los RF en produccion)
+// Declaraba RF-001 sin decir de que feature, y no habia una a la que pertenecer: ningun RF-001 de las
+// specs habla de listar el catalogo con filtros. Se sustituye por lo unico que si tiene requisito
+// exacto -listSchedules-; los demas casos (fuentes, readers, conexiones, procesos) siguen siendo
+// pruebas utiles del filtrado, pero no certifican ningun RF y no se les inventa uno.
+// @covers spec 006-programacion-procesos RF-003 (listSchedules es lo que responde GET /api/process-schedules)
 class CatalogQueryServiceTest {
 
     private final SourceDefinitionRepository sourceRepository = mock(SourceDefinitionRepository.class);
