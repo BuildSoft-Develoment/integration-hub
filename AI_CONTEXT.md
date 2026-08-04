@@ -20,7 +20,7 @@ v0.4.0
 - Resumen en una linea: plataforma Quarkus operativa (194 archivos Java) con motor de ejecucion de tareas multi-provider (REST, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, NOTIFICATION) sobre fuentes filesystem/ftp/sftp/rest y readers txt/csv/xls/xlsx/json/xml; se esta instanciando la capa de gobernanza (memoria viva, trazabilidad RF->codigo->test, gates con firma humana) sin perder lo que ya corre.
 - Ultima actualizacion (auto):
 <!-- auto:start name=ultima-actualizacion -->
-2026-08-01 04:56
+2026-08-04 05:04
 <!-- auto:end -->
 
 ## Features y su estado
@@ -93,7 +93,9 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 
 ## Sesiones recientes
 <!-- auto:start name=sesiones-recientes -->
-- _(sin entradas en SESSION_LOG.md)_
+- **2026-08-03 17:35** — Claude Opus 5 (asistido por Natan Davila) — build nativo (34 min), imagen 1594624bfee0 y stack recreado entero; de paso, `PUBLIC_BASE_URL` tenia clavada la IP de la oficina anterior y el login habria muerto al cambiar de red.
+- **2026-08-03 16:55** — Claude Opus 5 (asistido por Natan Davila) — tercer caso del tooltip invisible, con un agravante que aparecio al mirarlo: lo UNICO que impedia soltar en el lienzo una tarea de plugin no confiable era el atributo `disabled` del boton de la paleta.
+- **2026-08-03 16:35** — Claude Opus 5 (asistido por Natan Davila) — en Material 21.2.14 un boton deshabilitado lleva el `disabled` NATIVO y no emite eventos de raton, asi que el `matTooltip` que explicaba por que el maker no puede aprobar su propio PAY no se mostraba jamas; el motivo pasa a texto visible y se anade un gate para que no vuelva a es
 <!-- auto:end -->
 
 ## Decisiones recientes

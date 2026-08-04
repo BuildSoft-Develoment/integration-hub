@@ -15,10 +15,16 @@ Medido en el historial, no supuesto:
 |---|---|---|
 | `specs/008-mensajeria-pagos/spec-funcional.md` aparece | 2026-06-08 | `b4bb992f` |
 | Primeros componentes Angular de la consola MT101 | 2026-06-08 | `dbfcd9de` |
-| `specs/008-mensajeria-pagos/prototype-html5/index.html` | — | **no existe** |
+| `specs/008-mensajeria-pagos/prototype-html5/index.html` | 2026-08-04 | creado **despues** de la consola |
 
 Spec y UI aterrizaron el mismo dia. No hubo prototipo intermedio que validar, ni sesion de revision
 visual humana, ni `gate-prototype-ready` solicitado.
+
+**Sobre el prototipo del 4 de agosto.** Existe desde hoy y alcanza nivel 3 de la rubrica, pero se
+construyo DOS MESES DESPUES de la consola que retrata. Eso no lo convierte en una validacion de
+Fase 2: un prototipo sirve para descubrir problemas ANTES de construir, y aqui no descubrio nada —
+documenta lo ya construido en un formato navegable. Es util para revisar la experiencia con alguien
+delante y para que la proxima pantalla del vertical si empiece por aqui. No es una fase recuperada.
 
 ## Por que se documenta en vez de fabricarse
 
@@ -52,6 +58,28 @@ en uso.
 - **Decision pendiente de negocio**: si se quiere cerrar formalmente la Fase 2 de esta feature, la
   unica via honesta es una revision visual humana de la consola **tal como esta hoy**, registrada
   como tal — no como validacion de un prototipo que no existio.
+
+## Revision visual humana
+
+**Resultado: pending.**
+
+- **Revisor**: sin asignar.
+- **Fecha**: sin realizar.
+- **Evidencia revisada**: ninguna todavia.
+
+El prototipo esta en [prototype-html5/index.html](prototype-html5/index.html) y se abre en cualquier
+navegador sin servidor. Lo que hay que mirar con ojos, porque ningun validador lo comprueba:
+
+1. Que el ambar de "sin confirmar" se distinga del rojo de "rechazado" de un vistazo, sin leer.
+   Es la distincion que evita reenviar un pago que quiza ya salio.
+2. Que el motivo del bloqueo del cuatro-ojos se lea **debajo del boton apagado**, sin pasar el raton.
+3. Que las columnas de importes queden alineadas y comparables.
+4. Que el recorrido de un pago se entienda sin que nadie lo explique.
+5. Que en pantalla estrecha el rail no tape el contenido.
+
+**Este apartado no lo firma un agente.** Si alguien mira la pantalla y le parece pobre, el resultado
+correcto es `blocked`, no `approved`: es informacion util, no un obstaculo. Poner `approved` sin que
+nadie haya mirado seria justo el tipo de evidencia falsa que este documento denuncia mas arriba.
 
 ## Enlaces
 

@@ -187,9 +187,9 @@
 <!-- ── 1. BANNER ── -->
 <div class="banner">
   <span class="banner-tag spdd">◆ SPDD HUB</span>
-  <span class="banner-tag info">Integration Hub · 8 specs · 0 prototipos</span>
+  <span class="banner-tag info">Integration Hub · 8 specs · 1 prototipos</span>
   <span class="banner-tag warn">⏳ 8 VALIDACIONES HUMANA PENDIENTES</span>
-  <span class="banner-tag date">2026-07-31</span>
+  <span class="banner-tag date">2026-08-04</span>
 </div>
 
 <!-- ── 2. HERO ── -->
@@ -201,9 +201,9 @@
     <p class="hero-desc">Centro de navegación para todos los prototipos HTML5 del producto. Cada spec es una vertical funcional completa. Abre cualquier prototipo para validar flujos y diseño antes de implementar.</p>
     <div class="hero-stats">
       <div class="stat"><span class="stat-num">8</span><span class="stat-label">Specs</span></div>
-      <div class="stat"><span class="stat-num">0</span><span class="stat-label">Prototipos HTML5</span></div>
-      <div class="stat"><span class="stat-num">0</span><span class="stat-label">Actores</span></div>
-      <div class="stat"><span class="stat-num">8</span><span class="stat-label">Flujos cubiertos</span></div>
+      <div class="stat"><span class="stat-num">1</span><span class="stat-label">Prototipos HTML5</span></div>
+      <div class="stat"><span class="stat-num">2</span><span class="stat-label">Actores</span></div>
+      <div class="stat"><span class="stat-num">9</span><span class="stat-label">Flujos cubiertos</span></div>
       <div class="stat"><span class="stat-num">0</span><span class="stat-label">Backend real</span></div>
     </div>
   </div>
@@ -217,7 +217,24 @@
     <p class="section-sub">Sigue el recorrido de cada actor para entender cómo las specs se encadenan. Cada nodo es clickeable y abre el prototipo correspondiente en una pestaña nueva.</p>
     <div class="journey-wrap">
       <!-- @auto:start name=journeys -->
-      <p style="color:var(--neutral-500);font-size:13px">Aun no hay actores declarados en los `decisiones-ux.md` de las specs.</p>
+      <div class="journey-row">
+        <div class="journey-actor-label"><div class="actor-pill">👤 EL APROBADOR DE LA MESA DE PAGOS. TURNO DE MANANA</div></div>
+        <div class="journey-steps">
+        <a class="j-node" href="../specs/008-mensajeria-pagos/prototype-html5/index.html?from=hub&demo-mode=true&role=default" target="_blank" style="--card-clr:hsl(222 55% 56%)">
+          <span class="j-num">008</span>
+          <span class="j-name">Mensajeria Pagos</span>
+        </a>
+        </div>
+      </div>
+      <div class="journey-row">
+        <div class="journey-actor-label"><div class="actor-pill">👤 REVISA EL LOTE DEL</div></div>
+        <div class="journey-steps">
+        <a class="j-node" href="../specs/008-mensajeria-pagos/prototype-html5/index.html?from=hub&demo-mode=true&role=default" target="_blank" style="--card-clr:hsl(222 55% 56%)">
+          <span class="j-num">008</span>
+          <span class="j-name">Mensajeria Pagos</span>
+        </a>
+        </div>
+      </div>
       <!-- @auto:end -->
     </div>
   </div>
@@ -363,10 +380,15 @@
         </div>
         <h3 class="spec-title">Mensajeria Pagos</h3>
         <p class="spec-desc">Permitir que los procesos del motor (spec 003) construyan, validen, persistan, despachen, confirmen y reconcilien mensajes de pagos en los estandares SWIFT FIN, ISO 20022 y Open Banking, mediante task types de dominio registrables via SPI.</p>
-        
+        <ul class="invariants">
+        <li><span class="inv-icon">🔴</span>RF-001</li>
+        <li><span class="inv-icon">🔴</span>RF-002: Mt101ValidateTaskProvider</li>
+        <li><span class="inv-icon">🔴</span>RF-003: Mt101ArchiveTaskProvider</li>
+        <li><span class="inv-icon">🔴</span>RF-004: Mt101PayTaskProvider</li>
+        </ul>
         <div class="card-bottom">
-          <div class="actor-chips"></div>
-          <span class="open-btn" style="opacity:0.5;cursor:not-allowed">Pendiente</span>
+          <div class="actor-chips"><span class="actor-chip">👤 EL APROBADOR DE LA MESA DE PAGOS. TURNO DE MANANA</span><span class="actor-chip">👤 REVISA EL LOTE DEL</span></div>
+          <a class="open-btn" href="../specs/008-mensajeria-pagos/prototype-html5/index.html?from=hub&demo-mode=true" target="_blank">Abrir →</a>
         </div>
       </div>
       <!-- @auto:end -->
@@ -378,11 +400,24 @@
 <section>
   <div class="container">
     <div class="section-label">Actores del Sistema</div>
-    <h2 class="section-title">0 roles, 0 experiencias</h2>
+    <h2 class="section-title">2 roles, 2 experiencias</h2>
     <p class="section-sub">Cada actor tiene un shell visual diferente, permisos distintos y accede a un subconjunto de specs. El sistema garantiza el aislamiento entre roles.</p>
     <div class="actors-grid">
       <!-- @auto:start name=actors -->
-      <p style="color:var(--neutral-500);font-size:13px">Aun no hay actores declarados.</p>
+      <div class="actor-card">
+        <div class="actor-emoji">👤</div>
+        <div class="actor-name">EL APROBADOR DE LA MESA DE PAGOS. TURNO DE MANANA</div>
+        <div class="actor-role">1 spec</div>
+        <div class="actor-desc">Toca 1 vertical del producto. Permitir que los procesos del motor (spec 003) construyan, validen, persistan, d</div>
+        <div class="actor-spec-tags"><span class="spec-tag">008</span></div>
+      </div>
+      <div class="actor-card">
+        <div class="actor-emoji">👤</div>
+        <div class="actor-name">REVISA EL LOTE DEL</div>
+        <div class="actor-role">1 spec</div>
+        <div class="actor-desc">Toca 1 vertical del producto. Permitir que los procesos del motor (spec 003) construyan, validen, persistan, d</div>
+        <div class="actor-spec-tags"><span class="spec-tag">008</span></div>
+      </div>
       <!-- @auto:end -->
     </div>
   </div>
@@ -499,13 +534,13 @@
           <tr>
             <td><div class="row-num"><div class="dot" style="background:hsl(222 55% 56%)"></div><a class="sp-link" href="../specs/008-mensajeria-pagos/" target="_blank">008</a></div></td>
             <td>Mensajeria Pagos</td>
-            <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
+            <td><span class="ok">✓</span></td>
             <td><span class="missing">✗</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
-            <td><span class="missing">✗</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
             <td><span class="cov-status pend">Pendiente</span></td>
           </tr>
         </tbody>
@@ -558,7 +593,7 @@
 <!-- ── 9. FOOTER ── -->
 <footer>
   <div class="container">
-    <p><strong>Integration Hub</strong> · SPDD Hub v0.1 · 2026-07-31</p>
+    <p><strong>Integration Hub</strong> · SPDD Hub v0.1 · 2026-08-04</p>
     <p>Sin backend real · Sin credenciales reales · Datos mock representativos del dominio.</p>
     <div class="stack-tags">
       <!-- @auto:start name=stack -->

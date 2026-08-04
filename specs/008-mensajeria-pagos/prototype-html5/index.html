@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mesa de pagos SWIFT MT101 — Integration Hub</title>
+<style>
+  :root {
+    --azul-tinta: #0f1c2e;
+    --azul-acero: #1b3a5c;
+    --azul-vivo: #2563a8;
+    --papel: #f4f6f9;
+    --papel-alto: #ffffff;
+    --borde: #d3dae4;
+    --texto: #16202e;
+    --texto-suave: #5b6a7d;
+    --ambar: #b45309;
+    --ambar-fondo: #fdf3e3;
+    --rojo: #b3261e;
+    --rojo-fondo: #fdeceb;
+    --verde: #14663f;
+    --verde-fondo: #e8f5ee;
+    --info: #1d4ed8;
+    --info-fondo: #e9effd;
+    --radio: 10px;
+    --sombra: 0 1px 2px rgba(15, 28, 46, .08), 0 8px 24px rgba(15, 28, 46, .06);
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--texto);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  .barra {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: .7rem 1.2rem;
+    background: var(--azul-tinta);
+    color: #eaf0f7;
+  }
+  .barra__marca { font-weight: 700; letter-spacing: .01em; }
+  .barra__sep { flex: 1; }
+  .barra__quien {
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .84rem; color: #b9c8da;
+  }
+  .barra__avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--azul-vivo); color: #fff;
+    display: grid; place-items: center; font-size: .74rem; font-weight: 700;
+  }
+
+  .disposicion { display: grid; grid-template-columns: 216px 1fr; min-height: calc(100vh - 46px); }
+
+  .rail { background: var(--azul-acero); padding: .8rem .6rem; }
+  .rail__grupo {
+    color: #8fa8c2; font-size: .66rem; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: .8rem .6rem .35rem;
+  }
+  .rail__item {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    width: 100%; padding: .5rem .6rem; margin-bottom: .15rem;
+    border: 0; border-radius: 8px; background: transparent;
+    color: #d6e2ef; font: inherit; font-size: .88rem; text-align: left; cursor: pointer;
+  }
+  .rail__item:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .rail__item[aria-current="page"] { background: var(--azul-vivo); color: #fff; font-weight: 600; }
+  .rail__pico {
+    min-width: 22px; padding: 0 .35rem; border-radius: 999px;
+    background: var(--ambar); color: #fff;
+    font-size: .7rem; font-weight: 700; text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lienzo { padding: 1.4rem 1.6rem 3rem; }
+  .vista[hidden] { display: none; }
+
+  .titular { margin: 0 0 .2rem; font-size: 1.32rem; letter-spacing: -.01em; }
+  .bajada { margin: 0 0 1.2rem; color: var(--texto-suave); font-size: .9rem; max-width: 68ch; }
+
+  .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .8rem; margin-bottom: 1.4rem; }
+  .tarjeta {
+    background: var(--papel-alto); border: 1px solid var(--borde);
+    border-radius: var(--radio); padding: .9rem 1rem; box-shadow: var(--sombra);
+  }
+  .tarjeta__rotulo { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--texto-suave); }
+  .tarjeta__cifra { font-size: 1.85rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: .2rem; }
+  .tarjeta__pie { font-size: .78rem; color: var(--texto-suave); }
+  .tarjeta--alerta { border-left: 4px solid var(--ambar); }
+  .tarjeta--alerta .tarjeta__cifra { color: var(--ambar); }
+  .tarjeta--mal { border-left: 4px solid var(--rojo); }
+  .tarjeta--mal .tarjeta__cifra { color: var(--rojo); }
+  .tarjeta--bien { border-left: 4px solid var(--verde); }
+
+  .panel {
+    background: var(--papel-alto); border: 1px solid var(--borde);
+    border-radius: var(--radio); box-shadow: var(--sombra); overflow: hidden; margin-bottom: 1.2rem;
+  }
+  .panel__cabecera {
+    display: flex; align-items: center; gap: .8rem;
+    padding: .8rem 1rem; border-bottom: 1px solid var(--borde);
+  }
+  .panel__titulo { margin: 0; font-size: .98rem; }
+  .panel__cuerpo { padding: 1rem; }
+
+  .tabla-envoltorio { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  th, td { padding: .55rem .7rem; text-align: left; border-bottom: 1px solid var(--borde); white-space: nowrap; }
+  th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-suave); background: #f8fafc; }
+  tbody tr:hover { background: #f8fafc; }
+  .cifra { font-variant-numeric: tabular-nums; text-align: right; }
+  .ref { font-family: var(--mono); font-size: .82rem; }
+
+  .sello {
+    display: inline-block; padding: .12rem .5rem; border-radius: 999px;
+    font-size: .73rem; font-weight: 600; letter-spacing: .01em;
+  }
+  .sello--incierto { background: var(--ambar-fondo); color: var(--ambar); }
+  .sello--enviando { background: var(--info-fondo); color: var(--info); }
+  .sello--enviado { background: var(--verde-fondo); color: var(--verde); }
+  .sello--rechazado, .sello--conflicto { background: var(--rojo-fondo); color: var(--rojo); }
+  .sello--cuarentena { background: var(--ambar-fondo); color: var(--ambar); }
+
+  .btn {
+    padding: .42rem .8rem; border-radius: 8px; border: 1px solid var(--borde);
+    background: var(--papel-alto); color: var(--texto);
+    font: inherit; font-size: .84rem; cursor: pointer;
+  }
+  .btn:hover { background: #eef2f7; }
+  .btn--principal { background: var(--azul-vivo); border-color: var(--azul-vivo); color: #fff; }
+  .btn--principal:hover { background: #1d4f8a; }
+  .btn--peligro { background: var(--rojo); border-color: var(--rojo); color: #fff; }
+  .btn--peligro:hover { background: #8f1e17; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn:focus-visible { outline: 2px solid var(--azul-vivo); outline-offset: 2px; }
+
+  .nota-bloqueo {
+    margin: .45rem 0 0; color: var(--info);
+    font-size: .8rem; max-width: 60ch;
+  }
+
+  .acciones { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+
+  .aviso {
+    display: flex; gap: .6rem; align-items: flex-start;
+    padding: .7rem .9rem; border-radius: 8px; font-size: .86rem; margin-bottom: 1rem;
+  }
+  .aviso--ambar { background: var(--ambar-fondo); color: var(--ambar); border: 1px solid #f0d5ae; }
+  .aviso--verde { background: var(--verde-fondo); color: var(--verde); border: 1px solid #bfe0cd; }
+  .aviso--rojo { background: var(--rojo-fondo); color: var(--rojo); border: 1px solid #f3c6c3; }
+
+  .toast {
+    position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 20;
+    max-width: 22rem; padding: .7rem .9rem; border-radius: 10px;
+    background: var(--azul-tinta); color: #eaf0f7;
+    font-size: .86rem; box-shadow: 0 10px 30px rgba(15,28,46,.28);
+  }
+  .toast[hidden] { display: none; }
+
+  .vacio { text-align: center; padding: 2.6rem 1rem; color: var(--texto-suave); }
+  .vacio__icono { font-size: 2rem; }
+  .vacio__titulo { font-weight: 600; color: var(--texto); margin: .5rem 0 .25rem; }
+
+  .esqueleto { padding: 1rem; }
+  .esqueleto__linea {
+    height: 12px; border-radius: 6px; margin-bottom: .6rem;
+    background: linear-gradient(90deg, #e8edf3 25%, #f2f5f9 50%, #e8edf3 75%);
+    background-size: 200% 100%;
+    animation: brillo 1.3s ease-in-out infinite;
+  }
+  @keyframes brillo { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .esqueleto__linea { animation: none; } }
+
+  .linea-tiempo { list-style: none; margin: 0; padding: 0 0 0 1.3rem; border-left: 2px solid var(--borde); }
+  .hito { position: relative; padding: 0 0 1.1rem .3rem; }
+  .hito::before {
+    content: ""; position: absolute; left: -1.72rem; top: .28rem;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--verde); border: 2px solid var(--papel-alto);
+  }
+  .hito--incierto::before { background: var(--ambar); }
+  .hito--pendiente::before { background: var(--borde); }
+  .hito__cuando { font-size: .74rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+  .hito__que { font-weight: 600; font-size: .9rem; }
+  .hito__detalle { font-size: .83rem; color: var(--texto-suave); }
+
+  .filtros { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  .filtros input, .filtros select {
+    padding: .42rem .6rem; border: 1px solid var(--borde); border-radius: 8px;
+    font: inherit; font-size: .85rem; background: var(--papel-alto);
+  }
+
+  @media (max-width: 900px) {
+    .disposicion { grid-template-columns: 1fr; }
+    .rail { display: flex; overflow-x: auto; gap: .3rem; padding: .5rem; }
+    .rail__grupo { display: none; }
+    .rail__item { width: auto; white-space: nowrap; }
+    .lienzo { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="barra">
+  <span class="barra__marca">Integration Hub</span>
+  <span style="font-size:.85rem;color:#9db4cc;">Mesa de pagos SWIFT MT101</span>
+  <span class="barra__sep"></span>
+  <a href="../../../prototype/index.html" data-hub-link style="color:#9db4cc;font-size:.82rem;text-decoration:none;">← Volver al hub</a>
+  <span class="barra__quien">
+    <span class="barra__avatar">MC</span>
+    <span>Marisol Castro · Aprobador</span>
+  </span>
+</header>
+
+<div id="notificador" class="toast" role="status" aria-live="polite" hidden></div>
+
+<div class="disposicion">
+  <nav class="rail" aria-label="Secciones de la mesa de pagos">
+    <div class="rail__grupo">Vigilancia</div>
+    <button class="rail__item" data-vista="panel" aria-current="page">Panel del dia</button>
+    <button class="rail__item" data-vista="despacho">Despacho <span class="rail__pico">4</span></button>
+    <button class="rail__item" data-vista="conflictos">Conflictos <span class="rail__pico">2</span></button>
+    <div class="rail__grupo">Correccion</div>
+    <button class="rail__item" data-vista="cuarentena">Cuarentena <span class="rail__pico">7</span></button>
+    <div class="rail__grupo">Consulta</div>
+    <button class="rail__item" data-vista="linaje">Linaje de un pago</button>
+    <button class="rail__item" data-vista="archivo">Archivo</button>
+  </nav>
+
+  <main class="lienzo">
+
+    <!-- ─────────────────────────── PANEL ─────────────────────────── -->
+    <section class="vista" id="vista-panel">
+      <h1 class="titular">Panel del dia</h1>
+      <p class="bajada">Lote del 4 de agosto, 10.000 registros. Lo que no esta cerrado se muestra primero.</p>
+
+      <div class="tarjetas">
+        <div class="tarjeta tarjeta--alerta">
+          <div class="tarjeta__rotulo">Dinero sin resolver</div>
+          <div class="tarjeta__cifra">PEN 48 320,50</div>
+          <div class="tarjeta__pie">4 intenciones atascadas</div>
+        </div>
+        <div class="tarjeta tarjeta--bien">
+          <div class="tarjeta__rotulo">Enviados y aceptados</div>
+          <div class="tarjeta__cifra">4 993</div>
+          <div class="tarjeta__pie">de 5 000 mensajes</div>
+        </div>
+        <div class="tarjeta tarjeta--mal">
+          <div class="tarjeta__rotulo">Contradicciones</div>
+          <div class="tarjeta__cifra">2</div>
+          <div class="tarjeta__pie">el banco rechaza lo que consta enviado</div>
+        </div>
+        <div class="tarjeta">
+          <div class="tarjeta__rotulo">Filas en cuarentena</div>
+          <div class="tarjeta__cifra">7</div>
+          <div class="tarjeta__pie">esperando correccion</div>
+        </div>
+      </div>
+
+      <div class="aviso aviso--ambar">
+        <strong>4 pagos siguen sin saberse.</strong>
+        No se pueden reenviar hasta conciliar con el banco: el dinero pudo haber salido.
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">Ultimos movimientos del lote</h2>
+          <span class="barra__sep"></span>
+          <button class="btn" data-accion="recargar">Actualizar</button>
+        </div>
+        <div class="tabla-envoltorio">
+          <table>
+            <caption class="vacio" hidden>Movimientos recientes</caption>
+            <thead>
+              <tr><th>Referencia</th><th>Beneficiario</th><th class="cifra">Importe</th><th>Estado</th><th>Actualizado</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="ref">QB0417</td><td>Comercial Andina SAC</td><td class="cifra">PEN 12 480,00</td><td><span class="sello sello--incierto">Sin confirmar</span></td><td>10:42</td></tr>
+              <tr><td class="ref">QB0418</td><td>Textiles del Sur EIRL</td><td class="cifra">PEN 9 210,50</td><td><span class="sello sello--incierto">Sin confirmar</span></td><td>10:42</td></tr>
+              <tr><td class="ref">QB0419</td><td>Servicios Muñiz SAC</td><td class="cifra">USD 4 100,00</td><td><span class="sello sello--enviando">En envio</span></td><td>10:41</td></tr>
+              <tr><td class="ref">QB0420</td><td>Distribuidora Lima Norte</td><td class="cifra">PEN 22 530,00</td><td><span class="sello sello--rechazado">Rechazado</span></td><td>10:39</td></tr>
+              <tr><td class="ref">QB0421</td><td>Agroexport Chincha SA</td><td class="cifra">PEN 3 875,25</td><td><span class="sello sello--enviado">Aceptado</span></td><td>10:38</td></tr>
+              <tr><td class="ref">QB0422</td><td>Pesquera Callao SAC</td><td class="cifra">USD 18 060,00</td><td><span class="sello sello--enviado">Aceptado</span></td><td>10:38</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────── DESPACHO ─────────────────────────── -->
+    <section class="vista" id="vista-despacho" hidden>
+      <h1 class="titular">Despacho</h1>
+      <p class="bajada">Cada fila es un intento de pago que quedo abierto. Conciliar exige un motivo escrito.</p>
+
+      <div class="filtros">
+        <input type="search" placeholder="Buscar referencia" aria-label="Buscar referencia" />
+        <select aria-label="Filtrar por estado">
+          <option>Solo los atascados</option>
+          <option>Todos</option>
+          <option>Sin confirmar</option>
+          <option>En envio</option>
+        </select>
+        <button class="btn" data-accion="filtrar">Aplicar</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">Intentos abiertos</h2>
+          <span class="barra__sep"></span>
+          <span style="font-size:.8rem;color:var(--texto-suave);">4 de 5 000</span>
+        </div>
+        <div class="tabla-envoltorio">
+          <table>
+            <thead>
+              <tr><th>Referencia</th><th>Estado</th><th class="cifra">Intentos</th><th>Ultimo error</th><th>Desde</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="ref">QB0417</td>
+                <td><span class="sello sello--incierto">Sin confirmar</span></td>
+                <td class="cifra">3</td>
+                <td>Tiempo agotado esperando al banco</td>
+                <td>hace 41 min</td>
+                <td><button class="btn" data-accion="conciliar">Conciliar</button></td>
+              </tr>
+              <tr>
+                <td class="ref">QB0418</td>
+                <td><span class="sello sello--incierto">Sin confirmar</span></td>
+                <td class="cifra">2</td>
+                <td>Conexion cerrada durante el envio</td>
+                <td>hace 41 min</td>
+                <td><button class="btn" data-accion="conciliar">Conciliar</button></td>
+              </tr>
+              <tr>
+                <td class="ref">QB0419</td>
+                <td><span class="sello sello--enviando">En envio</span></td>
+                <td class="cifra">1</td>
+                <td>El proceso se reinicio a mitad</td>
+                <td>hace 43 min</td>
+                <td><button class="btn" data-accion="conciliar">Conciliar</button></td>
+              </tr>
+              <tr>
+                <td class="ref">QB1204</td>
+                <td><span class="sello sello--incierto">Sin confirmar</span></td>
+                <td class="cifra">5</td>
+                <td>Tiempo agotado esperando al banco</td>
+                <td>hace 2 h</td>
+                <td><button class="btn" data-accion="conciliar">Conciliar</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel__cuerpo" style="border-top:1px solid var(--borde);">
+          <div class="aviso aviso--ambar" style="margin:0;">
+            Se muestran 4 de 4. Si hubiera mas de los que caben, este aviso diria cuantos faltan:
+            dar por revisada una lista incompleta es peor que no listarla.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────── CONFLICTOS ─────────────────────────── -->
+    <section class="vista" id="vista-conflictos" hidden>
+      <h1 class="titular">Conflictos</h1>
+      <p class="bajada">Nuestro registro dice enviado; el banco dice rechazado. Reconocer un conflicto necesita dos personas.</p>
+
+      <div class="aviso aviso--rojo">
+        <strong>2 contradicciones abiertas.</strong>
+        Ninguna se cierra sola: alguien tiene que decidir cual de las dos versiones vale.
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">QB0420 · Distribuidora Lima Norte</h2>
+          <span class="barra__sep"></span>
+          <span class="sello sello--conflicto">En conflicto</span>
+        </div>
+        <div class="panel__cuerpo">
+          <table style="margin-bottom:1rem;">
+            <tbody>
+              <tr><th style="background:none;">Importe</th><td class="cifra">PEN 22 530,00</td></tr>
+              <tr><th style="background:none;">Nuestro registro</th><td>Aceptado a las 10:31 · referencia del banco GW-QB0420</td></tr>
+              <tr><th style="background:none;">Respuesta del banco</th><td>Rechazado a las 10:39 · cuenta de destino cerrada</td></tr>
+              <tr><th style="background:none;">Solicitado por</th><td>Marisol Castro (tu) · 10:44</td></tr>
+            </tbody>
+          </table>
+
+          <div class="acciones">
+            <button class="btn btn--principal" disabled>Aprobar el reconocimiento</button>
+            <button class="btn" data-accion="ver-linaje">Ver el recorrido completo</button>
+          </div>
+          <p class="nota-bloqueo">
+            No puedes aprobar un reconocimiento que solicitaste tu. Que lo revise otra persona con
+            permiso de aprobacion.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">QB2011 · Importaciones Del Pacifico SA</h2>
+          <span class="barra__sep"></span>
+          <span class="sello sello--conflicto">En conflicto</span>
+        </div>
+        <div class="panel__cuerpo">
+          <table style="margin-bottom:1rem;">
+            <tbody>
+              <tr><th style="background:none;">Importe</th><td class="cifra">USD 7 940,00</td></tr>
+              <tr><th style="background:none;">Nuestro registro</th><td>Aceptado a las 09:12 · referencia del banco GW-QB2011</td></tr>
+              <tr><th style="background:none;">Respuesta del banco</th><td>Rechazado a las 09:20 · beneficiario no valido</td></tr>
+              <tr><th style="background:none;">Solicitado por</th><td>Jorge Paredes · 09:35</td></tr>
+            </tbody>
+          </table>
+          <div class="acciones">
+            <button class="btn btn--principal" data-accion="aprobar-ack">Aprobar el reconocimiento</button>
+            <button class="btn" data-accion="ver-linaje">Ver el recorrido completo</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────── CUARENTENA ─────────────────────────── -->
+    <section class="vista" id="vista-cuarentena" hidden>
+      <h1 class="titular">Cuarentena</h1>
+      <p class="bajada">Filas que no pudieron convertirse en mensaje. Se corrigen y se reconstruyen en un lote aparte.</p>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">Filas retenidas del lote del 4 de agosto</h2>
+          <span class="barra__sep"></span>
+          <button class="btn" data-accion="descargar">Descargar para corregir</button>
+          <button class="btn btn--principal" data-accion="reconstruir">Reconstruir seleccionadas</button>
+        </div>
+        <div class="tabla-envoltorio">
+          <table>
+            <thead>
+              <tr><th>Fila</th><th>Beneficiario</th><th class="cifra">Importe</th><th>Motivo del rechazo</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="cifra">137</td><td>Constructora Ate SAC</td><td class="cifra">PEN 0,00</td><td>El importe tiene que ser mayor que cero</td><td><span class="sello sello--cuarentena">Retenida</span></td></tr>
+              <tr><td class="cifra">842</td><td>Molinera San Juan</td><td class="cifra">PEN 5 400,00</td><td>Moneda "SOL" no es un codigo valido</td><td><span class="sello sello--cuarentena">Retenida</span></td></tr>
+              <tr><td class="cifra">1 903</td><td>Transportes Vega EIRL</td><td class="cifra">USD 2 200,00</td><td>El beneficiario no trae cuenta ni codigo de banco</td><td><span class="sello sello--cuarentena">Retenida</span></td></tr>
+              <tr><td class="cifra">2 455</td><td>Editorial Quilca</td><td class="cifra">PEN 780,00</td><td>Gastos "AMB" fuera de OUR, BEN y SHA</td><td><span class="sello sello--cuarentena">Retenida</span></td></tr>
+              <tr><td class="cifra">3 118</td><td>Clinica Santa Rosa</td><td class="cifra">PEN 14 900,00</td><td>La referencia supera los 16 caracteres</td><td><span class="sello sello--cuarentena">Retenida</span></td></tr>
+              <tr><td class="cifra">4 271</td><td>Ferreteria El Roble</td><td class="cifra">PEN 1 150,00</td><td>Codigo de banco con formato incorrecto</td><td><span class="sello sello--cuarentena">Retenida</span></td></tr>
+              <tr><td class="cifra">4 890</td><td>Panificadora Huaral</td><td class="cifra">PEN 630,00</td><td>El importe tiene que ser mayor que cero</td><td><span class="sello sello--cuarentena">Retenida</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">Lote correctivo LC-2026-0804-01</h2>
+          <span class="barra__sep"></span>
+          <span class="sello sello--enviando">Listo para enviar</span>
+        </div>
+        <div class="panel__cuerpo">
+          <p style="margin-top:0;font-size:.88rem;color:var(--texto-suave);">
+            7 filas corregidas y archivadas. Enviarlas mueve dinero, asi que lo aprueba alguien
+            distinto de quien lo pidio.
+          </p>
+          <div class="acciones">
+            <button class="btn btn--peligro" disabled>Aprobar y enviar</button>
+            <button class="btn" data-accion="ver-lote">Revisar las 7 filas</button>
+          </div>
+          <p class="nota-bloqueo">
+            No puedes aprobar un envio que solicitaste tu. La separacion de funciones exige que
+            apruebe otra persona.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────── LINAJE ─────────────────────────── -->
+    <section class="vista" id="vista-linaje" hidden>
+      <h1 class="titular">Recorrido de un pago</h1>
+      <p class="bajada">Todo lo que le paso a QB0417, desde la fila del archivo hasta el ultimo intento.</p>
+
+      <div class="filtros">
+        <input type="search" value="QB0417" aria-label="Referencia a consultar" />
+        <button class="btn btn--principal" data-accion="buscar-linaje">Buscar</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">QB0417 · Comercial Andina SAC · PEN 12 480,00</h2>
+          <span class="barra__sep"></span>
+          <span class="sello sello--incierto">Sin confirmar</span>
+        </div>
+        <div class="panel__cuerpo">
+          <ol class="linea-tiempo">
+            <li class="hito">
+              <div class="hito__cuando">10:14:02</div>
+              <div class="hito__que">Leida del archivo</div>
+              <div class="hito__detalle">Fila 417 de mt101-10k.csv</div>
+            </li>
+            <li class="hito">
+              <div class="hito__cuando">10:14:08</div>
+              <div class="hito__que">Guardada para procesar</div>
+              <div class="hito__detalle">Junto con otras 9 999 filas</div>
+            </li>
+            <li class="hito">
+              <div class="hito__cuando">10:21:36</div>
+              <div class="hito__que">Convertida en mensaje</div>
+              <div class="hito__detalle">Mensaje 209 del lote, 2 operaciones dentro</div>
+            </li>
+            <li class="hito">
+              <div class="hito__cuando">10:26:11</div>
+              <div class="hito__que">Validada sin observaciones</div>
+              <div class="hito__detalle">Las 7 comprobaciones de estructura pasaron</div>
+            </li>
+            <li class="hito">
+              <div class="hito__cuando">10:29:47</div>
+              <div class="hito__que">Archivada</div>
+              <div class="hito__detalle">Huella SHA-256 8f3a…c204 · a partir de aqui no se puede editar</div>
+            </li>
+            <li class="hito hito--incierto">
+              <div class="hito__cuando">10:31:20</div>
+              <div class="hito__que">Enviada al banco — sin respuesta</div>
+              <div class="hito__detalle">Tiempo agotado tras 3 intentos. No sabemos si el dinero salio.</div>
+            </li>
+            <li class="hito hito--pendiente">
+              <div class="hito__cuando">—</div>
+              <div class="hito__que">Conciliacion</div>
+              <div class="hito__detalle">Pendiente de que alguien confirme con el banco</div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────── ARCHIVO ─────────────────────────── -->
+    <section class="vista" id="vista-archivo" hidden>
+      <h1 class="titular">Archivo</h1>
+      <p class="bajada">Consulta de mensajes ya archivados. La busqueda tarda: son millones de registros.</p>
+
+      <div class="filtros">
+        <input type="search" placeholder="Referencia, beneficiario o importe" aria-label="Buscar en el archivo" />
+        <input type="date" value="2026-08-04" aria-label="Fecha" />
+        <button class="btn btn--principal" data-accion="buscar-archivo">Buscar</button>
+        <button class="btn" data-accion="limpiar-archivo">Limpiar</button>
+      </div>
+
+      <div class="panel" id="archivo-cargando">
+        <div class="panel__cabecera"><h2 class="panel__titulo">Buscando en el archivo…</h2></div>
+        <div class="esqueleto">
+          <div class="esqueleto__linea" style="width:92%"></div>
+          <div class="esqueleto__linea" style="width:78%"></div>
+          <div class="esqueleto__linea" style="width:85%"></div>
+          <div class="esqueleto__linea" style="width:64%"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="archivo-vacio" hidden>
+        <div class="vacio">
+          <div class="vacio__icono">🗂</div>
+          <div class="vacio__titulo">Sin coincidencias</div>
+          <p style="margin:.2rem 0 1rem;">No hay mensajes para esa fecha. Prueba con otra o con parte de la referencia.</p>
+          <button class="btn" data-accion="limpiar-archivo">Quitar los filtros</button>
+        </div>
+      </div>
+
+      <div class="panel" id="archivo-error" hidden>
+        <div class="panel__cuerpo">
+          <div class="aviso aviso--rojo" style="margin:0;">
+            <div>
+              <strong>No se pudo consultar el archivo.</strong>
+              El servicio de consulta no responde. Los pagos no se ven afectados: esto es solo lectura.
+              <div class="acciones" style="margin-top:.6rem;">
+                <button class="btn" data-accion="buscar-archivo">Reintentar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var vistas = document.querySelectorAll(".vista");
+    var botones = document.querySelectorAll(".rail__item");
+
+    function mostrar(nombre) {
+      vistas.forEach(function (v) { v.hidden = v.id !== "vista-" + nombre; });
+      botones.forEach(function (b) {
+        if (b.dataset.vista === nombre) { b.setAttribute("aria-current", "page"); }
+        else { b.removeAttribute("aria-current"); }
+      });
+      if (nombre === "archivo") { cicloArchivo(); }
+      window.scrollTo(0, 0);
+    }
+
+    botones.forEach(function (b) {
+      b.addEventListener("click", function () { mostrar(b.dataset.vista); });
+    });
+
+    // El archivo recorre los tres desenlaces de una consulta lenta: mientras carga, sin
+    // resultados, y con el servicio caido. Se ven los tres sin tener que provocarlos.
+    var paso = 0;
+    function cicloArchivo() {
+      var cargando = document.getElementById("archivo-cargando");
+      var vacio = document.getElementById("archivo-vacio");
+      var error = document.getElementById("archivo-error");
+      cargando.hidden = false; vacio.hidden = true; error.hidden = true;
+      setTimeout(function () {
+        cargando.hidden = true;
+        if (paso % 2 === 0) { vacio.hidden = false; } else { error.hidden = false; }
+        paso += 1;
+      }, 1400);
+    }
+
+    document.addEventListener("click", function (e) {
+      var accion = e.target.getAttribute && e.target.getAttribute("data-accion");
+      if (!accion) { return; }
+      if (accion === "ver-linaje" || accion === "buscar-linaje") { mostrar("linaje"); return; }
+      if (accion === "buscar-archivo" || accion === "limpiar-archivo") { cicloArchivo(); return; }
+      if (accion === "aprobar-ack") {
+        var panel = e.target.closest(".panel__cuerpo");
+        var ok = document.createElement("div");
+        ok.className = "aviso aviso--verde";
+        ok.style.marginTop = ".8rem";
+        ok.textContent = "Reconocido. La contradiccion queda cerrada y anotada a tu nombre.";
+        panel.appendChild(ok);
+        e.target.disabled = true;
+        return;
+      }
+      if (accion === "reconstruir" || accion === "conciliar") {
+        avisar("Antes de continuar hay que escribir un motivo: queda en el expediente del pago.");
+      }
+      if (accion === "recargar" || accion === "filtrar") {
+        avisar("Datos actualizados.");
+      }
+      if (accion === "descargar") {
+        avisar("Preparando el archivo con las 7 filas retenidas.");
+      }
+    });
+
+    // Aviso breve, no bloqueante. `aria-live` para que tambien se anuncie a quien no lo ve.
+    var temporizador = null;
+    function avisar(texto) {
+      var t = document.getElementById("notificador");
+      t.textContent = texto;
+      t.hidden = false;
+      clearTimeout(temporizador);
+      temporizador = setTimeout(function () { t.hidden = true; }, 3200);
+    }
+  })();
+</script>
+
+</body>
+</html>
