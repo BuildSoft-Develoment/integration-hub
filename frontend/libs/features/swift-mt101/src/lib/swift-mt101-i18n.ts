@@ -42,18 +42,64 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'processTaskDescription.MT101_REPAIR': 'Repara campos MT101 antes de validar o pagar.',
   'processTaskDescription.MT101_PARSE_FROM_TABLE': 'Parsea mensajes SWIFT staged a registros MT101, paginado, para inbound de alto volumen.',
   'processTaskDescription.MT101_INBOUND_DELIVER': 'Entrega los MT101 entrantes ruteados a una tabla destino o endpoint REST.',
-  'taskTypeLabel.MT101_BUILD_FROM_TABLE': 'Construir MT101 desde staging',
-  'taskTypeLabel.MT101_VALIDATE': 'Validar MT101',
-  'taskTypeLabel.MT101_ARCHIVE': 'Archivar MT101',
-  'taskTypeLabel.MT101_PAY': 'Pagar MT101',
-  'taskTypeLabel.MT101_ROUTE': 'Rutear MT101',
-  'taskTypeLabel.MT101_RECONCILE': 'Conciliar MT101',
-  'taskTypeLabel.MT101_STATUS': 'Estado MT101',
-  'taskTypeLabel.MT101_PARSE': 'Parsear MT101',
-  'taskTypeLabel.MT101_SPLIT': 'Dividir MT101',
-  'taskTypeLabel.MT101_REPAIR': 'Reparar MT101',
-  'taskTypeLabel.MT101_PARSE_FROM_TABLE': 'Parsear MT101 desde staging',
-  'taskTypeLabel.MT101_INBOUND_DELIVER': 'Entregar MT101 entrante',
+
+  // Estados del intento de pago. El vertical NO los rotulaba: la mesa de pagos mostraba
+  // `UNCERTAIN`, `DISPATCHING`, `INVALIDATED` en crudo, y son el vocabulario del prototipo
+  // aprobado de 008 (`prototype-html5/index.html`).
+  //
+  // La distincion entre los tres finales no felices es de money-safety, no de estilo:
+  //   REJECTED    el banco lo rechazo -> no salio, y no saldra sin corregirlo.
+  //   INVALIDATED no llego a salir (fallo de transporte reintentable) -> se puede reintentar.
+  //   UNCERTAIN   SI salio y no sabemos el resultado -> nunca reenviar a ciegas.
+  // Llamar "Rechazado" a un INVALIDATED, o pintar de rojo un UNCERTAIN, empuja a quien opera
+  // justo a la accion que no debe hacer.
+  'payDispatchStatus.DISPATCHING': 'En envio',
+  'payDispatchStatus.SENT': 'Aceptado',
+  'payDispatchStatus.UNCERTAIN': 'Sin confirmar',
+  'payDispatchStatus.INVALIDATED': 'No enviado (reintentable)',
+  'payDispatchStatus.REJECTED': 'Rechazado',
+
+  // Cuarentena y reconstruccion correctiva.
+  'quarantineStatus.QUARANTINED': 'Retenida',
+  'quarantineStatus.CORRECTED': 'Corregida',
+  'quarantineStatus.APPROVED': 'Aprobada',
+  'quarantineStatus.REJECTED': 'Rechazada',
+  'quarantineStatus.REBUILD_PENDING_VALIDATION': 'Pendiente de validar',
+  'quarantineStatus.REBUILD_VALIDATED': 'Validada',
+  'quarantineStatus.REBUILD_CONFIRMED': 'Confirmada',
+  'quarantineStatus.REBUILD_SENT': 'Enviada',
+  'quarantineStatus.REBUILD_ARCHIVED': 'Archivada',
+  'quarantineStatus.REBUILD_REJECTED': 'Rechazada en reconstruccion',
+  'quarantineStatus.REBUILD_REOPEN': 'Reabierta',
+
+  // Linaje por registro: que le paso (stage) y en que quedo (status). Son dos columnas distintas
+  // del recorrido y hasta ahora se leian las dos en crudo.
+  'recordStage.RECORD_BUILT': 'Mensaje construido',
+  'recordStage.RECORD_VALIDATED': 'Mensaje validado',
+  'recordStage.RECORD_VALIDATION_ISSUE': 'Incidencia de validacion',
+  'recordStage.RECORD_ARCHIVED': 'Mensaje archivado',
+  'recordStage.RECORD_REJECTED': 'Mensaje rechazado',
+  'recordStage.PAYMENT_MESSAGE_BUILT': 'Pago construido',
+  'recordStage.PAYMENT_MESSAGE_ROUTED': 'Pago ruteado',
+  'recordStage.PAYMENT_STATUS_CONFIRMED': 'Estado confirmado por el banco',
+  'recordStage.PAYMENT_RECONCILIATION_EXCEPTION': 'Excepcion de conciliacion',
+  'recordStage.PAY_CONFLICT': 'Conflicto de pago',
+  'recordStage.PAY_CONFLICT_ACK_REQUESTED': 'Reconocimiento solicitado',
+  'recordStage.PAY_CONFLICT_ACK_SUPERSEDED': 'Reconocimiento superado',
+  'recordStage.PAY_CONFLICT_RESOLVED': 'Conflicto resuelto',
+  'recordStage.STAGING_ROW_CORRECTED': 'Fila de staging corregida',
+
+  'recordStatus.BUILT': 'Construido',
+  'recordStatus.VALIDATED': 'Validado',
+  'recordStatus.ARCHIVED': 'Archivado',
+  'recordStatus.ROUTED': 'Ruteado',
+  'recordStatus.CONFIRMED': 'Confirmado',
+  'recordStatus.CORRECTED': 'Corregido',
+  // Lo que consta enviado y el banco no reconoce. No es un fallo: es una discrepancia que hay que
+  // resolver antes de dar el pago por bueno.
+  'recordStatus.UNMATCHED': 'Sin correspondencia',
+  'recordStatus.REJECTED': 'Rechazado',
+
   'mt101.format': 'Formato de salida',
   'mt101.debitAccountMode': 'Modo cuenta debito',
   'mt101.debitAccountMode.singleDebit': 'Cuenta unica en Sequence A',
@@ -310,18 +356,49 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'processTaskDescription.MT101_REPAIR': 'Repairs MT101 fields before validation or payment.',
   'processTaskDescription.MT101_PARSE_FROM_TABLE': 'Parses staged SWIFT messages into MT101 records, paginated, for high-volume inbound.',
   'processTaskDescription.MT101_INBOUND_DELIVER': 'Delivers routed inbound MT101 to a destination table or REST endpoint.',
-  'taskTypeLabel.MT101_BUILD_FROM_TABLE': 'Build MT101 from staging',
-  'taskTypeLabel.MT101_VALIDATE': 'Validate MT101',
-  'taskTypeLabel.MT101_ARCHIVE': 'Archive MT101',
-  'taskTypeLabel.MT101_PAY': 'Pay MT101',
-  'taskTypeLabel.MT101_ROUTE': 'Route MT101',
-  'taskTypeLabel.MT101_RECONCILE': 'Reconcile MT101',
-  'taskTypeLabel.MT101_STATUS': 'MT101 status',
-  'taskTypeLabel.MT101_PARSE': 'Parse MT101',
-  'taskTypeLabel.MT101_SPLIT': 'Split MT101',
-  'taskTypeLabel.MT101_REPAIR': 'Repair MT101',
-  'taskTypeLabel.MT101_PARSE_FROM_TABLE': 'Parse MT101 from staging',
-  'taskTypeLabel.MT101_INBOUND_DELIVER': 'Deliver inbound MT101',
+
+  'payDispatchStatus.DISPATCHING': 'Dispatching',
+  'payDispatchStatus.SENT': 'Accepted',
+  'payDispatchStatus.UNCERTAIN': 'Unconfirmed',
+  'payDispatchStatus.INVALIDATED': 'Not sent (retryable)',
+  'payDispatchStatus.REJECTED': 'Rejected',
+
+  'quarantineStatus.QUARANTINED': 'Held',
+  'quarantineStatus.CORRECTED': 'Corrected',
+  'quarantineStatus.APPROVED': 'Approved',
+  'quarantineStatus.REJECTED': 'Rejected',
+  'quarantineStatus.REBUILD_PENDING_VALIDATION': 'Pending validation',
+  'quarantineStatus.REBUILD_VALIDATED': 'Validated',
+  'quarantineStatus.REBUILD_CONFIRMED': 'Confirmed',
+  'quarantineStatus.REBUILD_SENT': 'Sent',
+  'quarantineStatus.REBUILD_ARCHIVED': 'Archived',
+  'quarantineStatus.REBUILD_REJECTED': 'Rejected during rebuild',
+  'quarantineStatus.REBUILD_REOPEN': 'Reopened',
+
+  'recordStage.RECORD_BUILT': 'Message built',
+  'recordStage.RECORD_VALIDATED': 'Message validated',
+  'recordStage.RECORD_VALIDATION_ISSUE': 'Validation issue',
+  'recordStage.RECORD_ARCHIVED': 'Message archived',
+  'recordStage.RECORD_REJECTED': 'Message rejected',
+  'recordStage.PAYMENT_MESSAGE_BUILT': 'Payment built',
+  'recordStage.PAYMENT_MESSAGE_ROUTED': 'Payment routed',
+  'recordStage.PAYMENT_STATUS_CONFIRMED': 'Status confirmed by the bank',
+  'recordStage.PAYMENT_RECONCILIATION_EXCEPTION': 'Reconciliation exception',
+  'recordStage.PAY_CONFLICT': 'Payment conflict',
+  'recordStage.PAY_CONFLICT_ACK_REQUESTED': 'Acknowledgement requested',
+  'recordStage.PAY_CONFLICT_ACK_SUPERSEDED': 'Acknowledgement superseded',
+  'recordStage.PAY_CONFLICT_RESOLVED': 'Conflict resolved',
+  'recordStage.STAGING_ROW_CORRECTED': 'Staging row corrected',
+
+  'recordStatus.BUILT': 'Built',
+  'recordStatus.VALIDATED': 'Validated',
+  'recordStatus.ARCHIVED': 'Archived',
+  'recordStatus.ROUTED': 'Routed',
+  'recordStatus.CONFIRMED': 'Confirmed',
+  'recordStatus.CORRECTED': 'Corrected',
+  'recordStatus.UNMATCHED': 'Unmatched',
+  'recordStatus.REJECTED': 'Rejected',
+
   'mt101.format': 'Output format',
   'mt101.debitAccountMode': 'Debit account mode',
   'mt101.debitAccountMode.singleDebit': 'Single account in Sequence A',

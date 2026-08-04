@@ -236,6 +236,7 @@ export const es = {
   'sources.allDirections': 'Todas las direcciones',
   'sources.directionBadgeOutput': 'Salida',
   'sources.directionBadgeBoth': 'E+S',
+  'common.id': 'ID',
   'common.name': 'Nombre',
   'common.type': 'Tipo',
   'common.active': 'Activo',
@@ -726,9 +727,6 @@ export const es = {
   'processTaskDescription.FILE_WRITE': 'Serializa registros o una tabla a un archivo (CSV/TXT/XLSX).',
   'processTaskDescription.FILE_COMPRESS': 'Comprime uno o varios archivos (ZIP/GZIP, AES opcional).',
   'processTaskDescription.FILE_DELIVER': 'Entrega archivos a un destino de salida (SFTP/Filesystem).',
-  'taskTypeLabel.FILE_WRITE': 'Escribir archivo',
-  'taskTypeLabel.FILE_COMPRESS': 'Comprimir archivo',
-  'taskTypeLabel.FILE_DELIVER': 'Entregar archivo',
   'ui.compress.algorithm': 'Algoritmo',
   'ui.compress.algorithmHint': 'ZIP agrupa varios archivos y permite cifrado; GZIP comprime uno solo.',
   'ui.compress.level': 'Nivel de compresion',
@@ -804,12 +802,6 @@ export const es = {
   'ui.write.freezeHeader': 'Congelar cabecera',
   'ui.write.autoFilter': 'Autofiltro',
   'ui.write.autoSizeColumns': 'Auto-ancho de columnas',
-  'taskTypeLabel.FILE_READ': 'Lectura de archivo',
-  'taskTypeLabel.DB_WRITE': 'Escritura en base de datos',
-  'taskTypeLabel.DB_EXECUTE_SP': 'Procedimiento almacenado',
-  'taskTypeLabel.DB_EXECUTE_FN': 'Funcion de base de datos',
-  'taskTypeLabel.REST_CALL': 'Llamada REST',
-  'taskTypeLabel.NOTIFICATION': 'Notificacion',
   'executions.title': 'Ejecuciones',
   'executions.subtitle': 'Consulta ejecuciones de procesos, estados y tareas ejecutadas.',
   'executions.search': 'Buscar por proceso, id de ejecucion o id de proceso',
@@ -859,6 +851,16 @@ export const es = {
   'executions.reprocessSelectedFiles': 'Reprocesar seleccionados',
   'executions.downloadSkippedRows': 'Descargar filas omitidas',
   'executions.skippedRows': 'Filas omitidas',
+  // Cabeceras de los CSV exportados. Las columnas que ya tienen clave (estado, escritos, ultima
+  // modificacion) reusan la suya en vez de duplicarse aqui.
+  'executions.fileCol.name': 'Archivo',
+  'executions.fileCol.valid': 'Validos',
+  'executions.fileCol.skipped': 'Omitidos',
+  'executions.fileCol.size': 'Tamano',
+  'executions.fileCol.path': 'Ruta',
+  'executions.fileCol.error': 'Error',
+  'executions.skippedCol.row': 'Fila',
+  'executions.skippedCol.reason': 'Motivo',
   'executions.sourceFilesEmpty': 'La tarea seleccionada no tiene archivos procesados.',
   'executions.noMatchingFiles': 'No hay archivos que coincidan con los filtros actuales.',
   'executions.processDefinitionId': 'Proceso',
@@ -936,6 +938,9 @@ export const es = {
   'executionStatus.COMPLETED': 'Completada',
   'executionStatus.FAILED': 'Fallida',
   'executionStatus.COMPLETED_WITH_ERRORS': 'Completada con errores',
+  // Estado de TAREA: el nodo que la ejecutaba perdio el lease. "Interrumpida" y no "Fallida" porque
+  // no fallo, y no "Cancelada" porque nadie la cancelo.
+  'executionStatus.ABORTED': 'Interrumpida',
   'audit.title': 'Auditoria',
   'audit.subtitle': 'Consulta eventos, payloads y archivos procesados desde una lista operativa con panel lateral.',
   'audit.search': 'Buscar por id, ejecucion, tarea o mensaje',
@@ -944,6 +949,9 @@ export const es = {
   'audit.allStatuses': 'Todos los estados',
   'audit.noData': 'No hay eventos de auditoria para mostrar con los filtros actuales.',
   'audit.loadError': 'No se pudieron cargar los eventos de auditoria.',
+  // Se nombran las dos cifras a proposito: "se exporto una parte" no le sirve a quien tiene que
+  // decidir si acota el filtro y repite.
+  'audit.exportTruncated': 'Se exportaron {exportadas} de {total} eventos. Acota el filtro para llevarte el resto; el nombre del fichero indica que esta incompleto.',
   'audit.exportCsv': 'Exportar CSV',
   'audit.exportJson': 'Exportar JSON',
   'audit.detail': 'Detalle de auditoria',
@@ -960,17 +968,36 @@ export const es = {
   'audit.eventLabel.PROCESS_FAILED': 'Proceso fallido',
   'audit.eventLabel.PROCESS_COMPLETED_WITH_ERRORS': 'Proceso con errores',
   'audit.eventLabel.PROCESS_SCHEDULED_EXECUTION': 'Ejecucion programada lanzada',
+  // Estos cuatro se emiten desde siempre y no tenian etiqueta: la auditoria los mostraba en crudo.
+  'audit.eventLabel.PROCESS_QUEUED': 'Proceso encolado',
+  'audit.eventLabel.PROCESS_RECOVERED': 'Proceso recuperado',
+  'audit.eventLabel.TASK_SUSPENDED': 'Tarea suspendida',
+  // Cierre del camino del dinero: alguien concilio con el banco y cerro la ejecucion a mano.
+  'audit.eventLabel.PROCESS_RECONCILED_CLOSED': 'Proceso conciliado y cerrado',
+
+  // Cola de trabajo asincrona (task_inbox).
+  'inboxStatus.CLAIMED': 'Reclamado',
+  'inboxStatus.PROCESSED': 'Procesado',
+  'inboxStatus.FAILED': 'Fallido',
+  'inboxStatus.DEAD': 'Descartado',
+  'inboxStatus.POISON': 'Envenenado',
+
+  // Spool durable de auditoria (audit_spool).
+  'spoolStatus.PENDING': 'Pendiente',
+  'spoolStatus.IN_FLIGHT': 'En vuelo',
+  'spoolStatus.SENT': 'Enviado',
+  'spoolStatus.DEAD': 'Descartado',
+
+  // Linaje por registro. El motor solo emite la ingesta: cada vertical declara los suyos, porque
+  // "archivado" o "conciliado" solo significan algo dentro de su estandar.
+  'recordStage.RECORD_INGESTED': 'Registro ingerido',
+  'recordStatus.INGESTED': 'Ingerido',
   'audit.createdAt': 'Creado',
   'audit.message': 'Mensaje',
   'audit.payloadJson': 'Payload JSON',
   'audit.processedFiles': 'Archivos procesados',
   'audit.evidence': 'Evidencia',
   'audit.noFiles': 'No hay archivos procesados asociados a este evento.',
-  'audit.status.COMPLETED': 'Completado',
-  'audit.status.FAILED': 'Fallido',
-  'audit.status.PENDING': 'Pendiente',
-  'audit.status.RUNNING': 'En ejecucion',
-  'audit.status.COMPLETED_WITH_ERRORS': 'Completado con errores',
   'schedules.title': 'Schedules',
   'schedules.subtitle': 'Consulta procesos programados, proxima ejecucion y ultimos disparos.',
   'schedules.search': 'Buscar por nombre, descripcion o id',

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { PageEvent } from '@angular/material/paginator';
+import { resolveVocabulary, VocabularyTone, vocabularyTone } from '@integration-hub/core/i18n';
 import { I18nService } from '@integration-hub/core/services';
 import {
   CatalogListColumn,
@@ -53,23 +54,17 @@ export class ExecutionListComponent {
   }
 
   statusLabel(status: string): string {
-    return this.i18n.t(`executionStatus.${status}`);
+    return resolveVocabulary(this.i18n, 'executionStatus', status);
   }
 
-  /** Tono del estado, misma convencion que el detalle (summary-pill): success/warning/info/danger/neutral. */
-  statusTone(status: string): 'success' | 'warning' | 'info' | 'danger' | 'neutral' {
-    switch (status) {
-      case 'COMPLETED':
-        return 'success';
-      case 'FAILED':
-        return 'danger';
-      case 'COMPLETED_WITH_ERRORS':
-        return 'warning';
-      case 'RUNNING':
-        return 'info';
-      default:
-        return 'neutral';
-    }
+  /**
+   * El switch propio que habia aqui no contemplaba NEEDS_RECONCILIATION y lo pintaba en gris, igual
+   * que PENDING: desde la lista no se distinguia una corrida terminada de una que dejo un pago sin
+   * confirmar. El tono lo decide ahora el resolutor, que es el unico sitio donde ambar y rojo
+   * significan cosas distintas.
+   */
+  statusTone(status: string): VocabularyTone {
+    return vocabularyTone('executionStatus', status);
   }
 
   triggerLabel(status: string): string {

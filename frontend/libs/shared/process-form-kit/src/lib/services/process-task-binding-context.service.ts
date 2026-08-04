@@ -9,11 +9,13 @@ import {
   SourceRef,
   SourceDraft,
 } from '@integration-hub/core/providers';
+import { I18nService, resolveVocabulary } from '@integration-hub/core/i18n';
 import { ProcessTaskManagerService, ReaderManagerService, SourceManagerService } from '@integration-hub/core/services';
 import { DB_WRITE_METADATA_ITEMS } from '../models/process-db-write.models';
 
 @Injectable()
 export class ProcessTaskBindingContextService {
+  private readonly i18n = inject(I18nService);
   private readonly readerManager = inject(ReaderManagerService);
   private readonly sourceManager = inject(SourceManagerService);
   /** ADR-021: resuelve el descriptor del provider para leer lo que la tarea DECLARA de sus salidas. */
@@ -43,7 +45,11 @@ export class ProcessTaskBindingContextService {
         const taskRef = this.taskRef(item, config);
         return {
           taskRef,
-          label: `${taskRef} - ${item.taskType}`,
+          // El taskRef lo escribe quien disena el proceso y va tal cual; el taskType es vocabulario
+          // del backend y se nombra con el resolutor. Concatenar el enum crudo dejaba el selector de
+          // origen mostrando `task-2 - MT101_PAY` frente al mismo tipo ya traducido en la tarjeta de
+          // la tarea, en la misma pantalla.
+          label: `${taskRef} - ${resolveVocabulary(this.i18n, 'taskType', item.taskType)}`,
           taskType: item.taskType,
           taskOrder: item.taskOrder,
         };

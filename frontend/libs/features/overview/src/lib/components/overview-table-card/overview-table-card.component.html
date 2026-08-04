@@ -13,8 +13,8 @@
               }
             </div>
             <div class="table-card__meta">
-              @if (row.status) {
-                <span class="table-card__badge table-card__badge--{{ statusTone(row.status) }}">{{ row.status }}</span>
+              @if (row.status; as status) {
+                <span class="table-card__badge table-card__badge--{{ statusTone(status) }}">{{ statusLabel(status) }}</span>
               }
               @if (row.timestamp) {
                 <small>{{ formatDate(row.timestamp) }}</small>

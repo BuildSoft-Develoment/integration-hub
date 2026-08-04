@@ -5,6 +5,7 @@ export * from './lib/ui/app-feedback.service';
 export * from './lib/auth/auth-access.service';
 export * from './lib/auth/auth.service';
 export * from './lib/infrastructure/date-time.service';
+export * from './lib/infrastructure/file-export';
 export * from './lib/managers/connection-manager.service';
 export * from './lib/managers/managed-editor-state.base';
 export * from './lib/managers/process-task-manager.service';

@@ -132,8 +132,8 @@
                   <span class="lookup__tl-dot"><ih-icon [name]="statusIcon(entry.status)" [size]="16" /></span>
                   <div class="lookup__tl-body">
                     <div class="lookup__tl-head">
-                      <span class="lookup__tl-stage">{{ entry.stage }}</span>
-                      @if (entry.status) { <span class="lookup__status--{{ entry.status }}">{{ entry.status }}</span> }
+                      <span class="lookup__tl-stage">{{ stageLabel(entry.stage) }}</span>
+                      @if (entry.status) { <span class="lookup__status--{{ entry.status }}">{{ recordStatusLabel(entry.status) }}</span> }
                       @if (entry.eventTs; as ts) {
                         <time class="ih-muted" [attr.datetime]="ts" [title]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time>
                       }

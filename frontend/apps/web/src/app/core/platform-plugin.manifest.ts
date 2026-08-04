@@ -1,3 +1,5 @@
+import { Provider } from '@angular/core';
+import { Routes } from '@angular/router';
 import {
   AppPluginManifest,
   AppRouteContribution,
@@ -7,15 +9,35 @@ import {
 import { APP_NAVIGATION_DEFINITIONS } from './app-navigation.policy';
 import { APP_SECTION_CAPABILITIES } from './app-section-access.policy';
 
+/**
+ * Envuelve las rutas de una seccion del motor con los proveedores de vocabulario de los verticales.
+ *
+ * <p>La app es la unica capa que puede ver dos features a la vez (la frontera Nx prohibe
+ * feature -> feature), asi que el ensamblado vive aqui. Se anade una ruta padre sin componente cuyo
+ * unico cometido es sostener los proveedores: los hijos heredan el injector y las secciones no se
+ * enteran de que existen verticales, que es justo la inversion que pide ADR-021.</p>
+ *
+ * <p>Dar de alta un vertical nuevo es sumar su `provide...()` a la lista de la seccion. Si algun dia
+ * son varios, esto se convierte en un bucle; con uno solo, un bucle seria adorno.</p>
+ */
+function conVocabulario(rutas: Routes, proveedores: Provider[]): Routes {
+  return [{ path: '', providers: proveedores, children: rutas }];
+}
+
 export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
   {
     id: 'overview',
     path: '/overview',
     titleKey: 'overview.title',
     requiredCapability: APP_SECTION_CAPABILITIES.overview,
+    // Overview lista ejecuciones y eventos de CUALQUIER vertical, asi que necesita su vocabulario.
+    // Se carga el punto de entrada estrecho, no el barril: entra el mapa de etiquetas, no la consola.
     loadChildren: () =>
-      import('@integration-hub/features/overview').then(
-        (module) => module.overviewRoutes
+      Promise.all([
+        import('@integration-hub/features/overview'),
+        import('@integration-hub/features/swift-mt101/vocabulary'),
+      ]).then(([overview, vocabulario]) =>
+        conVocabulario(overview.overviewRoutes, vocabulario.provideSwiftMt101I18n())
       ),
   },
   {
@@ -84,8 +106,11 @@ export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
     titleKey: 'executions.title',
     requiredCapability: APP_SECTION_CAPABILITIES.executions,
     loadChildren: () =>
-      import('@integration-hub/features/executions').then(
-        (module) => module.executionCatalogRoutes
+      Promise.all([
+        import('@integration-hub/features/executions'),
+        import('@integration-hub/features/swift-mt101/vocabulary'),
+      ]).then(([executions, vocabulario]) =>
+        conVocabulario(executions.executionCatalogRoutes, vocabulario.provideSwiftMt101I18n())
       ),
   },
   {
@@ -104,8 +129,11 @@ export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
     titleKey: 'audit.title',
     requiredCapability: APP_SECTION_CAPABILITIES.audit,
     loadChildren: () =>
-      import('@integration-hub/features/audit').then(
-        (module) => module.auditRoutes
+      Promise.all([
+        import('@integration-hub/features/audit'),
+        import('@integration-hub/features/swift-mt101/vocabulary'),
+      ]).then(([audit, vocabulario]) =>
+        conVocabulario(audit.auditRoutes, vocabulario.provideSwiftMt101I18n())
       ),
   },
   {

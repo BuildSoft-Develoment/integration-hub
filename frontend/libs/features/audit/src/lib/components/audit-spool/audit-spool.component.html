@@ -41,10 +41,10 @@
 
       @if (summary()) {
         <div class="spool__summary">
-          <div class="spool__metric"><small>PENDING</small><strong>{{ summary()!.pending }}</strong></div>
-          <div class="spool__metric"><small>IN_FLIGHT</small><strong>{{ summary()!.inFlight }}</strong></div>
-          <div class="spool__metric"><small>SENT</small><strong>{{ summary()!.sent }}</strong></div>
-          <div class="spool__metric" [class.spool__metric--alert]="summary()!.dead > 0"><small>DEAD</small><strong>{{ summary()!.dead }}</strong></div>
+          <div class="spool__metric"><small>{{ spoolStatusLabel('PENDING') }}</small><strong>{{ summary()!.pending }}</strong></div>
+          <div class="spool__metric"><small>{{ spoolStatusLabel('IN_FLIGHT') }}</small><strong>{{ summary()!.inFlight }}</strong></div>
+          <div class="spool__metric"><small>{{ spoolStatusLabel('SENT') }}</small><strong>{{ summary()!.sent }}</strong></div>
+          <div class="spool__metric" [class.spool__metric--alert]="summary()!.dead > 0"><small>{{ spoolStatusLabel('DEAD') }}</small><strong>{{ summary()!.dead }}</strong></div>
           <div class="spool__metric"><small>{{ i18n.t('audit.spool.oldest') }}</small><span>{{ summary()!.oldestPendingCreatedAt || '-' }}</span></div>
         </div>
       }

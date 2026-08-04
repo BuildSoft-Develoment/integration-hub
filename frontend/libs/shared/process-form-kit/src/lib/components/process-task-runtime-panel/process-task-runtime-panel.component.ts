@@ -21,7 +21,8 @@ import { TaskContinueOnFailureComponent } from '../task-continue-on-failure/task
  * Panel de runtime por tarea: selecciona `executionMode`, tarea/output de origen y
  * `batchSize` del motor dinamico de inputs/outputs. Ver ADR-004.
  *
- * @trace RF-006, RF-009, RF-010
+ * @trace spec 003-diseno-y-ejecucion-procesos RF-006, RF-009, RF-010 (la matriz de 003 declara
+ * este componente como la superficie de interfaz de los tres)
  */
 @Component({
   selector: 'ih-process-task-runtime-panel',

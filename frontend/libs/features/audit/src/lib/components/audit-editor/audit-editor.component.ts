@@ -53,4 +53,12 @@ export class AuditEditorComponent {
   taskTypeDescription(taskType: string | null): string {
     return this.presentation.taskTypeDescription(taskType);
   }
+
+  /**
+   * El estado de un archivo procesado lo escribe `ProcessedSourceFileService` con los mismos tres
+   * valores que una ejecucion (COMPLETED / FAILED / PENDING): es la misma familia, no una propia.
+   */
+  fileStatusLabel(status: string | null): string {
+    return this.presentation.statusLabel(status);
+  }
 }

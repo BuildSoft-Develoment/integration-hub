@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 import {
   buildTaskDbWriteSummary,
@@ -90,7 +91,7 @@ export class ExecutionTaskListComponent {
     if (!summary?.skippedRows.length) {
       return;
     }
-    downloadSkippedRowsCsv(summary.skippedRows, `task-execution-${task.id}-skipped-rows.csv`);
+    downloadSkippedRowsCsv(this.i18n, summary.skippedRows, `task-execution-${task.id}-skipped-rows.csv`);
   }
 
   formatDate(value: string | null): string {
@@ -98,7 +99,11 @@ export class ExecutionTaskListComponent {
   }
 
   statusLabel(status: string): string {
-    return this.i18n.t(`executionStatus.${status}`);
+    return resolveVocabulary(this.i18n, 'executionStatus', status);
+  }
+
+  taskTypeLabel(taskType: string): string {
+    return resolveVocabulary(this.i18n, 'taskType', taskType);
   }
 
   formatOutput(value: unknown): string {

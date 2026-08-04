@@ -9,6 +9,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { AuthAccessService, AuthService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { ActionDispatcherService, ConfirmDialogComponent, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
@@ -59,6 +60,31 @@ export class Mt101QuarantineComponent {
 
   protected readonly statusKind = timelineStatusKind;
   protected readonly statusIcon = timelineStatusIcon;
+
+  /**
+   * Etiqueta del estado de CUARENTENA de una fila (`mt101_failed_record.status`).
+   *
+   * Solo vale para esa familia. En esta misma pantalla conviven otros dos vocabularios que se
+   * parecen y no lo son: el ciclo del fragmento (`mt101_build_fragment.status`: BUILT, VALIDATED,
+   * ARCHIVED, SENT, SUPERSEDED...) que alimenta las tarjetas del resumen, los conflictos de pago y
+   * el correctivo, y el del timeline operacional (INGESTED, RECONCILED, UNMATCHED...). Pasarlos por
+   * aqui los marcaria como clave ausente, que es justo lo contrario de lo que se busca.
+   */
+  quarantineStatusLabel(status: string | null | undefined): string {
+    return resolveVocabulary(this.i18n, 'quarantineStatus', status);
+  }
+
+  /**
+   * El recorrido del registro dentro de la cuarentena usa el vocabulario de LINAJE, no el de
+   * cuarentena: son dos cosas distintas que coinciden en la misma pantalla.
+   */
+  stageLabel(stage: string | null | undefined): string {
+    return resolveVocabulary(this.i18n, 'recordStage', stage);
+  }
+
+  recordStatusLabel(status: string | null | undefined): string {
+    return resolveVocabulary(this.i18n, 'recordStatus', status);
+  }
 
   /** Duración entre el hito i-1 y el i del timeline operacional (null en el primero). */
   durationAt(index: number): string | null {

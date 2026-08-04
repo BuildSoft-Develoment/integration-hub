@@ -8,7 +8,8 @@ import {
   TaskReadSummary,
   TaskSkippedRowRecord,
 } from '../models/execution.models';
-import { DateTimeService } from '@integration-hub/core/services';
+import { I18nService, resolveVocabulary } from '@integration-hub/core/i18n';
+import { DateTimeService, downloadText, toCsv } from '@integration-hub/core/services';
 
 const EXECUTION_DATE_FORMAT = 'dd LLL yyyy, HH:mm:ss';
 
@@ -204,44 +205,55 @@ export function summarizeFailure(details: string | null | undefined): TaskFailur
   };
 }
 
-export function downloadSkippedRowsCsv(rows: readonly TaskSkippedRowRecord[], fileName: string): void {
-  const csvRows = ['rowNumber,reason'];
-  rows.forEach((row) => {
-    const reason = String(row.reason ?? '').replace(/"/g, '""');
-    csvRows.push(`${row.rowNumber ?? ''},"${reason}"`);
-  });
-  downloadText(csvRows.join('\n'), fileName);
+export function downloadSkippedRowsCsv(
+  i18n: I18nService,
+  rows: readonly TaskSkippedRowRecord[],
+  fileName: string
+): void {
+  const header = [i18n.t('executions.skippedCol.row'), i18n.t('executions.skippedCol.reason')];
+  const csvRows = rows.map((row) => [row.rowNumber ?? '', row.reason ?? '']);
+  downloadText(toCsv(header, csvRows), fileName);
 }
 
-export function downloadProcessedFilesCsv(rows: readonly ProcessedSourceFileRecord[], fileName: string): void {
-  const csvRows = ['archivo,estado,validos,omitidos,escritos,tamano,ultimaModificacion,ruta,error'];
-  rows.forEach((row) => {
-    const values = [
-      row.fileName ?? '',
-      row.status ?? '',
-      row.recordCount ?? '',
-      row.skippedCount ?? '',
-      row.writtenCount ?? '',
-      row.fileSize ?? '',
-      row.lastModified ?? '',
-      row.filePath ?? '',
-      row.errorMessage ?? '',
-    ].map((value) => `"${String(value).replace(/"/g, '""')}"`);
-    csvRows.push(values.join(','));
-  });
-  downloadText(csvRows.join('\n'), fileName);
-}
-
-function downloadText(content: string, fileName: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+/**
+ * CSV de archivos procesados.
+ *
+ * La cabecera iba literal en espanol y sin acentos (`archivo,estado,...`) mientras el exportador de
+ * auditoria la escribia literal en ingles; y el estado se volcaba crudo, asi que un archivo que en
+ * pantalla decia `Completado` salia `COMPLETED` en el fichero.
+ *
+ * Dos columnas reusan clave existente en vez de duplicarle el significado al diccionario:
+ * `executions.recordsWritten` ya es "Escritos" y `executions.fileModifiedTo` ya es la cabecera de
+ * esa misma columna en la tabla de la pantalla.
+ */
+export function downloadProcessedFilesCsv(
+  i18n: I18nService,
+  rows: readonly ProcessedSourceFileRecord[],
+  fileName: string
+): void {
+  const header = [
+    i18n.t('executions.fileCol.name'),
+    i18n.t('common.status'),
+    i18n.t('executions.fileCol.valid'),
+    i18n.t('executions.fileCol.skipped'),
+    i18n.t('executions.recordsWritten'),
+    i18n.t('executions.fileCol.size'),
+    i18n.t('executions.fileModifiedTo'),
+    i18n.t('executions.fileCol.path'),
+    i18n.t('executions.fileCol.error'),
+  ];
+  const csvRows = rows.map((row) => [
+    row.fileName ?? '',
+    resolveVocabulary(i18n, 'executionStatus', row.status),
+    row.recordCount ?? '',
+    row.skippedCount ?? '',
+    row.writtenCount ?? '',
+    row.fileSize ?? '',
+    row.lastModified ?? '',
+    row.filePath ?? '',
+    row.errorMessage ?? '',
+  ]);
+  downloadText(toCsv(header, csvRows), fileName);
 }
 
 function processedFilesSummary(processedFiles: readonly ProcessedSourceFileRecord[]): TaskReadSummary | null {

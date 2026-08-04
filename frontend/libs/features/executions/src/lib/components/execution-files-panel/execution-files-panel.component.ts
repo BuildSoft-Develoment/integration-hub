@@ -69,6 +69,7 @@ export class ExecutionFilesPanelComponent {
             ? 'archivos-pendientes'
             : 'archivos';
     downloadProcessedFilesCsv(
+      this.i18n,
       rows,
       `task-execution-${this.task()?.id || 'source-files'}-${suffix}.csv`
     );

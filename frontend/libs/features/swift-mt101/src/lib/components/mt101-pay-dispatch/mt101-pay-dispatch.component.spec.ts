@@ -8,6 +8,7 @@ import {
   Mt101PayDispatchReconcileResult,
   Mt101PayDispatchSummary,
 } from '../../models/mt101.models';
+import { provideSwiftMt101I18n } from '../../swift-mt101-i18n';
 import { Mt101PayDispatchComponent } from './mt101-pay-dispatch.component';
 
 interface Overrides {
@@ -30,6 +31,10 @@ function build(summary: Mt101PayDispatchSummary, stuck: Mt101PayDispatchIntent[]
     providers: [
       { provide: Mt101AuditApiService, useValue: api },
       { provide: AuthAccessService, useValue: access },
+      // El vocabulario del vertical se registra por ruta en la app; sin el, el resolutor daria por
+      // ausente cada clave `payDispatchStatus.*` y llenaria el test de la alarma que solo debe
+      // sonar cuando falta de verdad.
+      ...provideSwiftMt101I18n(),
     ],
   });
   return TestBed.runInInjectionContext(() => new Mt101PayDispatchComponent());
@@ -60,6 +65,15 @@ describe('Mt101PayDispatchComponent', () => {
     expect(c.stuck().length).toBe(2);
     expect(c.statusEntries().find((e) => e.status === 'UNCERTAIN')?.count).toBe(1);
     expect(c.error()).toBeNull();
+  });
+
+  it('nombra el estado del dispatch y separa "salio y no se sabe" de "no salio"', () => {
+    const c = build({ total: 1, byStatus: { UNCERTAIN: 1 }, stuck: 1 }, [intent({})]);
+    // El contrato que importa: son dos hechos opuestos para quien decide si reenvia un pago, asi que
+    // no pueden compartir etiqueta (ni parecerse a un rechazo del banco).
+    expect(c.statusLabel('UNCERTAIN')).not.toBe(c.statusLabel('INVALIDATED'));
+    expect(c.statusLabel('UNCERTAIN')).not.toContain('UNCERTAIN');
+    expect(c.statusLabel(null)).toBe('-');
   });
 
   it('sin atascados: lista vacía, sin error', () => {

@@ -52,7 +52,7 @@
               <td>{{ c.processExecutionId ?? '-' }}</td>
               <td class="conflicts__mono">{{ c.sendersReference }}</td>
               <td>
-                <span class="conflicts__status">{{ c.status || '-' }}</span>
+                <span class="conflicts__status">{{ statusLabel(c.status) }}</span>
                 <!-- #7: chip de un vistazo si ya hay una solicitud PENDING de reconocimiento (quién/ticket/motivo en el tooltip). -->
                 @if (hasPendingAck(c)) {
                   <span class="conflicts__ack-chip"

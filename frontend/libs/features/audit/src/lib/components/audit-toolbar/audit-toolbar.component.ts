@@ -5,8 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { I18nService } from '@integration-hub/core/services';
-import { auditEventLabel } from '../../utils/audit-event-label';
+import { I18nService, resolveVocabulary } from '@integration-hub/core/i18n';
 
 @Component({
   selector: 'ih-audit-toolbar',
@@ -27,6 +26,12 @@ export class AuditToolbarComponent {
   readonly eventTypeOptions = input.required<readonly string[]>();
   readonly loading = input(false);
 
+  /**
+   * Exportar ya no baja la pagina que se ve: pide la consulta entera al servidor y eso tarda. Sin
+   * apagar el boton, dos clics seguidos lanzan dos descargas del mismo lote.
+   */
+  readonly exporting = input(false);
+
   readonly searchChange = output<string>();
   readonly eventTypeFilterChange = output<string>();
   readonly statusFilterChange = output<'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING' | 'COMPLETED_WITH_ERRORS'>();
@@ -35,6 +40,6 @@ export class AuditToolbarComponent {
   readonly exportJson = output<void>();
 
   eventTypeLabel(value: string): string {
-    return auditEventLabel(this.i18n, value);
+    return resolveVocabulary(this.i18n, 'auditEvent', value);
   }
 }

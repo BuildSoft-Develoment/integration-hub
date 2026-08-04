@@ -1,3 +1,7 @@
+// @trace spec 004-observabilidad-y-auditoria RF-010 (clasifica cada operacion auditable por riesgo,
+// modo y evidencia exigida: es lo que permite a la UI distinguir una consulta de una operacion
+// gobernada en vez de pintarlas igual)
+
 export type AuditOperationRiskSeverity = 'medium' | 'high' | 'critical';
 
 export type AuditOperationMode = 'query' | 'governed-operation';

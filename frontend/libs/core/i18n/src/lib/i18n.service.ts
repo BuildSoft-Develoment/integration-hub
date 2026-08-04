@@ -52,6 +52,16 @@ export class I18nService {
     return ignored;
   }
 
+  /**
+   * Si la clave existe. Hace falta porque `t()` devuelve la CLAVE cuando falta, y comparar el
+   * resultado con la clave para deducir ausencia es fragil: no distingue "sin traducir" de
+   * "traducido a si misma", y ese truco es el que usaban los helpers viejos para degradar en
+   * silencio al enum crudo.
+   */
+  has(key: string): boolean {
+    return key in this.dictionary();
+  }
+
   t(key: string, vars: Record<string, string | number> = {}): string {
     const template = this.dictionary()[key] ?? key;
     return Object.entries(vars).reduce(

@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { RouterLink } from '@angular/router';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { RelativeTimePipe } from '@integration-hub/shared/ui';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
@@ -74,6 +75,16 @@ export class Mt101PayDispatchComponent {
     return s ? Object.entries(s.byStatus).map(([status, count]) => ({ status, count })) : [];
   });
 
+  /**
+   * Estado de la INTENCION de dispatch (mt101_pay_dispatch_intent), no de la ejecucion ni del
+   * fragmento. La distincion que sostiene esta pantalla es UNCERTAIN (salio al banco y no se pudo
+   * confirmar) frente a INVALIDATED (no salio, es reintentable): el operador decide si reenvia
+   * leyendo justo esta celda, y con el enum crudo tenia que saberse la tabla de memoria.
+   */
+  statusLabel(status: string | null): string {
+    return resolveVocabulary(this.i18n, 'payDispatchStatus', status);
+  }
+
   constructor() {
     this.breadcrumb.setItems([
       { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
@@ -138,7 +149,12 @@ export class Mt101PayDispatchComponent {
         this.reconciling.set(null);
         const ref = row.sendersReference ?? row.dispatchKey;
         if (result.outcome === 'RECONCILED') {
-          this.message.set(this.i18n.t('audit.payDispatch.reconcileOk', { ref, status: result.newStatus ?? '' }));
+          // El terminal al que se concilio (SENT/REJECTED) se lee igual en el mensaje que en la
+          // tabla: el enum crudo aqui obligaba a leer "Reconciliado X -> SENT" junto a una celda que
+          // ya decia "Aceptado".
+          this.message.set(
+            this.i18n.t('audit.payDispatch.reconcileOk', { ref, status: this.statusLabel(result.newStatus) }),
+          );
           this.reason = '';
           this.activeKey.set(null);
           this.load();

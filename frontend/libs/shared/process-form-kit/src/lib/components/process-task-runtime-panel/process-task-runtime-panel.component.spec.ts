@@ -155,7 +155,11 @@ describe('ProcessTaskRuntimePanelComponent (tarea origen)', () => {
       { tasks: [previousTask] },
     );
 
-    expect(fixture.componentInstance.selectedTaskLabel()).toBe('task-10 - FAKE_BUILD_FROM_TABLE');
+    // El tipo de la fixture es inventado y por tanto NO tiene clave de diccionario, asi que la
+    // etiqueta sale marcada. Antes salia como `task-10 - FAKE_BUILD_FROM_TABLE`, o sea el enum
+    // crudo colado como si fuera un nombre: ese disimulo es justo lo que se elimino, y esta
+    // expectativa lo certificaba. Lo que este caso comprueba es la COMPOSICION taskRef + tipo.
+    expect(fixture.componentInstance.selectedTaskLabel()).toBe('task-10 - ⚠ FAKE_BUILD_FROM_TABLE');
     http.verify();
   });
 

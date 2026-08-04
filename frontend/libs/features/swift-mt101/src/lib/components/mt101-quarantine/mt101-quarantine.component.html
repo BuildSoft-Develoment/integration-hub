@@ -199,7 +199,7 @@
 
       @if (rebuildRun(); as run) {
         <div class="q__confirm" role="status">
-          <div class="q__confirm-title"><ih-icon name="alert-triangle" /> {{ i18n.t('audit.quarantine.runTitle') }} · {{ run.status }}</div>
+          <div class="q__confirm-title"><ih-icon name="alert-triangle" /> {{ i18n.t('audit.quarantine.runTitle') }} · {{ quarantineStatusLabel(run.status) }}</div>
           <p class="q__risk-detail">{{ i18n.t(executeRisk.labelKey) }}: {{ i18n.t(executeRisk.summaryKey) }} {{ i18n.t('audit.risk.evidence') }}: {{ evidenceText(executeRisk) }}</p>
           <ul class="q__confirm-list">
             <li>{{ i18n.t('audit.quarantine.runImpact', { rows: run.selectedRows, fragments: run.affectedFragments }) }}</li>
@@ -230,7 +230,7 @@
           <h3>{{ i18n.t('audit.quarantine.correctiveTitle') }}</h3>
           <ul>
             <li>{{ i18n.t('audit.quarantine.confirmSet', { set: corr.correctiveSetId }) }}</li>
-            <li><span class="q__status--{{ corr.status }}">{{ corr.status }}</span></li>
+            <li><span class="q__status--{{ corr.status }}">{{ quarantineStatusLabel(corr.status) }}</span></li>
             <li class="ih-pay-state ih-pay-state--{{ payStatusFor(corr.rebuildRunId) }}">PAY: {{ payStatusFor(corr.rebuildRunId) }}</li>
             @if (payStatusFor(corr.rebuildRunId) === 'REQUESTED') {
               <li class="ih-pay-evidence">
@@ -315,7 +315,7 @@
         <div class="q__cards">
           <div class="q__card"><small>{{ i18n.t('audit.quarantine.cardFragments') }}</small><strong>{{ s.total }}</strong></div>
           @for (entry of statusEntries(); track entry.status) {
-            <div class="q__card q__card--{{ entry.status }}"><small>{{ entry.status }}</small><strong>{{ entry.count }}</strong></div>
+            <div class="q__card q__card--{{ entry.status }}"><small>{{ quarantineStatusLabel(entry.status) }}</small><strong>{{ entry.count }}</strong></div>
           }
           <div class="q__card q__card--QUARANTINED"><small>{{ i18n.t('audit.quarantine.cardQuarantine') }}</small><strong>{{ pendingCount() }}</strong></div>
           @if (s.conflicts && s.conflicts > 0) {
@@ -427,7 +427,7 @@
                       <button type="button" class="q__copy" [cdkCopyToClipboard]="row.sourceFileHash" (cdkCopyToClipboardCopied)="markCopied('hash-' + row.id)" [attr.aria-label]="i18n.t('audit.common.copyHash')"><ih-icon [name]="copied() === 'hash-' + row.id ? 'check' : 'copy'" [size]="13" /> {{ copied() === 'hash-' + row.id ? i18n.t('audit.common.copied') : i18n.t('audit.common.copy') }}</button>
                     }
                   </td>
-                  <td class="q__status--{{ row.status }}">{{ row.status }}</td>
+                  <td class="q__status--{{ row.status }}">{{ quarantineStatusLabel(row.status) }}</td>
                   <td>
                     @if (row.sourceRecordNumber !== null && row.stagingId !== null && row.sourceFileHash) {
                       <button mat-button type="button" (click)="toggleTimeline(row)">
@@ -520,8 +520,8 @@
                           <div class="q__tl-title">{{ i18n.t('audit.quarantine.timelineTitle', { row: row.sourceRecordNumber ?? '' }) }} <span class="q__tl-note">{{ i18n.t('audit.quarantine.timelineNote') }}</span></div>
                           @for (e of timeline(); track $index; let i = $index) {
                             <div class="q__tl-entry q__tl-entry--{{ e.status }}">
-                              <span class="q__tl-stage"><ih-icon [name]="statusIcon(e.status)" class="q__tl-icon q__tl-icon--{{ statusKind(e.status) }}" /> {{ e.stage }}</span>
-                              <span class="q__status--{{ e.status }}">{{ e.status }}</span>
+                              <span class="q__tl-stage"><ih-icon [name]="statusIcon(e.status)" class="q__tl-icon q__tl-icon--{{ statusKind(e.status) }}" /> {{ stageLabel(e.stage) }}</span>
+                              <span class="q__status--{{ e.status }}">{{ recordStatusLabel(e.status) }}</span>
                               <span>{{ e.detail }}</span>
                               <span class="q__tl-ts">{{ e.eventTs || '—' }}@if (durationAt(i); as d) { <span class="q__tl-dur">· +{{ d }}</span> }</span>
                             </div>

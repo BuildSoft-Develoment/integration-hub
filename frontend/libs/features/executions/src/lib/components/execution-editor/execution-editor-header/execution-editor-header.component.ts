@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
 
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { I18nService } from '@integration-hub/core/services';
 import { IconComponent } from '@integration-hub/shared/ui';
 
@@ -33,7 +34,11 @@ export class ExecutionEditorHeaderComponent {
   readonly failedTaskType = input<string | null>(null);
 
   statusLabel(status: string): string {
-    return this.i18n.t(`executionStatus.${status}`);
+    return resolveVocabulary(this.i18n, 'executionStatus', status);
+  }
+
+  failedTaskTypeLabel(): string {
+    return resolveVocabulary(this.i18n, 'taskType', this.failedTaskType());
   }
 
   triggerLabel(value: string | null): string {

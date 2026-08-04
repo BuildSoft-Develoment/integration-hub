@@ -6,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { AuthService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
@@ -99,6 +100,17 @@ export class Mt101PayConflictsComponent {
   /** D: reintenta conocer la política tras un error de settings. */
   retrySettings(): void {
     this.loadSettings();
+  }
+
+  /**
+   * Terminal del fragmento en conflicto. Es la MISMA familia que el ledger de dispatch (el conflicto
+   * existe precisamente porque dos caminos escribieron terminales de pago contradictorios), asi que
+   * se nombra igual en las dos consolas: el operador que salta de una a otra no deberia tener que
+   * traducir. Sin clave se marca y se registra — que aqui aparezca un estado del ciclo de vida del
+   * fragmento (p. ej. ARCHIVED) es un hueco real que hay que ver, no disimular.
+   */
+  statusLabel(status: string | null): string {
+    return resolveVocabulary(this.i18n, 'payDispatchStatus', status);
   }
 
   /** #7: ¿este conflicto ya tiene una solicitud PENDING de reconocimiento (maker)? */

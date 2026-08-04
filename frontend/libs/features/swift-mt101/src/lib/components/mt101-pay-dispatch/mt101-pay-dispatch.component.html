@@ -25,8 +25,9 @@
         <strong>{{ s.stuck }}</strong>
       </div>
       @for (entry of statusEntries(); track entry.status) {
+        <!-- La clase sigue colgando del valor CRUDO (es un gancho de estilo); lo que se lee es la etiqueta. -->
         <div class="pd__card pd__card--{{ entry.status }}">
-          <small>{{ entry.status }}</small>
+          <small>{{ statusLabel(entry.status) }}</small>
           <strong>{{ entry.count }}</strong>
         </div>
       }
@@ -64,7 +65,7 @@
           @for (row of stuck(); track row.dispatchKey) {
             <tr>
               <td class="pd__mono">{{ row.sendersReference || '-' }}</td>
-              <td class="pd__status--{{ row.status }}">{{ row.status }}</td>
+              <td class="pd__status--{{ row.status }}">{{ statusLabel(row.status) }}</td>
               <td>{{ row.processExecutionId ?? '-' }}</td>
               <td>{{ row.attempts }}</td>
               <td>{{ row.errorMessage || '-' }}</td>

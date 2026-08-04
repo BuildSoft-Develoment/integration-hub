@@ -69,8 +69,8 @@
               </div>
               <div class="lineage__body">
                 <div class="lineage__head">
-                  <span class="lineage__stage">{{ entry.stage }}</span>
-                  <span class="lineage__status lineage__status--{{ entry.status }}">{{ entry.status }}</span>
+                  <span class="lineage__stage">{{ stageLabel(entry.stage) }}</span>
+                  <span class="lineage__status lineage__status--{{ entry.status }}">{{ recordStatusLabel(entry.status) }}</span>
                   <time class="lineage__ts" [attr.datetime]="entry.eventTs" [title]="entry.eventTs | ihTime:'absolute'" [attr.aria-label]="entry.eventTs | ihTime:'absolute'">{{ entry.eventTs | ihTime }}</time>
                 </div>
                 @if (durationAt(i); as dur) {

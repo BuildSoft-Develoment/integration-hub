@@ -9,6 +9,15 @@ type StatusFilter = 'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING' | 'CO
 
 const TABLE_ID = 'audit';
 
+/**
+ * Tope de filas por exportacion.
+ *
+ * No es una cifra de compromiso: es lo que un navegador puede convertir en CSV y descargar sin
+ * bloquear la pestana. Superarlo NO se disimula — quien exporta se entera de cuantas quedaron fuera
+ * y el propio nombre del fichero lo dice.
+ */
+export const EXPORT_MAX_ROWS = 10_000;
+
 @Injectable()
 export class AuditStore implements OnDestroy {
   private readonly api = inject(AuditApiService);
@@ -47,6 +56,35 @@ export class AuditStore implements OnDestroy {
 
   async load(): Promise<void> {
     await this.loadEvents(true);
+  }
+
+  /**
+   * Trae el resultado FILTRADO COMPLETO para exportar, no la pagina que se esta viendo.
+   *
+   * <p>La exportacion usaba `pagedEvents()`, que son los 8 registros de la pagina actual. Un auditor
+   * que filtraba por un rango y pulsaba "Exportar CSV" se llevaba 8 filas creyendo que se llevaba la
+   * consulta. Ese fichero luego se archiva o se manda, y nada en el delata lo que falta.</p>
+   *
+   * <p><b>Con tope, y el tope se cuenta.</b> Sin limite, un filtro amplio sobre la auditoria puede
+   * traer cientos de miles de filas al navegador y tumbar la pestana — este producto ya trabaja con
+   * lotes de un millon de registros, asi que no es hipotetico. Se traen como mucho
+   * {@link EXPORT_MAX_ROWS} y se devuelve `total` para que quien llame pueda DECIR cuantas quedaron
+   * fuera en vez de callarlo.</p>
+   */
+  async fetchForExport(): Promise<{ events: AuditRecord[]; total: number; truncado: boolean }> {
+    const response = await firstValueFrom(
+      this.api.list({
+        search: this.search(),
+        eventType: this.eventTypeFilter(),
+        status: this.statusFilter(),
+        page: 0,
+        size: EXPORT_MAX_ROWS,
+      })
+    );
+
+    const s = this.sort();
+    const events = s ? sortData(response.items, s) : response.items;
+    return { events, total: response.total, truncado: response.total > events.length };
   }
 
   ngOnDestroy(): void {

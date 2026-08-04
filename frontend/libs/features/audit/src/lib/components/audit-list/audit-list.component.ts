@@ -2,7 +2,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { PageEvent } from '@angular/material/paginator';
-import { I18nService } from '@integration-hub/core/services';
+import { I18nService, VocabularyTone, vocabularyTone } from '@integration-hub/core/i18n';
 import {
   CatalogListColumn,
   CatalogListComponent,
@@ -58,22 +58,12 @@ export class AuditListComponent {
   }
 
   /**
-   * Tono del estado, misma convencion que la lista de ejecuciones y el detalle (summary-pill):
-   * rojo solo para fallos, ambar solo cuando hay algo que mirar; el resto queda calmo (neutral).
+   * El switch propio que habia aqui no contemplaba SUSPENDED ni NEEDS_RECONCILIATION: caian al
+   * `default` neutro, indistinguibles de PENDING. Esa copia existia identica en varias pantallas,
+   * asi que el agujero se repetia en todas a la vez.
    */
-  statusTone(status: string): 'success' | 'warning' | 'info' | 'danger' | 'neutral' {
-    switch (status) {
-      case 'COMPLETED':
-        return 'success';
-      case 'FAILED':
-        return 'danger';
-      case 'COMPLETED_WITH_ERRORS':
-        return 'warning';
-      case 'RUNNING':
-        return 'info';
-      default:
-        return 'neutral';
-    }
+  statusTone(status: string): VocabularyTone {
+    return vocabularyTone('executionStatus', status);
   }
 
   eventLabel(event: AuditRecord): string {

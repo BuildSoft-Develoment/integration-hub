@@ -13,6 +13,7 @@ import { forkJoin } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
 import { AuditSpoolEntry, AuditSpoolSummary } from '../../models/audit.models';
 import { AuditOperationRisk, AuditWorkspaceNavComponent, auditEvidenceLabelKey, auditOperationRisk } from '@integration-hub/shared/audit-kit';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 
 @Component({
   selector: 'ih-audit-spool',
@@ -116,6 +117,14 @@ export class AuditSpoolComponent implements OnInit {
 
   ngOnDestroy(): void {
     this.actions.disarm();
+  }
+
+  /**
+   * Rotulos de los contadores del panel. Iban TECLEADOS como enum en el marcado, pegados a una
+   * linea que si pasaba por el diccionario: el panel era mitad producto y mitad volcado tecnico.
+   */
+  spoolStatusLabel(value: string): string {
+    return resolveVocabulary(this.i18n, 'spoolStatus', value);
   }
 
   evidenceText(risk: AuditOperationRisk): string {

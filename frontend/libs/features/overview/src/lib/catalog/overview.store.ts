@@ -2,6 +2,7 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AppFeedbackService } from '@integration-hub/core/services';
+import { I18nService, resolveVocabulary, VocabularyKind } from '@integration-hub/core/i18n';
 import { OverviewApiService } from '../api/overview-api.service';
 import {
   OverviewHealthSignal,
@@ -9,13 +10,22 @@ import {
   OverviewKpi,
   OverviewSummaryRecord,
 } from '../models/overview.models';
-import { OverviewTableRow } from '../models/overview-row.model';
+import { OverviewTableRow, OverviewVocabularyValue } from '../models/overview-row.model';
 import { PluginHealth } from '../models/overview-plugin-health.model';
+
+/** Empaqueta el valor con su familia; `null` si no hay valor, para que la fila no pinte distintivo. */
+function vocabulario(
+  kind: VocabularyKind,
+  value: string | null | undefined,
+): OverviewVocabularyValue | null {
+  return value ? { kind, value } : null;
+}
 
 @Injectable()
 export class OverviewStore {
   private readonly api = inject(OverviewApiService);
   private readonly feedback = inject(AppFeedbackService);
+  private readonly i18n = inject(I18nService);
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
@@ -154,7 +164,7 @@ export class OverviewStore {
     (this.summary()?.recentExecutions ?? []).map((item) => ({
       primary: item.processName,
       secondary: `#${item.id}`,
-      status: item.status,
+      status: vocabulario('executionStatus', item.status),
       timestamp: item.startedAt,
     }))
   );
@@ -163,16 +173,19 @@ export class OverviewStore {
     (this.summary()?.failedExecutionHighlights ?? []).map((item) => ({
       primary: item.processName,
       secondary: `#${item.id}`,
-      status: item.status,
+      status: vocabulario('executionStatus', item.status),
       timestamp: item.finishedAt,
     }))
   );
 
   readonly recentAuditRows = computed<OverviewTableRow[]>(() =>
     (this.summary()?.recentAuditEvents ?? []).map((item) => ({
-      primary: item.eventType,
+      // El tipo de evento es la columna de texto de esta tarjeta, no un distintivo, asi que la fila
+      // lo entrega ya resuelto. Leer el diccionario dentro del `computed` mantiene la fila reactiva
+      // al cambio de idioma: `i18n.t` depende de la senal `locale`.
+      primary: resolveVocabulary(this.i18n, 'auditEvent', item.eventType),
       secondary: item.message || `#${item.id}`,
-      status: item.status,
+      status: vocabulario('executionStatus', item.status),
       timestamp: item.createdAt,
     }))
   );

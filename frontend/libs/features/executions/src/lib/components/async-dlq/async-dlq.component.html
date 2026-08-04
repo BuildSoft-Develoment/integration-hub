@@ -84,9 +84,9 @@
             <tr>
               <td>{{ row.id }}</td>
               <td class="dlq__mono" [title]="row.idempotencyKey">{{ row.idempotencyKey }}</td>
-              <td>{{ row.taskType || '-' }}</td>
+              <td>{{ taskTypeLabel(row.taskType) }}</td>
               <td>{{ row.processExecutionId ?? '-' }}<span class="dlq__mono" *ngIf="row.taskDefinitionId != null"> / {{ row.taskDefinitionId }}</span></td>
-              <td><span class="dlq__badge dlq__badge--{{ row.status | lowercase }}">{{ row.status }}</span></td>
+              <td><span class="dlq__badge dlq__badge--{{ row.status | lowercase }}">{{ inboxStatusLabel(row.status) }}</span></td>
               <td [title]="row.error || ''">{{ row.error || '-' }}</td>
             </tr>
           }

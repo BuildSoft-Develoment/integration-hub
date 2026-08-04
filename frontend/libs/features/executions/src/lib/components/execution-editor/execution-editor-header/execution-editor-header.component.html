@@ -17,7 +17,7 @@
             <span class="profile-badge">{{ i18n.t('executions.childExecutions') }} {{ childrenCount() }}</span>
           }
           @if (failedTaskType()) {
-            <span class="profile-badge profile-badge--danger">{{ i18n.t('executions.failedAtTask') }} {{ failedTaskType() }}</span>
+            <span class="profile-badge profile-badge--danger">{{ i18n.t('executions.failedAtTask') }} {{ failedTaskTypeLabel() }}</span>
           }
         </div>
       </div>

@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
 import { Mt101FragmentLink, Mt101PhysicalLineLineage } from '../../models/mt101.models';
@@ -41,6 +42,15 @@ export class Mt101FragmentLookupComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly breadcrumb = inject(BreadcrumbService);
   readonly i18n = inject(I18nService);
+
+  /** Mismo recorrido por registro que #/audit, y por tanto el mismo vocabulario: stage y status. */
+  stageLabel(stage: string | null | undefined): string {
+    return resolveVocabulary(this.i18n, 'recordStage', stage);
+  }
+
+  recordStatusLabel(status: string | null | undefined): string {
+    return resolveVocabulary(this.i18n, 'recordStatus', status);
+  }
 
   recordNumber = '';
   sourceFileHash = '';

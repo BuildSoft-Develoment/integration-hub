@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { PageEvent } from '@angular/material/paginator';
@@ -7,8 +8,10 @@ import { AuditEditorComponent } from '../components/audit-editor/audit-editor.co
 import { AuditListComponent } from '../components/audit-list/audit-list.component';
 import { AuditToolbarComponent } from '../components/audit-toolbar/audit-toolbar.component';
 import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
+import { AppFeedbackService, downloadText, I18nService } from '@integration-hub/core/services';
 import { AuditStore } from './audit.store';
-import { downloadText, eventsToCsv, eventsToJson } from '../utils/download-utils';
+import { AuditRecord } from '../models/audit.models';
+import { eventsToCsv, eventsToJson } from '../utils/download-utils';
 
 @Component({
   selector: 'ih-audit-page',
@@ -21,6 +24,11 @@ import { downloadText, eventsToCsv, eventsToJson } from '../utils/download-utils
 })
 export class AuditPageComponent implements OnInit {
   readonly store = inject(AuditStore);
+  private readonly i18n = inject(I18nService);
+  private readonly feedback = inject(AppFeedbackService);
+
+  /** Traer el resultado completo tarda: el boton se apaga mientras, para no lanzar dos descargas. */
+  readonly exporting = signal(false);
   readonly viewModel = computed(() => ({
     search: this.store.search(),
     eventTypeFilter: this.store.eventTypeFilter(),
@@ -70,15 +78,46 @@ export class AuditPageComponent implements OnInit {
     void this.store.load();
   }
 
-  exportCsv(): void {
-    const events = this.store.pagedEvents();
-    if (events.length === 0) { return; }
-    downloadText(eventsToCsv(events), `audit-events-${Date.now()}.csv`);
+  async exportCsv(): Promise<void> {
+    await this.exportar((events) => eventsToCsv(this.i18n, events), 'csv', 'text/csv');
   }
 
-  exportJson(): void {
-    const events = this.store.pagedEvents();
-    if (events.length === 0) { return; }
-    downloadText(eventsToJson(events), `audit-events-${Date.now()}.json`, 'application/json');
+  async exportJson(): Promise<void> {
+    await this.exportar((events) => eventsToJson(events), 'json', 'application/json');
+  }
+
+  /**
+   * Exporta la CONSULTA, no la pagina visible.
+   *
+   * <p>El rotulo dice "Exportar CSV" y hasta ahora bajaba los 8 registros de la pagina actual. Nadie
+   * lo notaba: el fichero se abre despues, fuera de la pantalla que lo genero, y no hay con que
+   * comparar. Un auditor archivaba 8 filas de una consulta de miles creyendolas completas.</p>
+   *
+   * <p>Cuando la consulta supera el tope, la constancia de que falta algo viaja en el NOMBRE DEL
+   * FICHERO, no solo en un aviso de pantalla que se cierra y se olvida. Meterlo como una linea
+   * dentro del CSV romperia a quien lo parsee, y ese remedio seria peor.</p>
+   */
+  private async exportar(
+    serializar: (events: AuditRecord[]) => string,
+    extension: string,
+    mimeType: string,
+  ): Promise<void> {
+    if (this.exporting()) { return; }
+    this.exporting.set(true);
+    try {
+      const { events, total, truncado } = await this.store.fetchForExport();
+      if (events.length === 0) { return; }
+
+      const sufijo = truncado ? `-parcial-${events.length}-de-${total}` : '';
+      downloadText(serializar(events), `audit-events${sufijo}-${Date.now()}.${extension}`, mimeType);
+
+      if (truncado) {
+        this.feedback.info('audit.exportTruncated', { exportadas: events.length, total });
+      }
+    } catch (error) {
+      this.feedback.handleHttpError(error as HttpErrorResponse);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 }

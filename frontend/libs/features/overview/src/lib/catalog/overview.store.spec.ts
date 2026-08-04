@@ -42,9 +42,11 @@ describe('OverviewStore', () => {
                   {
                     id: 21,
                     processExecutionId: 11,
-                    eventType: 'PROCESS_EXECUTION_STARTED',
+                    // Tipo de evento REAL del backend. Antes decia `PROCESS_EXECUTION_STARTED`, que
+                    // no existe: mientras la fila devolvia el crudo, un tipo inventado pasaba igual.
+                    eventType: 'PROCESS_STARTED',
                     status: 'RUNNING',
-                    message: 'Proceso iniciado',
+                    message: 'Lanzado por el planificador',
                     createdAt: '2026-04-16T00:01:00Z',
                   },
                 ],
@@ -166,17 +168,53 @@ describe('OverviewStore', () => {
       {
         primary: 'Carga diaria',
         secondary: '#11',
-        status: 'RUNNING',
+        status: { kind: 'executionStatus', value: 'RUNNING' },
         timestamp: '2026-04-16T00:00:00Z',
+      },
+    ]);
+    expect(store.failedHighlightsRows()).toEqual([
+      {
+        primary: 'Carga nocturna',
+        secondary: '#31',
+        status: { kind: 'executionStatus', value: 'FAILED' },
+        timestamp: '2026-04-15T23:10:00Z',
       },
     ]);
     expect(store.recentAuditRows()).toEqual([
       {
-        primary: 'PROCESS_EXECUTION_STARTED',
-        secondary: 'Proceso iniciado',
-        status: 'RUNNING',
+        // El tipo de evento es texto de la tarjeta, no distintivo: la fila lo entrega traducido.
+        primary: 'Proceso iniciado',
+        secondary: 'Lanzado por el planificador',
+        status: { kind: 'executionStatus', value: 'RUNNING' },
         timestamp: '2026-04-16T00:01:00Z',
       },
     ]);
+  });
+
+  /**
+   * Esta version del test afirmaba `status: 'RUNNING'`, es decir, certificaba el defecto: mientras
+   * el campo fue una cadena, la plantilla podia interpolarlo y lo hacia. Que sea un objeto es la
+   * garantia estructural de que no queda nada legible que pintar sin pasar por el resolutor.
+   */
+  it('never hands the template a raw status string', async () => {
+    await store.load();
+
+    const estados = [
+      ...store.recentExecutionsRows(),
+      ...store.failedHighlightsRows(),
+      ...store.recentAuditRows(),
+    ].map((row) => row.status);
+
+    expect(estados.length).toBeGreaterThan(0);
+    for (const estado of estados) {
+      expect(typeof estado).not.toBe('string');
+      expect(estado?.kind).toBe('executionStatus');
+    }
+  });
+
+  it('resolves audit event types through the shared vocabulary, not the raw enum', async () => {
+    await store.load();
+
+    expect(store.recentAuditRows()[0].primary).not.toContain('PROCESS_STARTED');
   });
 });

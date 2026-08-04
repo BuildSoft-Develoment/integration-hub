@@ -2,13 +2,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
-
-interface TableRow {
-  primary: string;
-  secondary?: string | null;
-  status?: string | null;
-  timestamp?: string | null;
-}
+import { resolveVocabulary, vocabularyTone, VocabularyTone } from '@integration-hub/core/i18n';
+import { OverviewTableRow, OverviewVocabularyValue } from '../../models/overview-row.model';
 
 @Component({
   selector: 'ih-overview-table-card',
@@ -23,25 +18,25 @@ export class OverviewTableCardComponent {
 
   readonly titleKey = input.required<string>();
   readonly emptyKey = input.required<string>();
-  readonly rows = input.required<readonly TableRow[]>();
+  // Antes habia una interfaz `TableRow` local, calcada del modelo pero con los campos opcionales.
+  // Esa copia es lo que dejo pasar el estado como cadena suelta; ahora la tarjeta acepta la unica
+  // forma que el store sabe construir.
+  readonly rows = input.required<readonly OverviewTableRow[]>();
 
   formatDate(value: string | null): string {
     return value ? this.dateTime.formatIso(value) : '-';
   }
 
-  /** Tono semántico del estado para colorear el badge (misma convención que la lista de ejecuciones). */
-  statusTone(status: string | null | undefined): 'success' | 'warning' | 'info' | 'danger' | 'neutral' {
-    switch ((status ?? '').toUpperCase()) {
-      case 'COMPLETED':
-        return 'success';
-      case 'FAILED':
-        return 'danger';
-      case 'COMPLETED_WITH_ERRORS':
-        return 'warning';
-      case 'RUNNING':
-        return 'info';
-      default:
-        return 'neutral';
-    }
+  statusLabel(status: OverviewVocabularyValue): string {
+    return resolveVocabulary(this.i18n, status.kind, status.value);
+  }
+
+  /**
+   * El tono ya no se decide aqui. Habia un `switch` propio, copiado entre pantallas, y ninguna de
+   * las copias contemplaba `NEEDS_RECONCILIATION`: por eso salia gris — indistinguible de
+   * `PENDING` — en todas a la vez.
+   */
+  statusTone(status: OverviewVocabularyValue): VocabularyTone {
+    return vocabularyTone(status.kind, status.value);
   }
 }

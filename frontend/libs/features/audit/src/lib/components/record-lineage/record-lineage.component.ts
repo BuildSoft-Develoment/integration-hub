@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import {
   AuditWorkspaceNavComponent,
@@ -53,6 +54,18 @@ export class RecordLineageComponent {
 
   protected readonly statusKind = timelineStatusKind;
   protected readonly statusIcon = timelineStatusIcon;
+
+  /**
+   * El recorrido tiene dos columnas y no son la misma cosa: `stage` dice QUE le paso al registro y
+   * `status` en QUE quedo. Se traducen por separado porque sus vocabularios no se solapan.
+   */
+  stageLabel(stage: string | null | undefined): string {
+    return resolveVocabulary(this.i18n, 'recordStage', stage);
+  }
+
+  recordStatusLabel(status: string | null | undefined): string {
+    return resolveVocabulary(this.i18n, 'recordStatus', status);
+  }
 
   recordId = '';
   traceId = '';

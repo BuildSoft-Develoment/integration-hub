@@ -11,6 +11,7 @@
           [statusFilter]="vm.statusFilter"
           [eventTypeOptions]="vm.eventTypeOptions"
           [loading]="vm.loading"
+          [exporting]="exporting()"
           (searchChange)="updateSearch($event)"
           (eventTypeFilterChange)="updateEventTypeFilter($event)"
           (statusFilterChange)="updateStatusFilter($event)"

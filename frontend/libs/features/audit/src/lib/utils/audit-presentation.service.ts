@@ -1,23 +1,24 @@
 import { Injectable, inject } from '@angular/core';
-import { DateTimeService, I18nService } from '@integration-hub/core/services';
+import { DateTimeService } from '@integration-hub/core/services';
+import { I18nService, resolveVocabulary } from '@integration-hub/core/i18n';
 
-import { auditEventLabel } from './audit-event-label';
 import { AuditRecord } from '../models/audit.models';
-import { taskTypeLabel } from './task-type-label';
 
 @Injectable({ providedIn: 'root' })
 export class AuditPresentationService {
   private readonly i18n = inject(I18nService);
   private readonly dateTime = inject(DateTimeService);
 
-  statusLabel(status: string): string {
-    const auditStatus = this.i18n.t(`audit.status.${status}`);
-    if (auditStatus !== `audit.status.${status}`) {
-      return auditStatus;
-    }
-
-    const executionStatus = this.i18n.t(`executionStatus.${status}`);
-    return executionStatus !== `executionStatus.${status}` ? executionStatus : status;
+  /**
+   * Un estado de ejecucion se lee IGUAL aqui que en #/executions y #/overview.
+   *
+   * Antes esto consultaba primero `audit.status.*` y solo despues `executionStatus.*`: dos espacios
+   * de claves para el mismo hecho, con textos distintos ("Completado" contra "Completada"), y si
+   * ninguno acertaba devolvia el enum crudo. Un operador no puede correlacionar una ejecucion entre
+   * dos pantallas si cada una la nombra a su manera; el espacio de auditoria sobraba.
+   */
+  statusLabel(status: string | null): string {
+    return resolveVocabulary(this.i18n, 'executionStatus', status);
   }
 
   formatDate(value: string | null): string {
@@ -25,11 +26,11 @@ export class AuditPresentationService {
   }
 
   eventLabel(eventType: string | null): string {
-    return auditEventLabel(this.i18n, eventType);
+    return resolveVocabulary(this.i18n, 'auditEvent', eventType);
   }
 
   taskTypeDescription(taskType: string | null): string {
-    return taskTypeLabel(this.i18n, taskType);
+    return resolveVocabulary(this.i18n, 'taskType', taskType);
   }
 
   taskLabel(event: Pick<AuditRecord, 'taskType' | 'taskDefinitionId'>): string {

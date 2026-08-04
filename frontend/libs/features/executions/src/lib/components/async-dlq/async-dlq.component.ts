@@ -7,6 +7,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { resolveVocabulary } from '@integration-hub/core/i18n';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { ActionDispatcherService, RelativeTimePipe } from '@integration-hub/shared/ui';
 
@@ -88,6 +89,19 @@ export class AsyncDlqComponent implements OnInit {
         return '';
     }
   });
+
+  taskTypeLabel(taskType: string | null): string {
+    return resolveVocabulary(this.i18n, 'taskType', taskType);
+  }
+
+  /**
+   * Estado de la COLA asincrona (task_inbox: DEAD/POISON), no de la ejecucion. La tabla mezcla ambos
+   * mundos en la misma fila (processExecutionId al lado) y confundir las familias haria buscar
+   * DEAD en el vocabulario de ejecuciones, donde no existe.
+   */
+  inboxStatusLabel(status: string): string {
+    return resolveVocabulary(this.i18n, 'inboxStatus', status);
+  }
 
   ngOnInit(): void {
     this.breadcrumb.setItems([
