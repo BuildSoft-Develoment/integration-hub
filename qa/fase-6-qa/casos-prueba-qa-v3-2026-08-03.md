@@ -58,6 +58,53 @@ Hicieron falta tres intentos, y los dos fallos fueron operativos del ejecutor, n
 | 6 | COMPLETED | Referencias `QB$\{messageIndex\}`, terreno limpio. |
 
 
+## Automatizado-IT: lo que se ejecuto y lo que eso NO demuestra
+
+### Suites ejecutadas
+
+**vertical-swift-mt101** — `BUILD SUCCESS`
+
+| Fase | Tests | Resultado |
+|---|---|---|
+| Unitarios (surefire) | 510 | 0 fallos |
+| Integracion (failsafe) | 7 | 0 fallos |
+
+Los 7 de integracion salen de `Mt101OutboundEndToEndIT` (2) y `Mt101SplitRepairIT` (5),
+con `PostgreSQLContainer` y `atmoz/sftp:alpine` como infraestructura.
+
+**platform-app** — `BUILD SUCCESS` (install sin tests + solo failsafe)
+
+| | |
+|---|---|
+| ITs ejecutados | 15 |
+| Tests | 76 |
+| Fallos | 0 |
+
+Suites: Mt101AllTasksProcessE2EIT, Mt101ChildQuarantinePropagationIT, Mt101FragmentConflictLookupIT,
+Mt101OpenPayConflictsConsoleIT, Mt101PayConflictAcknowledgeAtomicityIT, Mt101PayConflictMakerCheckerIT,
+Mt101PayDispatchIntentLookupIT, Mt101PayDispatchIntentStoreIT, Mt101PayResolutionValidatorIT,
+Mt101PayStatusConnectionCoverageValidatorIT, Mt101PhysicalLineLookupIT, Mt101RequireNormalPayResolverIT,
+Mt101StatusRouteCoverageValidatorIT, PaymentValidationRuleResourceIT, PaymentsOperatorRoleIT.
+`Mt101MillionFileProcessE2EIT` excluido a peticion del usuario.
+
+### Tres cosas que hay que decir, y ninguna es un resultado de test
+
+**1. No existe mapeo caso -> test.** Se buscaron los 32 IDs (`PAY-03`, `CORR-03`, `STAT-08`,
+`MC-17`, `BANK-03`, `NF-02`, ...) en todo el codigo de test del repositorio: **cero
+coincidencias**. La columna "Pasos" del catalogo tampoco nombra clases — dice "1) Ejecutar
+pago". Por tanto, aunque las suites esten verdes, **ningun verde puede atribuirse a un caso
+concreto** sin decidirlo por parecido tematico, que es juicio y no evidencia. Los 32 quedan
+`No ejecutado` en v3, y el agujero de trazabilidad queda anotado como deuda del catalogo.
+
+**2. Los casos de escala se apoyan en un test que la build no corre.** `Mt101MassivePipelinePerfIT`
+lleva `@Tag("perf")`, excluido por defecto: hace falta `-Dgroups=perf`. Es decir, NF-01 (1M) y
+NF-02 (100k) figuran como "Automatizado-IT" apoyandose en un test que una corrida normal NO
+ejecuta. Nadie lo estaba viendo.
+
+**3. Hallazgo colateral, ajeno a estos 32 casos.** `DatabaseFunctionTaskProviderOracleCompatibility`
+(platform-app) **fallo** tras 518 s durante una corrida amplia. No pertenece al money-path ni a
+los casos de este bloque, pero es un test rojo que merece revision propia.
+
 ## Casos
 
 | # | Fase | ID | Modulo | Ejecutor | Escenario | v1 | v2 | **v3** | Evidencia / motivo v3 |
@@ -172,47 +219,47 @@ Hicieron falta tres intentos, y los dos fallos fueron operativos del ejecutor, n
 | 108 | F4 | `MP-13` | MP | Tecnico/Dev | Enrutado al canal | Blocked | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 109 | F4 | `MP-14` | MP | Tecnico/Dev | Referencia :20: por transaccion | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 110 | F4 | `MP-15` | MP | Tecnico/Dev | Division en fragmentos | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
-| 111 | F4 | `MP-16` | MP | Automatizado-IT | Reprocesar una fila exacta en un lote grande | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 111 | F4 | `MP-16` | MP | Automatizado-IT | Reprocesar una fila exacta en un lote grande | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 112 | F4 | `MP-17` | MP | Tecnico/Dev | Semantica de lotes (batchSize) | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 113 | F4 | `PAY-01` | PAY | Tecnico/Dev | Pago normal exitoso | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 114 | F4 | `PAY-02` | PAY | Automatizado-IT | Solo se reclama lo archivado | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 115 | F4 | `PAY-03` | PAY | Automatizado-IT | Aceptado -> SENT | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 114 | F4 | `PAY-02` | PAY | Automatizado-IT | Solo se reclama lo archivado | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 115 | F4 | `PAY-03` | PAY | Automatizado-IT | Aceptado -> SENT | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 116 | F4 | `PAY-04` | PAY | Tecnico/Dev | Rechazo real del banco -> FAILED | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 117 | F4 | `PAY-05` | PAY | Automatizado-IT | Fallo ANTES de enviar -> re-solicitable | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 118 | F4 | `PAY-06` | PAY | Automatizado-IT | Timeout ambiguo -> queda para conciliar | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 117 | F4 | `PAY-05` | PAY | Automatizado-IT | Fallo ANTES de enviar -> re-solicitable | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 118 | F4 | `PAY-06` | PAY | Automatizado-IT | Timeout ambiguo -> queda para conciliar | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 119 | F4 | `PAY-07` | PAY | Tecnico/Dev | Re-solicitar un pago no enviado | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 120 | F4 | `PAY-08` | PAY | Automatizado-IT | Aceptacion tardia de un 'incierto' | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 120 | F4 | `PAY-08` | PAY | Automatizado-IT | Aceptacion tardia de un 'incierto' | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 121 | F4 | `PAY-09` | PAY | Tecnico/Dev | Idempotencia de reenvio | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 122 | F4 | `PAY-10` | PAY | Automatizado-IT | Reinicio a mitad de pago | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 123 | F4 | `PAY-11` | PAY | Automatizado-IT | Contencion: 1 solo gana | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 124 | F4 | `PAY-12` | PAY | Automatizado-IT | Fencing de nodo caido | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 125 | F4 | `PAY-13` | PAY | Automatizado-IT | Heartbeat protege el lease | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 126 | F4 | `PAY-14` | PAY | Automatizado-IT | Recovery de pago con lease vencido | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 122 | F4 | `PAY-10` | PAY | Automatizado-IT | Reinicio a mitad de pago | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 123 | F4 | `PAY-11` | PAY | Automatizado-IT | Contencion: 1 solo gana | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 124 | F4 | `PAY-12` | PAY | Automatizado-IT | Fencing de nodo caido | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 125 | F4 | `PAY-13` | PAY | Automatizado-IT | Heartbeat protege el lease | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 126 | F4 | `PAY-14` | PAY | Automatizado-IT | Recovery de pago con lease vencido | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 127 | F4 | `PAY-15` | PAY | Tecnico/Dev | Pago por lista (in-memory) | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 128 | F4 | `PAY-16` | PAY | Automatizado-IT | Pago por lista + fallo re-solicitable | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 129 | F4 | `PAY-17` | PAY | Automatizado-IT | Pago por lista + bloqueo de reenvio | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 128 | F4 | `PAY-16` | PAY | Automatizado-IT | Pago por lista + fallo re-solicitable | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 129 | F4 | `PAY-17` | PAY | Automatizado-IT | Pago por lista + bloqueo de reenvio | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 130 | F4 | `PAY-18` | PAY | Tecnico/Dev | Gate: sin lista en memoria en prod | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 131 | F4 | `PAY-19` | PAY | Automatizado-IT | Auditar lo saltado en un revert | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 132 | F4 | `PAY-20` | PAY | Automatizado-IT | 'Incierto' pegajoso | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 131 | F4 | `PAY-19` | PAY | Automatizado-IT | Auditar lo saltado en un revert | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 132 | F4 | `PAY-20` | PAY | Automatizado-IT | 'Incierto' pegajoso | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 133 | F4 | `PAY-21` | PAY | Tecnico/Dev | Mapeo de respuesta del gateway (PAY) | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 134 | F4 | `CORR-01` | CORR | Tecnico/Dev | Rechazo del banco -> run hijo | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 135 | F4 | `CORR-02` | CORR | Manual-QA | Corregir un fragmento en conflicto | Blocked | Blocked | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
-| 136 | F4 | `CORR-03` | CORR | Automatizado-IT | Rechazo parcial -> PARTIALLY_SENT | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 137 | F4 | `CORR-04` | CORR | Automatizado-IT | Re-solicitar los no enviados | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 138 | F4 | `CORR-05` | CORR | Automatizado-IT | Mixto sin envios | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 139 | F4 | `CORR-06` | CORR | Automatizado-IT | El run hijo solo reenvia rechazados | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 140 | F4 | `CORR-07` | CORR | Automatizado-IT | Marca de despacho correctivo | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 141 | F4 | `CORR-08` | CORR | Automatizado-IT | Cuarentena por fragmento | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 142 | F4 | `CORR-09` | CORR | Automatizado-IT | Correctivo sin doble pago (con incierto) | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 143 | F4 | `CORR-10` | CORR | Automatizado-IT | Reemplazo de una solicitud hija previa | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 136 | F4 | `CORR-03` | CORR | Automatizado-IT | Rechazo parcial -> PARTIALLY_SENT | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 137 | F4 | `CORR-04` | CORR | Automatizado-IT | Re-solicitar los no enviados | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 138 | F4 | `CORR-05` | CORR | Automatizado-IT | Mixto sin envios | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 139 | F4 | `CORR-06` | CORR | Automatizado-IT | El run hijo solo reenvia rechazados | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 140 | F4 | `CORR-07` | CORR | Automatizado-IT | Marca de despacho correctivo | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 141 | F4 | `CORR-08` | CORR | Automatizado-IT | Cuarentena por fragmento | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 142 | F4 | `CORR-09` | CORR | Automatizado-IT | Correctivo sin doble pago (con incierto) | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 143 | F4 | `CORR-10` | CORR | Automatizado-IT | Reemplazo de una solicitud hija previa | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 144 | F4 | `STAT-01` | STAT | Tecnico/Dev | Confirmacion positiva del banco | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 145 | F4 | `STAT-02` | STAT | Tecnico/Dev | Rechazo del banco (NACK) | Blocked | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 146 | F4 | `STAT-03` | STAT | Tecnico/Dev | Confirmacion tardia | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 147 | F4 | `STAT-04` | STAT | Manual-QA | Datos de la confirmacion | Blocked | - | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
-| 148 | F4 | `STAT-05` | STAT | Automatizado-IT | Confirmacion de otra corrida con el mismo :20: | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 148 | F4 | `STAT-05` | STAT | Automatizado-IT | Confirmacion de otra corrida con el mismo :20: | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 149 | F4 | `STAT-06` | STAT | Tecnico/Dev | Cuadre (reconcile) | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 150 | F4 | `STAT-07` | STAT | Tecnico/Dev | STATUS re-lee la respuesta del banco | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 151 | F4 | `STAT-08` | STAT | Automatizado-IT | Rechazo sobre un enviado -> conflicto | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 151 | F4 | `STAT-08` | STAT | Automatizado-IT | Rechazo sobre un enviado -> conflicto | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 152 | F4 | `STAT-09` | STAT | Tecnico/Dev | Mapeo de status del banco (STATUS) | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 153 | F5 | `MC-01` | MC | Manual-QA | El conflicto aparece en la consola | Pass | - | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 154 | F5 | `MC-02` | MC | Manual-QA | Reconocer single-actor (modo OFF) | Blocked | Blocked | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
@@ -230,8 +277,8 @@ Hicieron falta tres intentos, y los dos fallos fueron operativos del ejecutor, n
 | 166 | F5 | `MC-14` | MC | Manual-QA | Boton Aprobar deshabilitado si soy el maker | Blocked | - | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 167 | F5 | `MC-15` | MC | Manual-QA | Segundo pedido reemplaza al anterior | Blocked | Pass | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 168 | F5 | `MC-16` | MC | Manual-QA | Historial del reemplazo se conserva | Blocked | Pass | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
-| 169 | F5 | `MC-17` | MC | Automatizado-IT | Aprobar cuando ya se resolvio (fail-loud) | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 170 | F5 | `MC-18` | MC | Automatizado-IT | Dos checkers aprueban a la vez | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 169 | F5 | `MC-17` | MC | Automatizado-IT | Aprobar cuando ya se resolvio (fail-loud) | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 170 | F5 | `MC-18` | MC | Automatizado-IT | Dos checkers aprueban a la vez | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 171 | F5 | `MC-19` | MC | Manual-QA | Estado 'cargando modo' | Pass | Blocked | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 172 | F5 | `MC-20` | MC | Tecnico/Dev | Settings en error -> se bloquea (fail-closed) | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 173 | F5 | `MC-21` | MC | Manual-QA | Maker-checker sobre un correctivo | Blocked | Blocked | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
@@ -264,9 +311,9 @@ Hicieron falta tres intentos, y los dos fallos fueron operativos del ejecutor, n
 | 200 | F6 | `AUD-04` | AUD | Tecnico/Dev | Fallo de auditoria no bloquea negocio | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 201 | F6 | `AUD-05` | AUD | Manual-QA | Trazabilidad de una decision | Blocked | - | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 202 | F6 | `AUD-06` | AUD | Tecnico/Dev | Store frio segun config | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
-| 203 | F7 | `NF-01` | NF | Automatizado-IT | Escala 1.000.000 de registros | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 204 | F7 | `NF-02` | NF | Automatizado-IT | Harness a 100k | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
-| 205 | F7 | `NF-03` | NF | Automatizado-IT | Fencing de dos nodos | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 203 | F7 | `NF-01` | NF | Automatizado-IT | Escala 1.000.000 de registros | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 204 | F7 | `NF-02` | NF | Automatizado-IT | Harness a 100k | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
+| 205 | F7 | `NF-03` | NF | Automatizado-IT | Fencing de dos nodos | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 206 | F7 | `NF-04` | NF | Tecnico/Dev | mTLS con el banco (UAT) | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 207 | F7 | `NF-05` | NF | Tecnico/Dev | Sin secretos/montos en URL/logs | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 208 | F7 | `NF-06` | NF | Tecnico/Dev | Controles ON en prod | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
@@ -278,7 +325,7 @@ Hicieron falta tres intentos, y los dos fallos fueron operativos del ejecutor, n
 | 214 | F7 | `NF-12` | NF | Tecnico/Dev | Arranque nativo | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 215 | F8 | `BANK-01` | BANK | Tecnico/Dev | CERO DOBLE PAGO verificado EN EL BANCO | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 216 | F8 | `BANK-02` | BANK | Manual-QA | Ningun pago queda colgado (orphan) | Blocked | Pass | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
-| 217 | F8 | `BANK-03` | BANK | Automatizado-IT | Toda contradiccion -> PAY_CONFLICT (nunca silenciosa) | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 217 | F8 | `BANK-03` | BANK | Automatizado-IT | Toda contradiccion -> PAY_CONFLICT (nunca silenciosa) | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 218 | F8 | `BANK-04` | BANK | Manual-QA | Segregacion de funciones inviolable | Blocked | - | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 219 | F8 | `BANK-05` | BANK | Manual-QA | Auditoria inmutable / no-repudio | Blocked | - | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 220 | F8 | `BANK-06` | BANK | Manual-QA | Trazabilidad E2E de un pago | Blocked | - | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
@@ -292,7 +339,7 @@ Hicieron falta tres intentos, y los dos fallos fueron operativos del ejecutor, n
 | 228 | F8 | `BANK-14` | BANK | Tecnico/Dev | mTLS + host key reales con el banco (prod) | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 229 | F8 | `BANK-15` | BANK | Tecnico/Dev | Secretos fuera de claro | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
 | 230 | F8 | `BANK-16` | BANK | Tecnico/Dev | Controles bancarios ACTIVOS en prod | Pass | Pass | **No ejecutado** | Requiere UI o API autenticada |
-| 231 | F8 | `BANK-17` | BANK | Automatizado-IT | Cero doble-ejecucion bajo caida de nodo | Pass | Pass | **No ejecutado** | Requiere `mvn verify`; las imagenes de testcontainers se borraron hoy (~14 GB de re-descarga) |
+| 231 | F8 | `BANK-17` | BANK | Automatizado-IT | Cero doble-ejecucion bajo caida de nodo | Pass | Pass | **No ejecutado** | Suites ejecutadas y en verde (vertical 510+7, platform-app 15 ITs/76 tests), pero el caso NO se puede dar por cubierto: no existe vinculo caso->test en el repositorio |
 | 232 | F8 | `BANK-18` | BANK | Tecnico/Dev | Resolucion segura de UNCERTAIN | Blocked | Blocked | **No ejecutado** | Requiere UI o API autenticada |
 | 233 | F8 | `BANK-19` | BANK | Manual-QA | Retencion de evidencia | Blocked | Pass | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
 | 234 | F8 | `BANK-20` | BANK | Manual-QA | Minimo privilegio (RBAC) | Blocked | Pass | **Pendiente-QA** | Requiere navegador con sesion iniciada; el agente no introduce credenciales |
