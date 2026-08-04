@@ -13,10 +13,11 @@
  * ya se ejecutaba. No se copia la lista aqui: una segunda copia se desincroniza el primer dia y
  * volveriamos a tener un registro que no describe lo que corre.
  *
- * COMPORTAMIENTO. Se conserva el fail-fast de la cadena original (`&&`): al primer rojo se para. La
- * diferencia es que ahora lo que corrio queda escrito, incluido el que fallo. Con `--all` se
- * ejecutan todos aunque alguno falle, util para ver el panorama completo sin ir arreglando de uno
- * en uno; el exit code sigue siendo 1 si alguno fallo.
+ * COMPORTAMIENTO. Se ejecutan TODOS los gates aunque alguno falle; el exit code es 1 si hubo alguno
+ * rojo. Se abandona el fail-fast del `&&` original a proposito: paraba en el puesto 32 por la deuda
+ * conocida de 008, y los 15 gates siguientes no se ejecutaban NUNCA. Un gate que no corre no vigila
+ * nada, y ademas su ausencia en el ledger era indistinguible de "no hay nada que reportar".
+ * `--fail-fast` recupera el comportamiento anterior para quien lo quiera.
  *
  * El exit code lo deciden los gates. Si la base de memoria no esta, se avisa y se sigue: el
  * veredicto de un gate no puede depender de que exista un sqlite local.
@@ -31,7 +32,11 @@ const VERSION = "v12.152";
 const CADENA = "check:project:chain";
 
 const args = process.argv.slice(2);
-const seguirTrasFallo = args.includes("--all");
+// Por defecto se ejecutan TODOS. El `&&` de la cadena original paraba al primer rojo, y eso dejaba
+// 15 de 47 gates sin correr nunca: con la deuda conocida de 008 clavada en el puesto 32, los que
+// venian detras llevaban meses sin que nadie supiera si pasaban. Un gate que no corre no vigila
+// nada — que es justo el fallo que este proyecto persigue. `--fail-fast` recupera lo anterior.
+const seguirTrasFallo = !args.includes("--fail-fast");
 const root = resolve(args.includes("--root") ? args[args.indexOf("--root") + 1] : ".");
 
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
@@ -49,7 +54,11 @@ if (gates.length === 0) {
 }
 
 console.log(`run-gates (${VERSION}) · ${gates.length} gates · arbol ${estadoDelArbol(root)}`);
-console.log(seguirTrasFallo ? "Modo --all: se ejecutan todos aunque fallen.\n" : "");
+console.log(
+  seguirTrasFallo
+    ? "Se ejecutan TODOS aunque alguno falle (--fail-fast para parar en el primer rojo).\n"
+    : "Modo --fail-fast: se para en el primer rojo; los siguientes no se ejecutan ni se registran.\n"
+);
 
 /**
  * Extrae la linea que de verdad explica el resultado.
@@ -94,8 +103,8 @@ for (const gate of gates) {
   if (await registrarEjecucion({ gate, alcance: CADENA, ok, exitCode, ms, detalle, root })) registrados += 1;
 
   if (!ok && !seguirTrasFallo) {
-    console.error(`\nSe para en '${gate}' (exit ${exitCode}), como hacia la cadena con '&&'.`);
-    console.error(`Para ver todos los gates sin parar: npm run check:project -- --all`);
+    console.error(`\nSe para en '${gate}' (exit ${exitCode}), (--fail-fast).`);
+    console.error(`Modo --fail-fast activo; sin el se ejecutan todos.`);
     break;
   }
 }

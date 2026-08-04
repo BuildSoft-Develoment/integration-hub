@@ -80,7 +80,12 @@ if (!existsSync(join(root, "package.json"))) {
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const scripts = pkg.scripts || {};
-const checkProject = scripts["check:project"] || "";
+// La lista de gates vive en `check:project:chain` desde que `check:project` pasa por run-gates.mjs
+// (que la LEE de ahi, asi que sigue habiendo una sola fuente de verdad). Este validador miraba
+// `check:project` y, al encontrar solo la invocacion del ejecutor, concluia que CERO validadores
+// estaban cableados: 45 falsos positivos de golpe. Se lee la cadena, con respaldo al nombre antiguo
+// para no romper repos que aun no tengan el ejecutor.
+const checkProject = scripts["check:project:chain"] || scripts["check:project"] || "";
 const checkTemplate = scripts["check:template"] || "";
 const checkAll = scripts["check:all"] || "";
 
