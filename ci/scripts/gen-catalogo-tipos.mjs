@@ -19,10 +19,12 @@
  *   node ci/scripts/gen-catalogo-tipos.mjs --check    # falla si esta desactualizada (para el CI)
  */
 
-import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { join, resolve, basename } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
-import { JAVA_MODULES } from './_lib/source-roots.mjs';
+// El recorrido de modulos y la lectura de `type()` viven en _lib porque los comparte
+// `check-likec4-sources.mjs`. Estaban aqui, y la segunda copia nacio mas ciega que esta.
+import { collectProviders } from './_lib/java-provider-types.mjs';
 
 const argv = process.argv.slice(2);
 const root = resolve(argv.includes('--root') ? argv[argv.indexOf('--root') + 1] : '.');
@@ -31,56 +33,7 @@ const check = argv.includes('--check');
 const TARGET = join(root, 'docs', 'transversal', '90.17-catalogo-de-tipos.md');
 const ZONE = 'catalogo-tipos';
 
-/** Recorre un directorio devolviendo todos los .java. */
-function javaFiles(dir, out = []) {
-  if (!existsSync(dir)) return out;
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, e.name);
-    if (e.isDirectory()) javaFiles(full, out);
-    else if (e.isFile() && e.name.endsWith('.java')) out.push(full);
-  }
-  return out;
-}
-
-/**
- * Extrae el identificador que un provider declara.
- *
- * Se busca el valor devuelto por el metodo declarado (type() / sourceType() / readerType()) y, si el
- * provider lo expone como constante, tambien esa. Deliberadamente NO se intenta interpretar codigo
- * dinamico: un provider que calcule su tipo en runtime se reporta como "dinamico" en vez de inventar
- * un valor. Es preferible un hueco visible a un catalogo que miente.
- */
-function declaredTypes(file, methodNames) {
-  const text = readFileSync(file, 'utf8');
-  const found = new Set();
-  for (const m of methodNames) {
-    const re = new RegExp('public\\s+String\\s+' + m + '\\s*\\([^)]*\\)\\s*\\{[^}]*?return\\s+"([^"]+)"', 's');
-    const hit = text.match(re);
-    if (hit) found.add(hit[1]);
-    // Variante: `return CONSTANTE;` con la constante declarada en el propio fichero.
-    const viaConst = text.match(new RegExp('public\\s+String\\s+' + m + '\\s*\\([^)]*\\)\\s*\\{[^}]*?return\\s+([A-Z0-9_]+)\\s*;', 's'));
-    if (viaConst) {
-      const decl = text.match(new RegExp('String\\s+' + viaConst[1] + '\\s*=\\s*"([^"]+)"'));
-      if (decl) found.add(decl[1]);
-      else found.add('(dinamico)');
-    }
-  }
-  return [...found];
-}
-
-function collect(suffix, methodNames) {
-  const rows = [];
-  for (const mod of JAVA_MODULES) {
-    for (const f of javaFiles(join(root, mod, 'src', 'main', 'java'))) {
-      const name = basename(f, '.java');
-      if (!name.endsWith(suffix) || name.startsWith('Abstract')) continue;
-      const types = declaredTypes(f, methodNames);
-      if (!types.length) continue;
-      for (const t of types) rows.push({ tipo: t, clase: name, modulo: mod });
-    }
-  }
-  return rows.sort((a, b) => a.tipo.localeCompare(b.tipo));
-}
+const collect = (suffix, methodNames) => collectProviders(root, suffix, methodNames).tipos;
 
 function table(rows, titulo) {
   if (!rows.length) return `### ${titulo}\n\n_(ninguno detectado)_\n`;

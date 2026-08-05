@@ -10,112 +10,163 @@
  * saber si describe la arquitectura real: "para eso esta la revision humana". Bien — pero eso dejo
  * pasar una deriva que un script si puede ver.
  *
- * El modelo dibujaba cuatro fuentes (disco, FTP, SFTP, REST) y el arranque registra OCHO: faltaban
- * los cuatro almacenes de objetos (S3, GCS, Azure Blob, OCI). El diagrama, que la fase 3 llama
- * "fuente canonica", decia que el producto no lee de la nube. Lo encontro una persona mirando, no
- * un gate; y lo que encuentra una persona mirando vuelve en cuanto deje de mirar.
+ * El modelo dibujaba cuatro fuentes (disco, FTP, SFTP, REST) y el codigo registra OCHO: faltaban los
+ * cuatro almacenes de objetos (S3, GCS, Azure Blob, OCI). El diagrama, que la fase 3 llama "fuente
+ * canonica", decia que el producto no lee de la nube. Lo encontro una persona mirando, no un gate; y
+ * lo que encuentra una persona mirando vuelve en cuanto deje de mirar.
+ *
+ * DE DONDE SALE EL LADO DEL CODIGO
+ * De `_lib/java-provider-types.mjs`, el MISMO extractor que genera el catalogo canonico
+ * (`docs/transversal/90.17-catalogo-de-tipos.md`). La primera version de este gate reimplemento esa
+ * lectura escaneando un unico directorio plano, y daba verde con un provider en un subpaquete o en un
+ * vertical: el mismo verde falso que venia a cerrar. Una sola implementacion, o dos puntos ciegos.
  *
  * QUE COMPRUEBA
- * Que el conjunto de literales `type()` de los `*SourceProvider` coincida EXACTAMENTE con el
- * conjunto de `container` de `fileSources` en el modelo. Falla en los dos sentidos:
+ *   1. Que el conjunto de tipos del codigo coincida EXACTAMENTE con los `container` de `fileSources`.
+ *      Falla en los dos sentidos: fuente sin dibujar (el diagrama promete de menos) y contenedor sin
+ *      provider detras (promete de mas, que es peor: alguien planifica contando con algo que no hay).
+ *   2. Que todo `*SourceProvider` cuyo tipo NO se pueda leer este en la lista de excepciones de abajo.
+ *      FAIL-CLOSED a proposito: si el extractor no entiende un `type()`, ese provider desaparece del
+ *      contrato en silencio y el gate quedaria verde con una fuente sin dibujar. Un hueco tiene que
+ *      doler, no informar.
+ *   3. Que ningun par de nombres colapse al normalizar. `Map.set` pisaria uno de los dos y el recuento
+ *      mentiria sin imprimir nada.
+ *   4. Que cada contenedor tenga una relacion que lo lea. Una fuente dibujada que nadie lee es un nodo
+ *      decorativo, y el gate anterior la daba por buena.
  *
- *   - fuente en el codigo que el modelo no dibuja  -> el diagrama promete de menos (el caso de hoy)
- *   - contenedor en el modelo sin provider detras  -> el diagrama promete de mas (fuente borrada)
- *
- * Un provider sin literal `type()` no aporta tipo y no se exige: `RemoteSourceProvider` es el
- * mecanismo de plugin fuera de proceso de ADR-013, no un tipo que el usuario elija en la UI.
- *
- * NORMALIZACION
- * Los dos lados nombran lo mismo con convenciones distintas: el codigo usa la constante que viaja
- * en la BD (`OCI_OBJECT_STORAGE`) y el modelo usa un identificador (`ociObjectStorage`). Se
- * comparan en minusculas, sin guiones bajos y sin el sufijo `source` — que es lo que distingue
- * `restSource` (el nodo) de `REST` (el tipo), no dos cosas diferentes.
+ * ALCANCE DECLARADO (lo que NO hace, para que nadie lo suponga)
+ *   - No valida el TITULO de los contenedores. El estado de cada fuente (homologada en nativo o no)
+ *     vive en `ops/fase-7-deploy/dist/NATIVE-STATUS.md` y NO se copia al diagrama: una etiqueta de
+ *     estado escrita a mano caduca -ya paso: se copio "nativo pendiente" de una fila de trazabilidad
+ *     de 2026-06-05 cuando el smoke nativo de S3 y Azure Blob habia pasado el 2026-07-13-.
+ *   - `fileSources` contiene SOLO contenedores hoja, uno por tipo de fuente. Si algun dia se agrupan,
+ *     este gate hay que cambiarlo: cuenta todo `container` del bloque.
  *
  * Uso: node ci/scripts/check-likec4-sources.mjs [--root <path>]
  */
 
 process.removeAllListeners("warning");
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { collectProviders, DINAMICO } from "./_lib/java-provider-types.mjs";
 
 const args = process.argv.slice(2);
 const root = resolve(args.includes("--root") ? args[args.indexOf("--root") + 1] : ".");
-
-const DIR_PROVIDERS = join(root, "platform-app/src/main/java/com/integrationhub/platform/provider/source");
 const MODELO = join(root, "likec4/integration-hub.likec4");
 
-if (!existsSync(DIR_PROVIDERS) || !existsSync(MODELO)) {
-  console.log("check-likec4-sources: N/A (falta el modelo likec4 o el paquete de providers).");
+/**
+ * Providers cuyo tipo NO se puede leer del codigo y que aun asi son legitimos.
+ *
+ * Uno solo, y con motivo: `RemoteSourceProvider` devuelve un CAMPO DE INSTANCIA (`return type;`), no
+ * una constante. Su tipo se lo da el plugin fuera de proceso en tiempo de ejecucion (ADR-013), asi
+ * que no hay ningun tipo fijo que dibujar. Cualquier otro que aparezca aqui es un hueco real.
+ */
+const SIN_TIPO_ESPERADO = new Map([
+  ["RemoteSourceProvider", "tipo dinamico: lo aporta el plugin remoto en runtime (ADR-013)"],
+]);
+
+if (!existsSync(MODELO)) {
+  console.log("check-likec4-sources: N/A (no existe likec4/integration-hub.likec4).");
   process.exit(0);
 }
 
-/** Misma cosa escrita en dos convenciones: `OCI_OBJECT_STORAGE` y `ociObjectStorage`. */
-const normalizar = (s) => s.toLowerCase().replace(/_/g, "").replace(/source$/, "");
-
 /**
- * Tipos que registra el codigo: lo que devuelve `type()`.
+ * Quita comentarios del modelo antes de parsearlo.
  *
- * No todos lo escriben igual, y la diferencia importa. Unos devuelven el literal (`return "S3"`) y
- * otros una constante de la clase (`return TYPE`), que se resuelve aqui: son el mismo dato con
- * distinto estilo. Pero `RemoteSourceProvider` devuelve un CAMPO DE INSTANCIA (`return type`), y eso
- * no es estilo: su tipo se lo da el plugin en tiempo de ejecucion, asi que no tiene ninguno que
- * dibujar. Por eso se resuelven las constantes y no los campos, en vez de aceptar cualquier
- * identificador.
+ * Sin esto un `container` comentado seguia contando -que es justo como se esconde un nodo del
+ * diagrama sin borrarlo- y una llave dentro de un comentario descuadraba el bloque. Las lineas 109-119
+ * del modelo son once lineas seguidas de comentario, asi que no es un caso hipotetico.
+ * Los titulos van entre comillas simples: un `//` dentro de un titulo no es un comentario.
  */
-function tiposDelCodigo() {
-  const out = new Map();
-  const sinTipo = [];
-  for (const f of readdirSync(DIR_PROVIDERS).filter((f) => f.endsWith("SourceProvider.java"))) {
-    const texto = readFileSync(join(DIR_PROVIDERS, f), "utf8");
-    const m = texto.match(/String\s+type\(\)\s*\{\s*return\s*(?:"([^"]+)"|(\w+))\s*;/);
-    if (!m) { sinTipo.push(`${f} (no se pudo leer type())`); continue; }
-
-    let tipo = m[1];
-    if (tipo === undefined) {
-      const c = texto.match(new RegExp(`static\\s+final\\s+String\\s+${m[2]}\\s*=\\s*"([^"]+)"`));
-      if (!c) { sinTipo.push(`${f} (type() dinamico: return ${m[2]})`); continue; }
-      tipo = c[1];
-    }
-    out.set(normalizar(tipo), { tipo, clase: f });
-  }
-  return { out, sinTipo };
+function sinComentarios(texto) {
+  const sinBloque = texto.replace(/\/\*[\s\S]*?\*\//g, "");
+  return sinBloque
+    .split(/\r?\n/)
+    .map((l) => {
+      let comillas = 0;
+      for (let i = 0; i < l.length - 1; i++) {
+        if (l[i] === "'") comillas++;
+        else if (l[i] === "/" && l[i + 1] === "/" && comillas % 2 === 0) return l.slice(0, i);
+      }
+      return l;
+    })
+    .join("\n");
 }
 
-/** Contenedores que dibuja el modelo dentro del bloque `fileSources`. */
-function contenedoresDelModelo() {
-  const texto = readFileSync(MODELO, "utf8");
+/** Contenedores del bloque `fileSources`, y las relaciones que apuntan a ellos. */
+function modelo() {
+  const texto = sinComentarios(readFileSync(MODELO, "utf8"));
   const i = texto.indexOf("fileSources = system");
   if (i === -1) {
     console.error("check-likec4-sources: no se encuentra `fileSources = system` en el modelo.");
     process.exit(1);
   }
-  // El bloque va desde su `{` hasta la llave que lo cierra, contando anidamiento.
-  let j = texto.indexOf("{", i);
-  let nivel = 0, fin = j;
-  for (; fin < texto.length; fin++) {
+  let fin = texto.indexOf("{", i);
+  for (let nivel = 0; fin < texto.length; fin++) {
     if (texto[fin] === "{") nivel++;
     else if (texto[fin] === "}" && --nivel === 0) break;
   }
-  const bloque = texto.slice(j, fin);
+  const bloque = texto.slice(texto.indexOf("{", i), fin);
+
+  const contenedores = [...bloque.matchAll(/^\s*container\s+(\w+)/gm)].map((m) => m[1]);
+  // Las relaciones viven fuera del bloque, en la seccion de relaciones del modelo.
+  const leidos = new Set([...texto.matchAll(/->\s*fileSources\.(\w+)/g)].map((m) => m[1]));
+  return { contenedores, leidos };
+}
+
+/**
+ * Misma cosa escrita en dos convenciones: el codigo usa la constante que viaja en la BD
+ * (`OCI_OBJECT_STORAGE`) y el modelo un identificador (`ociObjectStorage`).
+ *
+ * El sufijo `source` se quita SOLO en el lado del modelo, que es donde existe el desajuste real
+ * (`restSource` el nodo vs `REST` el tipo). Quitarlo tambien del lado del codigo colapsaria tipos de
+ * BD legitimos que terminaran en SOURCE contra otros distintos, sin ganar nada.
+ */
+const claveCodigo = (s) => s.toLowerCase().replace(/_/g, "");
+const claveModelo = (s) => s.toLowerCase().replace(/_/g, "").replace(/source$/, "");
+
+/** Indexa detectando colisiones en vez de dejar que `Map.set` pise una de las dos entradas. */
+function indexar(pares, lado, colisiones) {
   const out = new Map();
-  for (const m of bloque.matchAll(/^\s*container\s+(\w+)/gm)) {
-    out.set(normalizar(m[1]), m[1]);
+  for (const { clave, valor } of pares) {
+    const previo = out.get(clave);
+    if (previo !== undefined && previo !== valor) {
+      colisiones.push(`${lado}: '${previo}' y '${valor}' colapsan en la misma clave '${clave}'`);
+      continue;
+    }
+    out.set(clave, valor);
   }
   return out;
 }
 
-const { out: codigo, sinTipo } = tiposDelCodigo();
-const modelo = contenedoresDelModelo();
+const { tipos, sinTipo } = collectProviders(root, "SourceProvider", ["sourceType", "type"]);
+const { contenedores, leidos } = modelo();
 
-const noDibujados = [...codigo.keys()].filter((k) => !modelo.has(k));
-const fantasmas = [...modelo.keys()].filter((k) => !codigo.has(k));
+const colisiones = [];
+const codigo = indexar(
+  tipos.filter((t) => t.tipo !== DINAMICO).map((t) => ({ clave: claveCodigo(t.tipo), valor: t.tipo })),
+  "codigo",
+  colisiones,
+);
+const detalle = new Map(tipos.map((t) => [claveCodigo(t.tipo), t]));
+const dibujados = indexar(
+  contenedores.map((c) => ({ clave: claveModelo(c), valor: c })),
+  "modelo",
+  colisiones,
+);
+
+const noDibujados = [...codigo.keys()].filter((k) => !dibujados.has(k));
+const fantasmas = [...dibujados.keys()].filter((k) => !codigo.has(k));
+const inesperados = sinTipo.filter((s) => !SIN_TIPO_ESPERADO.has(s.clase));
+const huerfanos = contenedores.filter((c) => !leidos.has(c));
 
 console.log("check-likec4-sources");
 console.log(`  tipos de fuente registrados por el codigo : ${codigo.size}`);
-console.log(`  contenedores dibujados en el modelo       : ${modelo.size}`);
-if (sinTipo.length) {
-  console.log(`  providers sin literal type() (no exigidos): ${sinTipo.join(", ")}`);
+console.log(`  contenedores dibujados en el modelo       : ${dibujados.size}`);
+for (const s of sinTipo) {
+  const motivo = SIN_TIPO_ESPERADO.get(s.clase);
+  if (motivo) console.log(`  exento: ${s.clase} (${s.modulo}) — ${motivo}`);
 }
 
 let fallo = false;
@@ -123,17 +174,46 @@ let fallo = false;
 if (noDibujados.length) {
   fallo = true;
   console.error(`\n  ✗ El codigo lee de fuentes que el modelo NO dibuja (${noDibujados.length}):`);
-  for (const k of noDibujados) console.error(`    ${codigo.get(k).tipo}  <-  ${codigo.get(k).clase}`);
+  for (const k of noDibujados) {
+    const d = detalle.get(k);
+    console.error(`    ${codigo.get(k)}  <-  ${d.clase} (${d.modulo})`);
+  }
   console.error("    El diagrama promete menos de lo que el producto hace.");
-  console.error("    Anade un `container` en `fileSources` de likec4/integration-hub.likec4.");
+  console.error("    En likec4/integration-hub.likec4: anade un `container` en `fileSources` Y una");
+  console.error("    relacion `integrationHub.quarkusApp -> fileSources.<id>` que lo lea.");
 }
 
 if (fantasmas.length) {
   fallo = true;
   console.error(`\n  ✗ El modelo dibuja fuentes que NINGUN provider implementa (${fantasmas.length}):`);
-  for (const k of fantasmas) console.error(`    container ${modelo.get(k)}`);
+  for (const k of fantasmas) console.error(`    container ${dibujados.get(k)}`);
   console.error("    El diagrama promete mas de lo que el producto hace, que es peor:");
   console.error("    alguien puede planificar un entorno contando con una fuente que no existe.");
+}
+
+if (inesperados.length) {
+  fallo = true;
+  console.error(`\n  ✗ Providers de los que NO se pudo leer el tipo (${inesperados.length}):`);
+  for (const s of inesperados) console.error(`    ${s.clase} (${s.modulo}) — ${s.motivo}`);
+  console.error("    Sin tipo legible, ese provider se cae del contrato y el gate quedaria verde con");
+  console.error("    una fuente sin dibujar. Escribe `return \"TIPO\";` o `return CONSTANTE;` con la");
+  console.error("    constante en el mismo fichero; si el tipo es dinamico a proposito, decláralo en");
+  console.error("    SIN_TIPO_ESPERADO de este script con su motivo.");
+}
+
+if (colisiones.length) {
+  fallo = true;
+  console.error(`\n  ✗ Nombres que colapsan al normalizar (${colisiones.length}):`);
+  for (const c of colisiones) console.error(`    ${c}`);
+  console.error("    Son cosas distintas en runtime y el gate las contaria como una sola.");
+}
+
+if (huerfanos.length) {
+  fallo = true;
+  console.error(`\n  ✗ Contenedores que nadie lee (${huerfanos.length}):`);
+  for (const c of huerfanos) console.error(`    fileSources.${c}  sin ninguna relacion `);
+  console.error("    Un nodo sin arista es decoracion: sale en el diagrama pero no dice quien lo usa.");
+  console.error("    Anade `integrationHub.quarkusApp -> fileSources.<id> '...'`.");
 }
 
 if (fallo) {
@@ -141,5 +221,5 @@ if (fallo) {
   process.exit(1);
 }
 
-console.log("\nOK. Las fuentes del modelo son exactamente las que el codigo registra.");
+console.log("\nOK. Las fuentes del modelo son exactamente las que el codigo registra, y todas se leen.");
 process.exit(0);

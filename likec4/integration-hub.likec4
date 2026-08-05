@@ -114,13 +114,18 @@ model {
     // NO es un detalle: cambia las credenciales (rol IAM propio de cada proveedor), el SDK y lo que
     // hay que aprovisionar. Quien lee este diagrama para montar un entorno necesita ver cual.
     //
-    // El estado va en el titulo, como ya se hace con `MongoDB (parcial: no implementado)`: funcionan
-    // en JVM y les falta el build nativo y su QA. Dibujarlos como terminados seria el error opuesto
-    // a haberlos omitido.
-    container s3 'AWS S3 (JVM; nativo/QA pendiente)'
-    container gcs 'Google Cloud Storage (JVM; nativo/QA pendiente)'
-    container azureBlob 'Azure Blob Storage (JVM; nativo/QA pendiente)'
-    container ociObjectStorage 'Oracle Cloud Object Storage (JVM; nativo/QA pendiente)'
+    // El estado de homologacion NO se escribe aqui. La primera version de estas cuatro lineas decia
+    // "JVM; nativo/QA pendiente", copiado de una fila de trazabilidad del 2026-06-05; el smoke del
+    // binario NATIVO habia pasado S3 (MinIO) y Azure Blob (Azurite) el 2026-07-13. O sea: al arreglar
+    // un diagrama que omitia estas fuentes se le metio una afirmacion falsa sobre ellas.
+    //
+    // Un estado copiado a mano caduca, y aqui nada lo vigila. Vive en un solo sitio:
+    // `ops/fase-7-deploy/dist/NATIVE-STATUS.md`, con la evidencia en
+    // `qa/fase-6-qa/evidencias/native-smokes-20260713.md`.
+    container s3 'AWS S3'
+    container gcs 'Google Cloud Storage'
+    container azureBlob 'Azure Blob Storage'
+    container ociObjectStorage 'Oracle Cloud Object Storage'
   }
 
   observability = system 'Observabilidad' {
