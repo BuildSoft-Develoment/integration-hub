@@ -105,6 +105,22 @@ model {
     container ftp 'FTP'
     container sftp 'SFTP'
     container restSource 'REST Source'
+
+    // ADR-006: los cuatro almacenes de objetos. Estaban implementados y no aparecian, asi que el
+    // diagrama decia que el producto solo lee de disco, FTP/SFTP y REST — la mitad de los 8 tipos
+    // de fuente que registra el arranque.
+    //
+    // Se enumeran en vez de agregarlos en un 'object storage' generico porque la eleccion de nube
+    // NO es un detalle: cambia las credenciales (rol IAM propio de cada proveedor), el SDK y lo que
+    // hay que aprovisionar. Quien lee este diagrama para montar un entorno necesita ver cual.
+    //
+    // El estado va en el titulo, como ya se hace con `MongoDB (parcial: no implementado)`: funcionan
+    // en JVM y les falta el build nativo y su QA. Dibujarlos como terminados seria el error opuesto
+    // a haberlos omitido.
+    container s3 'AWS S3 (JVM; nativo/QA pendiente)'
+    container gcs 'Google Cloud Storage (JVM; nativo/QA pendiente)'
+    container azureBlob 'Azure Blob Storage (JVM; nativo/QA pendiente)'
+    container ociObjectStorage 'Oracle Cloud Object Storage (JVM; nativo/QA pendiente)'
   }
 
   observability = system 'Observabilidad' {
@@ -224,6 +240,11 @@ model {
   integrationHub.quarkusApp -> fileSources.ftp 'Descarga archivos'
   integrationHub.quarkusApp -> fileSources.sftp 'Descarga archivos'
   integrationHub.quarkusApp -> fileSources.restSource 'Obtiene payloads remotos'
+  // Por streaming, sin cargar el objeto entero en memoria (RF-008 de 001 / RNF-04).
+  integrationHub.quarkusApp -> fileSources.s3 'Descarga objetos por streaming'
+  integrationHub.quarkusApp -> fileSources.gcs 'Descarga objetos por streaming'
+  integrationHub.quarkusApp -> fileSources.azureBlob 'Descarga objetos por streaming'
+  integrationHub.quarkusApp -> fileSources.ociObjectStorage 'Descarga objetos por streaming'
   integrationHub.quarkusApp -> externalApi 'Invoca APIs de negocio'
   integrationHub.quarkusApp -> externalDatabases 'Escribe a bases externas dinamicas'
   integrationHub.quarkusApp -> observability.otel 'Exporta trazas'
