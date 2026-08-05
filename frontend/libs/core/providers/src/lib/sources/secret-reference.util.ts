@@ -24,7 +24,28 @@ export const SOURCE_CREDENTIAL_KEYS: Readonly<Record<string, readonly string[]>>
   S3: ['secretAccessKey'],
   OCI_OBJECT_STORAGE: ['secretAccessKey'],
   REST: ['password', 'token'],
+  // Estos dos FALTABAN, y son los que peor secreto guardan: `serviceAccountJson` es el JSON de la
+  // service account de Google con la clave privada RSA dentro, y `connectionString`/`accountKey` dan
+  // acceso total a la cuenta de Azure. Sin entrada en este mapa, `plaintextCredentialKeys` devolvia
+  // [] y el guardado los dejaba pasar en claro a `source_definition.configuration_json`, mientras que
+  // un password de SFTP si se bloqueaba. El control existia y miraba a otro lado.
+  //
+  // La sustitucion de ${secret:...} la hace `JsonConfigurationMapper.resolveValue`, que recorre TODO
+  // el mapa de configuracion, no una lista de campos: estas claves admiten referencia igual que las
+  // demas, asi que bloquearlas no deja al operador sin salida.
+  GCS: ['serviceAccountJson'],
+  AZURE_BLOB: ['connectionString', 'sasToken', 'accountKey'],
 };
+
+/**
+ * Tipos de fuente que NO tienen ninguna credencial que proteger.
+ *
+ * Existe para que el mapa de arriba sea comprobable: sin esta lista, "el tipo no esta en el mapa" y
+ * "el tipo no tiene credenciales" son indistinguibles, que es exactamente como GCS y AZURE_BLOB
+ * pasaron desapercibidos. El test de este fichero exige que todo tipo registrado en el backend este
+ * en uno de los dos sitios.
+ */
+export const SOURCE_TYPES_WITHOUT_CREDENTIALS: readonly string[] = ['FILESYSTEM'];
 
 /**
  * Claves de credencial con texto plano en el config YA SERIALIZADO del source (lo que realmente se persiste).

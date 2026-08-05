@@ -156,6 +156,27 @@ se **cachea por hash de config** (region+creds+endpoint) para no recrear pools p
    exclusion de Netty (**spike native adelantado** — Azure es el de mayor riesgo native), integracion,
    gate.
 
+### Seguimiento del plan (2026-08-05)
+
+Lo de arriba se escribio el 2026-06-05 y no se ha vuelto a tocar; parte ya esta resuelto. No se
+reescribe -describia bien lo pendiente ENTONCES-, se anota lo medido despues:
+
+- **S3 y Azure Blob**: lo "pendiente" de integracion y de **build native** esta HECHO. Smoke sobre el
+  binario NATIVO en verde el 2026-07-13: S3 contra MinIO y Azure Blob contra Azurite, 3 registros
+  cada uno. Evidencia: `qa/fase-6-qa/evidencias/native-smokes-20260713.md`; estado consolidado en
+  `ops/fase-7-deploy/dist/NATIVE-STATUS.md`. Con eso, la duda de este ADR sobre Azure en GraalVM
+  ("el de mayor riesgo native") queda resuelta a favor.
+- **GCS**: sigue pendiente de verdad, y por un motivo estructural, no por falta de tiempo:
+  `GcsSourceProvider` no admite endpoint override, asi que no es homologable contra emulador y
+  necesita GCP real. Recogido como limite conocido en `NATIVE-STATUS.md`.
+- **Azure `managed-identity`**: sigue pendiente. `AzureBlobSourceProvider` lo rechaza fail-loud y no
+  hay `azure-identity` en el pom.
+- **Gate humano**: sin acta. Sigue pendiente para los cuatro.
+
+Lo que este seguimiento NO arregla, y conviene no perder: el estado de estas fuentes vivia copiado a
+mano en varios sitios y caduco en todos a la vez. Por eso el modelo `likec4` ya no lo lleva en el
+titulo de los nodos y apunta aqui y a `NATIVE-STATUS.md`.
+
 ## Gate
 
 Cambio de modelo de extensibilidad + seguridad (credenciales/secretos) → revision y firma humana

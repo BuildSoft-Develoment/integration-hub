@@ -1,5 +1,31 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { isPlaintextSecret, isSecretReference, plaintextCredentialKeys } from './secret-reference.util';
+import {
+  SOURCE_CREDENTIAL_KEYS,
+  SOURCE_TYPES_WITHOUT_CREDENTIALS,
+  isPlaintextSecret,
+  isSecretReference,
+  plaintextCredentialKeys,
+} from './secret-reference.util';
+
+// process.cwd() es `frontend/` cuando corre el runner de Angular.
+const REPO = join(process.cwd(), '..');
+
+/**
+ * Tipos de fuente que el backend registra, leidos del CATALOGO GENERADO.
+ *
+ * No se vuelve a parsear el Java: `ci/scripts/gen-catalogo-tipos.mjs` ya lo hace recorriendo los
+ * siete modulos del reactor, y `gen:catalogo:check` falla si el catalogo se desactualiza. Un tercer
+ * parser seria un tercer punto ciego.
+ */
+function tiposDeFuenteDelBackend(): string[] {
+  const doc = readFileSync(join(REPO, 'docs/transversal/90.17-catalogo-de-tipos.md'), 'utf8');
+  const desde = doc.indexOf('### Fuentes');
+  const hasta = doc.indexOf('### ', desde + 1);
+  const seccion = doc.slice(desde, hasta === -1 ? undefined : hasta);
+  return [...seccion.matchAll(/^\|\s*`([A-Z0-9_]+)`\s*\|/gm)].map((m) => m[1]);
+}
 
 describe('secret-reference util (QA-006)', () => {
   describe('isSecretReference', () => {
@@ -50,6 +76,47 @@ describe('secret-reference util (QA-006)', () => {
 
     it('es case-insensitive en el tipo de fuente', () => {
       expect(plaintextCredentialKeys({ password: 'x' }, 'sftp')).toEqual(['password']);
+    });
+
+    it('protege las credenciales de la nube que antes pasaban en claro', () => {
+      // El JSON de service account de Google lleva la clave privada RSA dentro.
+      expect(plaintextCredentialKeys({ serviceAccountJson: '{"private_key":"-----BEGIN' }, 'GCS'))
+        .toEqual(['serviceAccountJson']);
+      expect(plaintextCredentialKeys({ serviceAccountJson: '${secret:gcp/sa}' }, 'GCS')).toEqual([]);
+      // Los tres modos de autenticacion de Azure llevan secreto.
+      expect(plaintextCredentialKeys({ connectionString: 'AccountKey=abc' }, 'AZURE_BLOB'))
+        .toEqual(['connectionString']);
+      expect(plaintextCredentialKeys({ sasToken: 'sv=2024', accountKey: 'k' }, 'AZURE_BLOB'))
+        .toEqual(['sasToken', 'accountKey']);
+    });
+  });
+
+  /**
+   * El hueco de GCS/AZURE_BLOB no fue un descuido puntual: fue que nada exigia que el mapa siguiera
+   * al backend. Mientras "no esta en el mapa" signifique "no tiene credenciales", cada tipo de fuente
+   * nuevo nace sin proteger y en silencio.
+   */
+  describe('cobertura frente a los tipos que el backend registra', () => {
+    it('todo tipo de fuente esta en el mapa de credenciales o declarado sin credenciales', () => {
+      const tipos = tiposDeFuenteDelBackend();
+      expect(tipos.length, 'no se pudo leer el catalogo generado de tipos').toBeGreaterThan(0);
+
+      const sinCubrir = tipos.filter(
+        (t) => !(t in SOURCE_CREDENTIAL_KEYS) && !SOURCE_TYPES_WITHOUT_CREDENTIALS.includes(t),
+      );
+      expect(
+        sinCubrir,
+        `tipos de fuente que el guardado dejaria pasar en claro:\n  ${sinCubrir.join('\n  ')}\n` +
+          'Anadelos a SOURCE_CREDENTIAL_KEYS con sus campos, o a SOURCE_TYPES_WITHOUT_CREDENTIALS si ' +
+          'de verdad no tienen ninguna credencial.',
+      ).toEqual([]);
+    });
+
+    it('no se declara nada que el backend ya no registre', () => {
+      const tipos = new Set(tiposDeFuenteDelBackend());
+      const sobran = [...Object.keys(SOURCE_CREDENTIAL_KEYS), ...SOURCE_TYPES_WITHOUT_CREDENTIALS]
+        .filter((t) => !tipos.has(t));
+      expect(sobran, `declarados aqui pero sin provider detras: ${sobran.join(', ')}`).toEqual([]);
     });
   });
 });

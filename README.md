@@ -77,9 +77,10 @@ La documentacion principal del proyecto vive en:
 
 Base inicial para una plataforma de integracion configurable sobre Quarkus con:
 
-- fuentes configurables: filesystem, FTP, SFTP, REST
-- readers configurables: TXT, CSV, XLS, XLSX, JSON, XML
-- tareas configurables: persistencia, stored procedure, funcion de base de datos, llamada REST, notificacion
+- fuentes, readers y tareas configurables por provider, y extensibles con plugins sin tocar el nucleo.
+  La lista de tipos concretos NO se escribe aqui: se genera desde el codigo en
+  [el catalogo de tipos](docs/transversal/90.17-catalogo-de-tipos.md). Enumerarla a mano caduco tres
+  veces en este mismo fichero -decia 4 fuentes de 8, y 6 readers de 7-.
 - seguridad con Keycloak externo
 - persistencia de metadatos con Hibernate ORM y PostgreSQL
 - observabilidad con OpenTelemetry
