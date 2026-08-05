@@ -89,6 +89,17 @@ model {
   vault = system 'Kubernetes Secrets / External Config'
   sharedStorage = system 'Shared File Storage'
 
+  // ADR-010: la auditoria NO se escribe en linea. La app deja la trama en un spool durable y un
+  // relay la publica al broker; otro proceso la consume. Sin estos dos, el diagrama describe una
+  // auditoria sincrona que no existe — y un despliegue hecho desde el sin broker NO ARRANCA:
+  // `audit.relay.enabled=true` no tiene fallback (application.properties:145).
+  broker = system 'Message Broker' {
+    description 'Kafka por defecto. El SPI admite Artemis, RabbitMQ y Redis via audit.broker.type.'
+  }
+  coldStore = system 'ClickHouse' {
+    description 'Almacen frio de auditoria a nivel de registro (audit_record_event).'
+  }
+
   fileSources = system 'Fuentes externas' {
     container filesystem 'File System'
     container ftp 'FTP'
@@ -141,6 +152,12 @@ model {
         }
       }
       component auditService 'Audit Service'
+      component auditSpool 'Audit Spool' {
+        description 'Tabla audit_spool. La trama se escribe aqui en una transaccion propia, no al broker.'
+      }
+      component outboxRelay 'Outbox Relay' {
+        description 'Drena el spool al broker en lotes. Si el broker no existe, la app no arranca.'
+      }
       component telemetry 'OpenTelemetry Instrumentation'
       component packages 'Package Structure' {
         component apiPackage 'api'
@@ -179,6 +196,15 @@ model {
         }
       }
     }
+
+    // Deployable PROPIO, no una parte del servicio: imagen y contenedor aparte, health en :8082.
+    // Omitirlo hacia creer que la plataforma se despliega con dos piezas cuando son tres, y que la
+    // auditoria termina en Postgres cuando en realidad la escribe este proceso.
+    container auditConsumer 'Audit Consumer' {
+      description 'Consume del broker y escribe audit_event, audit_record_event y el cold store.'
+      component auditEventWriter 'AuditEventWriter'
+      component coldStoreWriter 'Cold Store Writer (Postgres / ClickHouse)'
+    }
   }
 
   user -> integrationHub.adminConsole 'Consulta estado y resultados'
@@ -191,7 +217,9 @@ model {
   integrationHub.adminConsole -> integrationHub.quarkusApp 'Invoca APIs protegidas'
 
   integrationHub.quarkusApp -> iam 'Valida access tokens'
-  integrationHub.quarkusApp -> db 'Persiste configuracion, jobs, auditoria y staging'
+  // Decia "auditoria" y era falso: la app escribe `audit_spool`, no `audit_event`. El
+  // `insert into audit_event` vive solo en audit-consumer/AuditEventWriter.
+  integrationHub.quarkusApp -> db 'Persiste configuracion, catalogos, ejecuciones, staging y audit_spool'
   integrationHub.quarkusApp -> fileSources.filesystem 'Lee archivos locales'
   integrationHub.quarkusApp -> fileSources.ftp 'Descarga archivos'
   integrationHub.quarkusApp -> fileSources.sftp 'Descarga archivos'
@@ -289,7 +317,9 @@ model {
   integrationHub.quarkusApp.repositories.readerDefinitionRepository -> integrationHub.quarkusApp.domainEntities.catalogEntities.readerDefinitionEntity 'Lee y persiste'
   integrationHub.quarkusApp.repositories.processExecutionRepository -> integrationHub.quarkusApp.domainEntities.executionEntities.processExecutionEntity 'Lee y persiste'
   integrationHub.quarkusApp.repositories.processTaskExecutionRepository -> integrationHub.quarkusApp.domainEntities.executionEntities.processTaskExecutionEntity 'Lee y persiste'
-  integrationHub.quarkusApp.repositories.auditEventRepository -> integrationHub.quarkusApp.domainEntities.executionEntities.auditEventEntity 'Lee y persiste'
+  // 'Lee y persiste' era falso: AuditEventRepository no tiene un solo persist. `audit_event` es un
+  // read-model que puebla audit-consumer; la app solo lo consulta.
+  integrationHub.quarkusApp.repositories.auditEventRepository -> integrationHub.quarkusApp.domainEntities.executionEntities.auditEventEntity 'Solo lectura (read-model)'
 
   integrationHub.quarkusApp.domainEntities.catalogEntities.processDefinitionEntity -> integrationHub.quarkusApp.domainEntities.catalogEntities.processTaskDefinitionEntity '0..n taskDefinitions'
   integrationHub.quarkusApp.domainEntities.catalogEntities.processDefinitionEntity -> integrationHub.quarkusApp.domainEntities.executionEntities.processExecutionEntity '0..n processExecutions'
@@ -298,7 +328,18 @@ model {
   integrationHub.quarkusApp.domainEntities.executionEntities.processExecutionEntity -> integrationHub.quarkusApp.domainEntities.executionEntities.processTaskExecutionEntity '0..n taskExecutions'
   integrationHub.quarkusApp.domainEntities.catalogEntities.processTaskDefinitionEntity -> integrationHub.quarkusApp.domainEntities.executionEntities.processTaskExecutionEntity '0..n taskExecutions'
   integrationHub.quarkusApp.domainEntities.executionEntities.processExecutionEntity -> integrationHub.quarkusApp.domainEntities.executionEntities.auditEventEntity '0..n auditEvents'
-  integrationHub.quarkusApp.domainEntities.catalogEntities.processTaskDefinitionEntity -> integrationHub.quarkusApp.domainEntities.executionEntities.auditEventEntity '0..n auditEvents'}
+  integrationHub.quarkusApp.domainEntities.catalogEntities.processTaskDefinitionEntity -> integrationHub.quarkusApp.domainEntities.executionEntities.auditEventEntity '0..n auditEvents'
+
+  // ADR-010: el camino REAL de la auditoria, que el modelo no tenia. Se lee de arriba abajo:
+  // la app deja la trama en el spool, el relay la publica, otro proceso la consume y la escribe.
+  integrationHub.quarkusApp.auditService -> integrationHub.quarkusApp.auditSpool 'Escribe la trama (transaccion propia)'
+  integrationHub.quarkusApp.auditSpool -> db 'Tabla audit_spool'
+  integrationHub.quarkusApp.outboxRelay -> integrationHub.quarkusApp.auditSpool 'Reclama lotes PENDING'
+  integrationHub.quarkusApp.outboxRelay -> broker 'Publica en el topico audit-events'
+  integrationHub.auditConsumer -> broker 'Consume audit-events'
+  integrationHub.auditConsumer -> db 'Escribe audit_event y audit_record_event'
+  integrationHub.auditConsumer -> coldStore 'Vuelca el detalle por registro'
+}
 
 deployment {
   environment dev {
@@ -306,6 +347,8 @@ deployment {
       docker dockerHost {
         instanceOf integrationHub.adminConsole
         instanceOf integrationHub.quarkusApp
+        // Contenedor propio en docker-compose, no parte del servicio.
+        instanceOf integrationHub.auditConsumer
       }
     }
     zone data {
@@ -314,6 +357,9 @@ deployment {
         instanceOf iam
         instanceOf observability.otel
         instanceOf observability.jaeger
+        // Sin broker la app NO ARRANCA: audit.relay.enabled=true no tiene fallback.
+        instanceOf broker
+        instanceOf coldStore
       }
     }
   }
@@ -363,6 +409,11 @@ deployment {
           instanceOf integrationHub.adminConsole
           instanceOf integrationHub.quarkusApp
         }
+        // El consumer escala aparte: su carga la marca el volumen de auditoria, no el trafico
+        // de la consola. Sin el, la auditoria se acumula en el spool y nadie la escribe.
+        node auditConsumerPod {
+          instanceOf integrationHub.auditConsumer
+        }
       }
     }
     zone data {
@@ -385,6 +436,16 @@ deployment {
       node observabilityNode {
         instanceOf observability.otel
         instanceOf observability.jaeger
+      }
+      // Faltaban las dos. Un despliegue planificado desde esta vista provisionaba Postgres HA,
+      // Keycloak HA y observabilidad, y dejaba fuera el broker — con el que la app ni arranca.
+      cluster brokerCluster {
+        node brokerNode {
+          instanceOf broker
+        }
+      }
+      node coldStoreNode {
+        instanceOf coldStore
       }
     }
     zone services {
@@ -463,6 +524,10 @@ views 'Architecture' {
     include fileSources
     include externalApi
     include observability
+    // Los sistemas top-level no entran solos: sin estos dos, el contexto sigue diciendo que la
+    // auditoria se queda dentro de la plataforma.
+    include broker
+    include coldStore
   }
 
   view containers of integrationHub {
@@ -481,6 +546,8 @@ views 'Architecture' {
     include externalApi
     include observability
     include observability.*
+    include broker
+    include coldStore
   }
 
   view frontend_components of integrationHub.adminConsole {
