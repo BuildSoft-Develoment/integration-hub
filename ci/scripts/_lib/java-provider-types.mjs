@@ -84,10 +84,10 @@ export function collectProviders(root, suffix, methodNames) {
       if (new RegExp(`\\binterface\\s+${name}\\b`).test(readFileSync(f, 'utf8'))) continue;
       const types = declaredTypes(f, methodNames);
       if (!types.length) {
-        sinTipo.push({ clase: name, modulo: mod, motivo: 'no se pudo leer el tipo declarado' });
+        sinTipo.push({ clase: name, modulo: mod, ruta: f, motivo: 'no se pudo leer el tipo declarado' });
         continue;
       }
-      for (const t of types) tipos.push({ tipo: t, clase: name, modulo: mod });
+      for (const t of types) tipos.push({ tipo: t, clase: name, modulo: mod, ruta: f });
     }
   }
   tipos.sort((a, b) => a.tipo.localeCompare(b.tipo));

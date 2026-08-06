@@ -136,6 +136,74 @@ class SourceCatalogServiceTest {
         assertFalse(definition.moneyCritical);
     }
 
+    // ── QA-006: el control que vivia SOLO en Angular. Un POST directo lo saltaba entero.
+
+    @Test
+    void createRechazaUnaCredencialEnTextoPlano() {
+        var service = servicioConProviderDeCredenciales();
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.create("Banco", "SFTP", true, "{\"host\":\"h\",\"password\":\"hunter2\"}", "INPUT", false));
+
+        assertTrue(error.getMessage().contains("password"), () -> error.getMessage());
+        assertTrue(error.getMessage().contains("QA-006"), () -> error.getMessage());
+    }
+
+    @Test
+    void updateRechazaTambien() {
+        // El agujero estaba en apply(), que comparten create y update: si solo se cubriera create,
+        // bastaria crear la fuente vacia y editarla despues para colar el secreto.
+        var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
+        org.mockito.Mockito.when(repository.findRequired(7L))
+                .thenReturn(new com.integrationhub.platform.entity.SourceDefinition());
+        var service = new SourceCatalogService(repository,
+                new StubSourceProviderRegistry(new CredentialSourceProvider()), mapper());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.update(7L, "Banco", "SFTP", true, "{\"password\":\"hunter2\"}", "INPUT", false));
+    }
+
+    @Test
+    void aceptaLaCredencialComoReferencia() {
+        var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
+        var service = new SourceCatalogService(repository,
+                new StubSourceProviderRegistry(new CredentialSourceProvider()), mapper());
+
+        var definition = service.create("Banco", "SFTP", true,
+                "{\"password\":\"${secret:sftp/pass}\"}", "INPUT", false);
+
+        assertEquals("SFTP", definition.sourceType);
+    }
+
+    @Test
+    void noBloqueaUnCampoDeCredencialVacio() {
+        // REST con bearer no serializa `password`, S3 con rol IAM no serializa `secretAccessKey`.
+        // Tratar el vacio como secreto seria un falso bloqueo, y un falso bloqueo acaba en que
+        // alguien desactiva el control.
+        var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
+        var service = new SourceCatalogService(repository,
+                new StubSourceProviderRegistry(new CredentialSourceProvider()), mapper());
+
+        var definition = service.create("Banco", "SFTP", true, "{\"password\":\"\",\"host\":\"h\"}", "INPUT", false);
+
+        assertEquals("SFTP", definition.sourceType);
+    }
+
+    @Test
+    void rechazaUnaReferenciaAMEDIAS() {
+        // `pass${secret:x}word` deja media credencial en claro en la base de datos.
+        var service = servicioConProviderDeCredenciales();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.create("Banco", "SFTP", true, "{\"password\":\"pass${secret:x}word\"}", "INPUT", false));
+    }
+
+    private SourceCatalogService servicioConProviderDeCredenciales() {
+        var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
+        return new SourceCatalogService(repository,
+                new StubSourceProviderRegistry(new CredentialSourceProvider()), mapper());
+    }
+
     @Test
     void testRejectsMissingSourceType() {
         var service = new SourceCatalogService(null, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
@@ -187,6 +255,29 @@ class SourceCatalogServiceTest {
                 return provider;
             }
             throw new IllegalArgumentException("Unsupported source provider: " + type);
+        }
+    }
+
+    /** Provider con credenciales declaradas, para ejercitar QA-006 en el servidor. */
+    private static final class CredentialSourceProvider implements SourceProvider {
+        @Override
+        public String type() {
+            return "SFTP";
+        }
+
+        @Override
+        public List<String> credentialKeys() {
+            return List.of("password", "passphrase");
+        }
+
+        @Override
+        public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
+            return List.of();
+        }
+
+        @Override
+        public SourcePayload openFile(SelectedSourceFile selectedFile, Map<String, Object> configuration) {
+            throw new UnsupportedOperationException();
         }
     }
 

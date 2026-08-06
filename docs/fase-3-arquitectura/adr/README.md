@@ -34,6 +34,7 @@
 - [ADR-022 Upsert de DB_WRITE por dialecto de motor](ADR-022-upsert-db-write-por-motor.md)
 - [ADR-023 Cada modulo es dueno de su esquema de base de datos](ADR-023-separacion-schemas-motor-vertical.md)
 - [ADR-024 Despliegue nativo bajo un subpath, horneado en build-time](ADR-024-despliegue-nativo-bajo-subpath.md)
+- [ADR-025 Credenciales de fuente: el control vive en el servidor y lo declara el provider](ADR-025-credenciales-de-fuente-control-en-el-servidor.md)
 
 ## Regla
 

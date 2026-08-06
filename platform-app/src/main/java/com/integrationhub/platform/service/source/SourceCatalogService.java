@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class SourceCatalogService {
@@ -18,14 +19,29 @@ public class SourceCatalogService {
     private final SourceDefinitionRepository sourceDefinitionRepository;
     private final SourceProviderRegistry sourceProviderRegistry;
     private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final SourceCredentialPolicy credentialPolicy;
 
     @Inject
     public SourceCatalogService(SourceDefinitionRepository sourceDefinitionRepository,
                                 SourceProviderRegistry sourceProviderRegistry,
-                                JsonConfigurationMapper jsonConfigurationMapper) {
+                                JsonConfigurationMapper jsonConfigurationMapper,
+                                SourceCredentialPolicy credentialPolicy) {
         this.sourceDefinitionRepository = sourceDefinitionRepository;
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
+        this.credentialPolicy = credentialPolicy;
+    }
+
+    /**
+     * La politica se DERIVA del registry, que es de donde saca los campos de credencial de cada tipo.
+     * No es un colaborador opcional ni admite null: sin ella no habria control de QA-006, y un
+     * constructor que lo permitiera dejaria abierta la puerta a construir el servicio sin proteccion.
+     */
+    public SourceCatalogService(SourceDefinitionRepository sourceDefinitionRepository,
+                                SourceProviderRegistry sourceProviderRegistry,
+                                JsonConfigurationMapper jsonConfigurationMapper) {
+        this(sourceDefinitionRepository, sourceProviderRegistry, jsonConfigurationMapper,
+                new SourceCredentialPolicy(sourceProviderRegistry));
     }
 
     @Transactional
@@ -100,12 +116,43 @@ public class SourceCatalogService {
         definition.name = requireName(name);
         definition.sourceType = requireType(sourceType, "Source type is required");
         definition.active = active;
+        requireCredentialsAsReferences(definition.sourceType, configurationJson);
         definition.configurationJson = configurationJson;
         definition.direction = normalizeDirection(direction);
         // ADR-021 (E): marcar como banco una fuente de LECTURA no significa nada —nadie entrega ahi— y
         // dejaria una marca que sugiere una proteccion inexistente. Se normaliza a false en vez de
         // rechazar: es una combinacion sin sentido, no un intento de hacer algo peligroso.
         definition.moneyCritical = moneyCritical && !"INPUT".equals(definition.direction);
+    }
+
+    /**
+     * QA-006: ninguna credencial se persiste en claro. Rechaza (400), no avisa.
+     *
+     * <p>Hasta ahora esto solo lo comprobaba el formulario de Angular, asi que un POST directo a la
+     * API guardaba el secreto igual. Se valida aqui porque este es el unico punto por el que pasa
+     * TODO lo que se persiste, venga de donde venga.</p>
+     *
+     * <p>Se parsea con {@code toMapUnresolved}: {@code toMap} sustituiria los {@code ${secret:...}}
+     * por su valor real y entonces TODA credencial pareceria texto plano -el control rechazaria
+     * justo las configuraciones correctas-.</p>
+     */
+    private void requireCredentialsAsReferences(String sourceType, String configurationJson) {
+        if (configurationJson == null || configurationJson.isBlank()) {
+            return;
+        }
+        Map<String, Object> configuration;
+        try {
+            configuration = jsonConfigurationMapper.toMapUnresolved(configurationJson);
+        } catch (IllegalArgumentException e) {
+            // Fail-closed: si no se puede leer, no se puede afirmar que no haya secretos dentro.
+            throw new IllegalArgumentException("Source configuration is not valid JSON", e);
+        }
+        var enClaro = credentialPolicy.plaintextCredentials(sourceType, configuration);
+        if (!enClaro.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "QA-006: credentials must be stored as ${secret:...} references, never in plain text. "
+                            + "Plain-text credential field(s) in " + sourceType + ": " + String.join(", ", enClaro));
+        }
     }
 
     /** ADR-016: INPUT (default) / OUTPUT / BOTH. null/blank/desconocido -> INPUT (compat + fail-safe). */

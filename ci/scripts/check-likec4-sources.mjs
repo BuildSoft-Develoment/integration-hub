@@ -59,11 +59,11 @@ const MODELO = join(root, "likec4/integration-hub.likec4");
  * Providers cuyo tipo NO se puede leer del codigo y que aun asi son legitimos.
  *
  * Uno solo, y con motivo: `RemoteSourceProvider` devuelve un CAMPO DE INSTANCIA (`return type;`), no
- * una constante. Su tipo se lo da el plugin fuera de proceso en tiempo de ejecucion (ADR-013), asi
+ * una constante. Su tipo se lo da el plugin fuera de proceso en tiempo de ejecucion (ADR-014), asi
  * que no hay ningun tipo fijo que dibujar. Cualquier otro que aparezca aqui es un hueco real.
  */
 const SIN_TIPO_ESPERADO = new Map([
-  ["RemoteSourceProvider", "tipo dinamico: lo aporta el plugin remoto en runtime (ADR-013)"],
+  ["RemoteSourceProvider", "tipo dinamico: lo aporta el plugin remoto en runtime (ADR-014)"],
 ]);
 
 if (!existsSync(MODELO)) {

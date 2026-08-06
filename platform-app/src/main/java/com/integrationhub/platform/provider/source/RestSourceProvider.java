@@ -29,6 +29,12 @@ public class RestSourceProvider implements SourceProvider {
         return "REST";
     }
 
+    /** QA-006: campos que solo pueden persistirse como referencia ${secret:...}. */
+    @Override
+    public List<String> credentialKeys() {
+        return List.of("password", "token");
+    }
+
     @Override
     public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
         String url = SourceConfigurationSupport.requireString(configuration, "url");

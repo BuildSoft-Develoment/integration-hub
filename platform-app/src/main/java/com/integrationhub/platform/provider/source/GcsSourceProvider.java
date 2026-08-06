@@ -42,6 +42,15 @@ public class GcsSourceProvider implements SourceProvider {
         return "GCS";
     }
 
+    /**
+     * QA-006: campos que solo pueden persistirse como referencia ${secret:...}.
+     * <p>El JSON de service account lleva la clave privada RSA dentro.</p>
+     */
+    @Override
+    public List<String> credentialKeys() {
+        return List.of("serviceAccountJson");
+    }
+
     @Override
     public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
         String bucket = SourceConfigurationSupport.requireString(configuration, "bucket");

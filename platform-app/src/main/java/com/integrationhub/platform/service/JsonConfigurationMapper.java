@@ -29,6 +29,21 @@ public class JsonConfigurationMapper implements ConfigurationMapper {
     private static final Pattern SECRET_PATTERN = Pattern.compile(
             "\\$\\{(env|config|secret|vault|vaultkv|awssecret|gcpsecret|azuresecret):([^}]+)}");
 
+    /**
+     * QA-006: true si el valor ENTERO es una referencia a un secreto gestionado.
+     *
+     * <p>Vive aqui, y no en quien valida, porque el patron que enumera las fuentes de secreto
+     * resolubles es este: un segundo patron en otra clase se quedaria atras el dia que se anada un
+     * proveedor de secretos, y aceptaria como "texto plano" una referencia perfectamente valida
+     * -o al reves-.</p>
+     *
+     * <p>Exige coincidencia COMPLETA, no parcial: media referencia dentro de una cadena
+     * ({@code pass${secret:x}word}) sigue dejando parte del secreto en claro en la base de datos.</p>
+     */
+    public static boolean isSecretReference(String value) {
+        return value != null && SECRET_PATTERN.matcher(value.trim()).matches();
+    }
+
     ObjectMapper objectMapper;
     private final SecretResolver secretResolver;
 

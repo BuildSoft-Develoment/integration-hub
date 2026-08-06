@@ -49,6 +49,15 @@ public class S3SourceProvider implements SourceProvider {
         return "S3";
     }
 
+    /**
+     * QA-006: campos que solo pueden persistirse como referencia ${secret:...}.
+     * <p>accessKeyId es un identificador publico, no un secreto.</p>
+     */
+    @Override
+    public List<String> credentialKeys() {
+        return List.of("secretAccessKey");
+    }
+
     @Override
     public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
         String bucket = SourceConfigurationSupport.requireString(configuration, "bucket");

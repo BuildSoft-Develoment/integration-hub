@@ -23,6 +23,12 @@ public class FtpSourceProvider implements SourceProvider {
         return "FTP";
     }
 
+    /** QA-006: campos que solo pueden persistirse como referencia ${secret:...}. */
+    @Override
+    public List<String> credentialKeys() {
+        return List.of("password");
+    }
+
     @Override
     public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
         String host = SourceConfigurationSupport.requireString(configuration, "host");

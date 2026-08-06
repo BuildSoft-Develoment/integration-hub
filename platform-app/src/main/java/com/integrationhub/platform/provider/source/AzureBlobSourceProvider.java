@@ -40,6 +40,15 @@ public class AzureBlobSourceProvider implements SourceProvider {
         return "AZURE_BLOB";
     }
 
+    /**
+     * QA-006: campos que solo pueden persistirse como referencia ${secret:...}.
+     * <p>Los tres modos de authMode llevan secreto; connectionString incluye el AccountKey.</p>
+     */
+    @Override
+    public List<String> credentialKeys() {
+        return List.of("connectionString", "sasToken", "accountKey");
+    }
+
     @Override
     public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
         String prefix = SourceConfigurationSupport.resolvePathTemplate(

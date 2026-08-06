@@ -29,6 +29,15 @@ public class SftpSourceProvider implements SourceProvider {
         return "SFTP";
     }
 
+    /**
+     * QA-006: campos que solo pueden persistirse como referencia ${secret:...}.
+     * <p>privateKeyPath NO va: es la RUTA a la clave, no la clave.</p>
+     */
+    @Override
+    public List<String> credentialKeys() {
+        return List.of("password", "passphrase");
+    }
+
     @Override
     public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
         String host = SourceConfigurationSupport.requireString(configuration, "host");

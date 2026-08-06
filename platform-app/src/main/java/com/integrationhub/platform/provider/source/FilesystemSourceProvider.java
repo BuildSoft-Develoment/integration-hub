@@ -24,6 +24,15 @@ public class FilesystemSourceProvider implements SourceProvider {
         return "FILESYSTEM";
     }
 
+    /**
+     * QA-006: campos que solo pueden persistirse como referencia ${secret:...}.
+     * <p>Lee de disco local: no hay credencial. La lista vacia es una afirmacion, no un olvido.</p>
+     */
+    @Override
+    public List<String> credentialKeys() {
+        return List.of();
+    }
+
     @Override
     public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
         String configuredPath = SourceConfigurationSupport.requireString(configuration, "path");
