@@ -8,8 +8,8 @@
  * `docs/fase-3-arquitectura/03.02-diagramas-c4-likec4.md` trata `likec4/` como la fuente canonica de
  * la arquitectura del proyecto, y era lo unico del esqueleto que NADIE comprobaba: no estaba en
  * package.json, ningun gate lo miraba, y un error de sintaxis solo se descubria cuando alguien abria
- * el visor. Este gate nacio en este repositorio y se promovio a la plantilla; los tres fallos de abajo
- * se encontraron alli y se corrigen en los dos sitios.
+ * el visor. Este gate nacio en este repositorio y se promovio a la plantilla; los fallos de abajo se
+ * encontraron alli y se corrigen en los dos sitios.
  *
  * Peor: `roadmap-status.mjs` daba la fase 3 por entregada con que EXISTIERA el directorio
  * (`existsSync`). Un modelo roto, vacio o copiado de otro producto contaba igual. Ese `existsSync`
@@ -50,7 +50,7 @@
 
 process.removeAllListeners("warning");
 
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -167,6 +167,179 @@ if (/\(\s*0 (?:files|archivos)\s*\)/i.test(salida) || /no LikeC4 sources found|N
   process.exit(1);
 }
 
+// ── Las vistas declaradas tienen que dibujar algo ────────────────────────────────────────────────
+//
+// `validate` NO comprueba esto: el modelo de la plantilla llevaba tres vistas declaradas que no
+// existian. `view contexto of expedientes` SIN cuerpo se descarta en silencio, el modelo valida
+// igual, y el export solo traia la vista `index` que LikeC4 genera sola. Se prometian tres diagramas
+// y no se dibujaba ninguno.
+//
+// La primera version de este chequeo tuvo CINCO fallos, todos por lo mismo: leer un lenguaje real
+// con expresiones regulares. Estan corregidos abajo y anotados donde toca, porque volverian solos.
+//
+// Cuesta una segunda invocacion, pero el paquete ya esta en cache tras el `validate`.
+
+const declaradas = vistasDeclaradas(fuentes);
+const { vistas, error: errorExport } = exportarVistas();
+
+// FAIL-CLOSED. Si se llega aqui es que `npx` funciona y `validate` acaba de correr: que el export
+// falle ya no es "no tengo herramienta", es un hueco. Antes esto salia 0 con un aviso, y bastaba una
+// raiz sin permiso de escritura para que el chequeo se apagara solo sobre un modelo roto.
+if (errorExport) {
+  console.error(`check-likec4: no se pudo comprobar que las vistas dibujen (${errorExport}).`);
+  console.error("  El modelo valida, pero eso no dice nada de sus vistas: era el hueco original.");
+  process.exit(1);
+}
+
+// Solo se juzgan las vistas DECLARADAS con nombre. Las que genera LikeC4 sola (`index`) y las
+// anonimas (`view of x { ... }`, sin nombre que seguir) no son un contrato del autor: exigirles
+// contenido daba falsos rojos.
+const perdidas = [...declaradas].filter((v) => !vistas.has(v));
+const vacias = [...declaradas].filter((v) => vistas.get(v) === 0);
+
+if (perdidas.length || vacias.length) {
+  console.error("check-likec4: el modelo valida, pero sus vistas no.");
+  if (perdidas.length) {
+    console.error(`\n  ✗ Vistas declaradas que el modelo NO tiene (${perdidas.length}):`);
+    for (const v of perdidas) console.error(`    ${v}`);
+    console.error("    Se descartan en silencio. La causa habitual es declararlas sin cuerpo:");
+    console.error("    `view x of y` no vale; hace falta `view x of y { include * }`.");
+  }
+  if (vacias.length) {
+    console.error(`\n  ✗ Vistas declaradas que no dibujan ningun elemento (${vacias.length}):`);
+    for (const v of vacias) console.error(`    ${v}`);
+    console.error("    Revisa sus reglas `include`.");
+  }
+  process.exit(1);
+}
+
 console.log("check-likec4");
 console.log(`OK. El modelo de arquitectura valida (${fuentes.length} fichero(s): sintaxis, semantica y layout).`);
+console.log(`OK. ${vistas.size} vista(s) en el modelo` +
+  (declaradas.size ? `; las ${declaradas.size} declaradas con nombre estan y dibujan.` : "."));
 process.exit(0);
+
+/**
+ * Nombres de vista declarados en las fuentes.
+ *
+ * Hace falta el lado del CODIGO porque el sintoma del fallo es justo la diferencia: una vista que se
+ * declara y no aparece. El modelo exportado, por si solo, no puede delatar lo que nunca llego.
+ *
+ * TRES TRAMPAS QUE TUVO Y QUE NO SON HIPOTETICAS -las tres se reprodujeron-:
+ *
+ *  - `view of x { ... }` (anonima, sintaxis legal y la forma corta de la documentacion de LikeC4)
+ *    capturaba la palabra clave `of` COMO SI FUERA EL NOMBRE. El gate exigia entonces una vista
+ *    llamada `of` que no puede existir: rojo permanente, y el mensaje mandaba a buscar un fallo
+ *    inexistente. De ahi el `(?!of\b)`.
+ *
+ *  - El troceado de comentarios era un `replace` de `/\*...\*\/`, que no distingue comentario de
+ *    cadena. Dos titulos con rutas glob -`'lee de docs/*.md'` y `'compila src/**\/*.java'`- se
+ *    emparejaban entre si y BORRABAN todo lo que hubiera en medio, incluidas las vistas sin cuerpo
+ *    que este chequeo viene a cazar. Falso verde, y encima con un recuento que mentia.
+ *
+ *  - La palabra `view` abriendo linea dentro de una descripcion multilinea (`'''...'''`) contaba
+ *    como declaracion. Falso rojo.
+ *
+ * Las tres se cierran igual: se blanquea lo que NO es codigo -comentarios y contenido de cadenas-
+ * antes de buscar. Blanquear y no borrar es deliberado: preserva los saltos de linea, de los que
+ * depende el ancla `^`.
+ */
+function vistasDeclaradas(ficheros) {
+  const out = new Set();
+  for (const f of ficheros) {
+    let texto;
+    try {
+      texto = readFileSync(f, "utf8");
+    } catch {
+      continue;
+    }
+    const NOMBRADA = /^[^\S\r\n]*(?:dynamic\s+|deployment\s+)?view\s+(?!of\b)([A-Za-z_][\w-]*)\b/gm;
+    const limpio = blanquearNoCodigo(texto);
+    const halladas = [...limpio.matchAll(NOMBRADA)].map((m) => m[1]);
+    for (const n of halladas) out.add(n);
+    // Red de seguridad: si el texto CRUDO tiene vistas con nombre y tras limpiar no queda ninguna,
+    // el fallo es de este parser, no del modelo. Se compara contra la MISMA regla -incluido el
+    // `(?!of\b)`-: la primera version usaba una mas laxa y un fichero cuya unica vista era anonima
+    // disparaba la alarma. Un guarda que grita por lo que el mismo excluye es otro falso rojo.
+    if (halladas.length === 0 && [...texto.matchAll(NOMBRADA)].length > 0) {
+      console.error(`check-likec4: hay declaraciones \`view\` con nombre en ${f} que este gate no supo leer.`);
+      process.exit(1);
+    }
+  }
+  return out;
+}
+
+/** Sustituye por espacios los comentarios y el CONTENIDO de las cadenas, conservando los saltos. */
+function blanquearNoCodigo(t) {
+  let out = "";
+  let i = 0;
+  while (i < t.length) {
+    const c = t[i];
+    const d = t[i + 1];
+    if (c === "'" || c === '"') {
+      const triple = t.slice(i, i + 3) === c.repeat(3);
+      const cierre = triple ? c.repeat(3) : c;
+      out += cierre;
+      i += cierre.length;
+      while (i < t.length) {
+        if (t[i] === "\\") { out += "  "; i += 2; continue; }
+        if (t.slice(i, i + cierre.length) === cierre) { out += cierre; i += cierre.length; break; }
+        // Una cadena de una linea sin cerrar no se come el resto del fichero.
+        if (!triple && (t[i] === "\n" || t[i] === "\r")) break;
+        out += t[i] === "\n" || t[i] === "\r" ? t[i] : " ";
+        i++;
+      }
+      continue;
+    }
+    if (c === "/" && d === "*") {
+      const fin = t.indexOf("*/", i + 2);
+      const hasta = fin === -1 ? t.length : fin + 2;
+      out += t.slice(i, hasta).replace(/[^\r\n]/g, " ");
+      i = hasta;
+      continue;
+    }
+    if (c === "/" && d === "/") {
+      while (i < t.length && t[i] !== "\n" && t[i] !== "\r") { out += " "; i++; }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+/** Vistas del modelo construido, con cuantos nodos dibuja cada una. */
+function exportarVistas() {
+  // Nombre RELATIVO (el `-o` viaja por la linea de comandos y una ruta absoluta con espacios
+  // reintroduciria la trampa 1) y UNICO por proceso: con un nombre fijo, dos corridas simultaneas
+  // sobre el mismo arbol -CI con matrix, dos features en paralelo- se pisaban el fichero y una salia
+  // verde sin haber comprobado nada.
+  const RELATIVO = `.likec4-gate-export.${process.pid}.json`;
+  const destino = join(root, RELATIVO);
+  const limpiar = () => { try { rmSync(destino, { force: true }); } catch { /* nada que borrar */ } };
+  limpiar();
+  try {
+    const exp = spawnSync("npx", ["--yes", `likec4@${VERSION}`, "export", "json", DIR, "-o", RELATIVO], {
+      encoding: "utf8", shell: true, cwd: root, timeout: 300_000,
+    });
+    if (exp.error || exp.status !== 0 || !existsSync(destino)) {
+      return { vistas: null, error: "el export json no produjo salida" };
+    }
+    const crudo = JSON.parse(readFileSync(destino, "utf8"));
+    // Se unen las vistas de TODOS los proyectos del export. Quedarse con el primero acusaba de
+    // perdidas a vistas que si se dibujan, en repos con varios proyectos likec4.
+    const proyectos = Array.isArray(crudo) ? crudo : [crudo];
+    const vistas = new Map();
+    for (const p of proyectos) {
+      for (const [id, v] of Object.entries(p?.views || {})) vistas.set(id, (v?.nodes || []).length);
+    }
+    // Cero vistas NO es un fallo de infraestructura: es que el export cambio de forma o que el
+    // modelo no produce ninguna. Tratarlo como aviso dejaba el chequeo en verde permanente ante
+    // cualquier deriva del JSON.
+    return { vistas, error: vistas.size ? null : "el export no trajo ninguna vista" };
+  } catch (e) {
+    return { vistas: null, error: `no se pudo leer el export (${e.message})` };
+  } finally {
+    limpiar();
+  }
+}

@@ -74,3 +74,7 @@ AGENT_BOARD.md
 .claude/mcp.json
 .claude/launch.json
 ops/fase-7-deploy/dist/onprem/int/data-filesystem/
+
+# Artefacto temporal de ci/scripts/check-likec4.mjs (se borra solo; esto es por si un
+# proceso muere a mitad y no ensucie el arbol).
+.likec4-gate-export.*.json
