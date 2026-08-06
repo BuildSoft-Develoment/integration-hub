@@ -71,16 +71,49 @@ const NON_HUMAN_REVIEWERS = /\b(agente|agent|ia\b|a\.?i\.?|claude|gpt|codex|copi
  * Dos copias del mismo parseo garantizan dos versiones del mismo fallo, asi que hay una sola.
  */
 export function parseHumanReviewFields(body) {
-  const etiqueta = (nombre) => new RegExp(`${nombre}\\*{0,2}\\s*:\\s*\\*{0,2}\\s*(.+)`, "i");
-  const resultRaw = (body.match(
-    /Resultado\*{0,2}\s*:\s*\*{0,2}\s*(approved|aprobado|blocked|bloqueado|pending|pendiente)/i,
+  const campos = soloCampos(body);
+  // `[^\S\r\n]` = espacio horizontal. Con `\s*` tras los dos puntos, un campo VACIO se comia el salto
+  // de linea y capturaba la linea siguiente: `- Revisor:` sin rellenar devolvia "- Fecha: ...", o
+  // sea, un campo en blanco pasaba por relleno y la firma parecia completa.
+  const campo = (etiqueta) => {
+    const re = new RegExp(
+      `^[^\\S\\r\\n]*(?:[-*+][^\\S\\r\\n]*)?\\*{0,2}${etiqueta}\\*{0,2}[^\\S\\r\\n]*:[^\\S\\r\\n]*(.*)$`,
+      "im",
+    );
+    return ((campos.match(re) || [])[1] || "").replace(/<!--[\s\S]*?-->/g, "").trim();
+  };
+  const resultRaw = (campos.match(
+    /^[^\S\r\n]*(?:[-*+][^\S\r\n]*)?\*{0,2}Resultado\*{0,2}[^\S\r\n]*:[^\S\r\n]*\*{0,2}(approved|aprobado|blocked|bloqueado|pending|pendiente)/im,
   ) || [])[1];
   return {
     result: resultRaw ? resultRaw.toLowerCase() : null,
-    reviewer: ((body.match(etiqueta("Revisor")) || [])[1] || "").trim(),
-    fecha: ((body.match(etiqueta("Fecha")) || [])[1] || "").trim(),
-    evidencia: ((body.match(etiqueta("Evidencia\\s+revisada")) || [])[1] || "").trim(),
+    reviewer: campo("Revisor"),
+    fecha: campo("Fecha"),
+    evidencia: campo("Evidencia\\s+revisada"),
   };
+}
+
+/**
+ * Deja solo las lineas que pueden ser un CAMPO firmado, quitando la prosa de instrucciones.
+ *
+ * `plantillas/fase-4-sdd/prototype-validation.md` -y `scripts/_lib/feature-templates.mjs`, que la
+ * emite en cada `scaffold:feature`- abren la seccion con un blockquote de ayuda que dice literalmente
+ *
+ *     > ... Si se ve pobre -> Resultado: blocked.
+ *
+ * Como el regex tomaba la PRIMERA coincidencia, la frase de ayuda ganaba al campo de abajo: un humano
+ * firmaba `- Resultado: approved` y el parser leia `blocked`. El prototipo no llegaba nunca a
+ * `human-approved` y ningun gate protestaba, porque no hay hallazgo que emitir cuando el resultado no
+ * es "approved". Un rojo permanente que se confunde con trabajo pendiente.
+ *
+ * Se descartan las citas (`>`), que son instrucciones y no datos, y se exige que la etiqueta abra
+ * linea (con vineta opcional): un `Resultado:` mencionado a mitad de una frase deja de contar.
+ */
+function soloCampos(body) {
+  return String(body ?? "")
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*>/.test(l))
+    .join("\n");
 }
 
 /** Un revisor que no sea persona no vale como aprobacion. Compartido con el validador anti-trampa. */
