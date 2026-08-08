@@ -333,4 +333,58 @@ class Mt101SftpSinkConnectionResolverTest {
                 "el mensaje nombra la tarea real, no MT101_PAY");
         assertTrue(error.getMessage().contains("not an OUTPUT sink"));
     }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // El merge copia las credenciales del sink SIN resolver (a proposito: el spec persistido del correctivo nunca
+    // debe llevar secretos en claro) y se inyecta DESPUES de que el motor resolviera la configuration de la task,
+    // asi que escapaba a toda resolucion. Resultado en el servidor (ejecucion #17): la ref viajaba literal a
+    // session.setPassword() y el banco respondia "Auth fail for methods 'publickey,password,keyboard-interactive'"
+    // — mientras "Probar fuente", que si resuelve, autenticaba sin problema. Dos caminos leyendo el mismo dato con
+    // distinta resolucion. Estos tests fijan las DOS mitades del contrato.
+    // ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    void elMergeDejaLasRefsIntactas_paraQueElSpecPersistidoNoLleveSecretos() {
+        var merged = resolver("SFTP", "OUTPUT", SFTP_SOURCE_JSON).withResolvedSink(payConfigWithSinkRef());
+        var sftp = mapOf(merged.get("sftp"));
+
+        assertEquals("${secret:tasks/sftp/bank/password}", sftp.get("password"),
+                "el merge NO debe resolver: lo que se congela/persiste son referencias, no secretos");
+    }
+
+    @Test
+    void resolveConnectionSecretsExpandeLaRefAntesDeConectar() {
+        var target = resolverConVault("SFTP", "OUTPUT", SFTP_SOURCE_JSON);
+        var merged = target.withResolvedSink(payConfigWithSinkRef());
+
+        var resuelto = mapOf(target.resolveConnectionSecrets(merged).get("sftp"));
+
+        var password = String.valueOf(resuelto.get("password"));
+        assertFalse(password.startsWith("${secret:"),
+                "sin expandir, JSch autentica con la cadena literal y el banco devuelve 'Auth fail'");
+        assertEquals("bank-sink-secret", password, "debe traer el valor real del vault");
+        assertEquals("sftp-bank", resuelto.get("host"), "lo no-secreto no se toca");
+    }
+
+    @Test
+    void resolveConnectionSecretsToleraNull() {
+        assertNull(resolver("SFTP", "OUTPUT", SFTP_SOURCE_JSON).resolveConnectionSecrets(null));
+    }
+
+    /** Como {@link #resolver}, pero con un vault simulado que si devuelve valor para la ref del banco. */
+    private Mt101SftpSinkConnectionResolver resolverConVault(String type, String direction, String sourceJson) {
+        var sinkService = new SinkDefinitionResolver() {
+            @Override
+            public SinkDefinition resolve(Long id) {
+                return new SinkDefinition(id, "bank-sink", type, sourceJson, direction);
+            }
+        };
+        return new Mt101SftpSinkConnectionResolver(sinkService, new TestConfigurationMapper(
+                reference -> "tasks/sftp/bank/password".equals(reference) ? "bank-sink-secret" : null));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> mapOf(Object raw) {
+        return (Map<String, Object>) raw;
+    }
 }

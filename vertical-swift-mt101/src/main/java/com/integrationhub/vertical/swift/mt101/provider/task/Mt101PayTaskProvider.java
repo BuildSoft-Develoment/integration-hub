@@ -194,10 +194,17 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // salta esto (materializa el spec CONGELADO en preparePayIntents): re-resolver aqui podria mover el destino o
         // fallar si la fuente fue borrada tras el pago -> romperia el invariante "el correctivo usa el destino congelado".
         // (final para poder capturarse en las lambdas de forEachPage/forEachRoutedPage.)
+        // El merge del sink copia host/username/password/passphrase TAL CUAL desde /sources con toMapUnresolved
+        // (a proposito: el spec persistido nunca debe llevar secretos en claro). Pero ese bloque se inyecta DESPUES
+        // de que el motor resolviera la configuration de la task, asi que escapaba a toda resolucion y el
+        // ${secret:...} llegaba literal a session.setPassword() -> "Auth fail for methods 'publickey,password,
+        // keyboard-interactive'" contra el banco. Se resuelve AQUI, en memoria y justo antes de despachar, con el
+        // mismo mecanismo que ya usa el correctivo al materializar su plan (correctiveSecretResolver).
         final Map<String, Object> configuration =
                 (sinkConnectionResolver != null
                         && stringValue(fragmentSource.get("correctivePayRunId"), null) == null)
-                        ? sinkConnectionResolver.withResolvedSink(rawConfiguration)
+                        ? sinkConnectionResolver.resolveConnectionSecrets(
+                                sinkConnectionResolver.withResolvedSink(rawConfiguration))
                         : rawConfiguration;
 
         var routedPay = Mt101PayRouteResolver.hasRouteTransports(configuration);

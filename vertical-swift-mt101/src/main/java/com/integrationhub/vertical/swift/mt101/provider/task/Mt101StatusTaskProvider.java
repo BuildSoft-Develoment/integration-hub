@@ -741,9 +741,13 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         // ADR-017: la conexion SFTP de cada ruta puede venir de una fuente OUTPUT/BOTH (`routeQuery.<ruta>.
         // sftp.sinkRef`) en vez de inline, para que sea LA MISMA que usa el PAY de ese banco. Sin sinkRef la
         // config vuelve intacta (modo inline). Nullable en constructores de test (sin CDI).
+        // El merge trae las credenciales del sink como refs ${secret:...} intactas y se inyecta DESPUES de que el
+        // motor resolviera la configuration, asi que hay que expandirlas aqui: si no, llegan literales a
+        // session.setPassword() del gateway SFTP y el banco responde "Auth fail". Mismo caso que en MT101_PAY.
         var resolvedConfiguration = sinkConnectionResolver == null
                 ? configuration
-                : sinkConnectionResolver.withResolvedStatusSink(configuration);
+                : sinkConnectionResolver.resolveConnectionSecrets(
+                        sinkConnectionResolver.withResolvedStatusSink(configuration));
         var routeQuery = mapValue(resolvedConfiguration.get("routeQuery"));
         var routeAware = !routeQuery.isEmpty();
         var urlTemplate = routeAware

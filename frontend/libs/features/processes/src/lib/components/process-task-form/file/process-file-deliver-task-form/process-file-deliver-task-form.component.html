@@ -13,7 +13,7 @@
     <div class="task-grid">
     <mat-form-field>
       <mat-label>{{ i18n.t('ui.deliver.sink') }}</mat-label>
-      <mat-select [disabled]="readonly()" [ngModel]="draft().sinkRef" (ngModelChange)="updateDraft({ sinkRef: $event })">
+      <mat-select [disabled]="readonly()" [ngModel]="draft().sinkRef" [compareWith]="sameSink" (ngModelChange)="updateDraft({ sinkRef: sinkRefOf($event) })">
         <mat-option value="">{{ i18n.t('ui.deliver.selectSink') }}</mat-option>
         @for (sink of sinkOptions(); track sink.id) {
           <mat-option [value]="sink.id">{{ sink.id }} - {{ sink.name }}</mat-option>

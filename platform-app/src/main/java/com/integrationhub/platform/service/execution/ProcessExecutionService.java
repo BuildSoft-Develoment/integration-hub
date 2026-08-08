@@ -263,8 +263,11 @@ public class ProcessExecutionService {
                             taskSpan.setAttribute("task.completed.with.errors", true);
                             continue;
                         }
+                        // El output de la tarea viaja tambien al fallar: ahi deja el provider el motivo real
+                        // (MT101_PAY publica en `errors` el lastError por fragmento no despachado). Antes se emitia
+                        // solo el plan y el unico rastro de un pago no entregado era el contador invalidated=N.
                         processExecutionStateService.failTask(processExecutionId, executionToken, taskExecutionId, taskDetails,
-                                auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource));
+                                auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource, taskPayload));
                         processExecutionStateService.failProcess(processExecutionId, executionToken,
                                 "Task " + taskPlan.taskType() + " failed: " + runResult.details());
                         taskSpan.setStatus(StatusCode.ERROR, runResult.details());

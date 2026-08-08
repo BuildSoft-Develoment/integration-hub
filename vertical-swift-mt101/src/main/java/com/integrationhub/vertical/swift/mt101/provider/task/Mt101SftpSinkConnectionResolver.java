@@ -163,6 +163,22 @@ public class Mt101SftpSinkConnectionResolver {
         return merged;
     }
 
+    /**
+     * Expande las refs {@code ${secret:...}}/{@code ${config:...}} del bloque de conexion mergeado.
+     *
+     * <p>El merge las copia INTACTAS a proposito (ver {@code mergedSftpBlock}): el spec persistido del correctivo
+     * nunca debe llevar secretos en claro. Pero ese bloque se inyecta DESPUES de que el motor resolviera la
+     * configuration de la task, asi que escapa a toda resolucion: sin esta llamada el {@code ${secret:...}} llega
+     * literal a {@code session.setPassword()} y el banco responde
+     * {@code Auth fail for methods 'publickey,password,keyboard-interactive'}.
+     *
+     * <p>Lo invoca SOLO el camino EN VIVO (pago normal y status). El correctivo NO debe llamarlo: materializa su
+     * plan congelado con su propio resolver, y resolver aqui rompería el invariante de refs-congeladas de ADR-017.
+     */
+    public Map<String, Object> resolveConnectionSecrets(Map<String, Object> configuration) {
+        return configuration == null ? null : jsonConfigurationMapper.resolveSecretsIn(configuration);
+    }
+
     private static Long longValue(Object raw) {
         if (raw == null || String.valueOf(raw).isBlank()) {
             return null;

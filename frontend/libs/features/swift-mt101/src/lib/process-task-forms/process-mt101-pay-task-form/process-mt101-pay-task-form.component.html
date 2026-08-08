@@ -175,7 +175,8 @@
               <mat-label>{{ i18n.t('mt101Pay.sftp.sink') }}</mat-label>
               <mat-select
                 [ngModel]="draft().sftp.sinkRef"
-                (ngModelChange)="updateSftp({ sinkRef: $event })"
+                (ngModelChange)="updateSftp({ sinkRef: sinkRefOf($event) })"
+                [compareWith]="sameSink"
                 [disabled]="readonly()">
                 <mat-option value="">{{ i18n.t('mt101Pay.sftp.selectSink') }}</mat-option>
                 @for (sink of sinkOptions(); track sink.id) {

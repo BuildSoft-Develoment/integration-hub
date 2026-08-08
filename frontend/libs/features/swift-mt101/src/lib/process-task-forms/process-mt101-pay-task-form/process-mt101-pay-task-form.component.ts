@@ -78,6 +78,17 @@ export class ProcessMt101PayTaskFormComponent {
     return normalized === 'OUTPUT' || normalized === 'BOTH';
   }
 
+  // El draft declara sinkRef como string (se hidrata con String(...) desde configuration_json) pero las
+  // opciones emiten el id NUMERICO de la fuente. Sin comparador propio mat-select usa ===, "7" !== 7: al
+  // recomputarse el draft no reconocia el valor recien elegido y lo revertia a vacio en el mismo ciclo, asi
+  // que el destino del PAY no llegaba a guardarse nunca y la entrega moria en invalidated=1 tras agotar los
+  // reintentos. Se compara y se normaliza como string; el provider ya emite Number(sinkRef) al serializar.
+  readonly sameSink = (a: unknown, b: unknown): boolean => this.sinkRefOf(a) === this.sinkRefOf(b);
+
+  sinkRefOf(value: unknown): string {
+    return value == null ? '' : String(value);
+  }
+
   updateDraft(patch: Partial<Mt101PayTaskDraft>): void {
     const next: Mt101PayTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));

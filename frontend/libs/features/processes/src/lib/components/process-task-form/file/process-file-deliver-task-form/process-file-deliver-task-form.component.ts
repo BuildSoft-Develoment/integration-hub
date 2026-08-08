@@ -53,6 +53,15 @@ export class ProcessFileDeliverTaskFormComponent {
     return normalized === 'OUTPUT' || normalized === 'BOTH';
   }
 
+  // Mismo desajuste que en el form de MT101_PAY: el draft declara sinkRef como string (se hidrata con
+  // String(...) desde configuration_json) y las opciones emiten el id NUMERICO de la fuente. Sin comparador
+  // propio mat-select usa ===, "8" !== 8, y el destino elegido se pinta vacio al recomputarse el draft.
+  readonly sameSink = (a: unknown, b: unknown): boolean => this.sinkRefOf(a) === this.sinkRefOf(b);
+
+  sinkRefOf(value: unknown): string {
+    return value == null ? '' : String(value);
+  }
+
   updateDraft(patch: Partial<FileDeliverTaskDraft>): void {
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, { ...this.draft(), ...patch }));
   }

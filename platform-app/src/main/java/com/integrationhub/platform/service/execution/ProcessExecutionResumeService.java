@@ -319,9 +319,12 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
         // ejecución en RUNNING, así las transiciones guardadas lo aceptan.
         var executionToken = taskExecution.processExecution == null ? null : taskExecution.processExecution.executionToken;
         if (!result.success()) {
+            // El output del resume viaja tambien al fallar: es donde el provider deja el motivo (misma fuga que
+            // se corrigio en ProcessExecutionService al fallar una tarea normal).
             stateService.failTask(processExecutionId, executionToken, taskExecutionId, result.details(), Map.of(
                     "taskType", taskDefinition.taskType,
-                    "resumeToken", token == null ? "" : token));
+                    "resumeToken", token == null ? "" : token,
+                    "outputs", result.outputs() == null ? Map.of() : result.outputs()));
             if (processExecutionId != null) {
                 stateService.failProcess(processExecutionId, executionToken, "Resume returned failure: " + result.details());
             }

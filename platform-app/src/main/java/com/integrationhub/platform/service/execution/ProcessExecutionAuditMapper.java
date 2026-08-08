@@ -191,6 +191,34 @@ public class ProcessExecutionAuditMapper {
         return payload;
     }
 
+    /**
+     * Igual que {@link #buildTaskFailurePayload}, pero conservando el OUTPUT que la tarea alcanzo a producir.
+     *
+     * <p>Sin esto, al fallar se emitia un payload con solo el plan (taskType/triggerSource/executionVariables) y se
+     * DESCARTABA el output, que es justo donde el provider deja el motivo: MT101_PAY publica en {@code errors} la
+     * referencia y el {@code lastError} de cada fragmento no despachado. El resultado era que la unica pista de un
+     * pago no entregado era el contador {@code invalidated=N}, indiagnosticable a posteriori. Las ramas de exito y
+     * de continueOnFailure si conservaban ese output; la de fallo —la que mas lo necesita— no.
+     *
+     * <p>El plan gana ante colision de claves: describe QUE tarea fallo y no debe quedar pisado por el output.
+     */
+    public Map<String, Object> buildTaskFailurePayload(ProcessExecutionStateService.TaskPlan taskPlan,
+                                                        Map<String, String> executionVariables,
+                                                        String triggerSource,
+                                                        Object taskOutput) {
+        var payload = buildTaskFailurePayload(taskPlan, executionVariables, triggerSource);
+        if (taskOutput instanceof Map<?, ?> output) {
+            output.forEach((key, value) -> {
+                if (key != null) {
+                    payload.putIfAbsent(String.valueOf(key), value);
+                }
+            });
+        } else if (taskOutput != null) {
+            payload.putIfAbsent("taskOutput", taskOutput);
+        }
+        return payload;
+    }
+
     public Map<String, Object> buildPipelineFailurePayload(ProcessExecutionStateService.TaskPlan taskPlan,
                                                             StreamingPipelineService.StreamingPipelineException failure,
                                                             Map<String, String> executionVariables,
