@@ -189,6 +189,84 @@ class ProcessExecutionSuspendResumeIT {
                 "ambas tareas deben quedar COMPLETED");
     }
 
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void laReanudacionCorreElPlanQueLaEjecucionTenia_aunqueSeBorreLaTareaMientrasEstaSuspendida()
+            throws Exception {
+        // El plan viaja CONGELADO en el envelope. Antes la reanudacion relei­a la definicion viva y
+        // filtraba por `taskOrder > afterTaskOrder`: desactivar la tarea downstream durante la
+        // suspension (que es exactamente lo que hace ProcessCatalogService.update al guardar) la
+        // borraba del plan, y el proceso cerraba COMPLETED sin ejecutarla y sin avisar.
+        RecordingFollowUpTaskProvider.resetRecording();
+        var processDefinitionId = insertProcessWithTask(
+                SuspendThenCompleteTaskProvider.TASK_TYPE, "suspend-plan-congelado-borrado-it");
+        insertFollowUpTask(processDefinitionId, 2);
+
+        var execution = processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+        assertEquals(ExecutionStatus.SUSPENDED, execution.status);
+
+        // --- alguien edita el proceso mientras la ejecucion espera al banco ---
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("update process_task_definition set active = false "
+                    + "where process_definition_id = " + processDefinitionId + " and task_order = 2");
+        }
+
+        var token = readSingleString(
+                "select resume_token from process_task_execution where resume_token is not null "
+                        + "order by id desc limit 1");
+        var outcome = resumeService.resume(token, Map.of("bankRef", "BANK-FROZEN"));
+
+        assertEquals(1, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
+                "la tarea downstream estaba en el plan de ESTA ejecucion: borrarla despues no puede "
+                        + "quitarla de una ejecucion ya en vuelo");
+        assertEquals(ProcessExecutionResumeService.Outcome.COMPLETED, outcome.outcome(),
+                () -> "la continuacion debe completar el proceso: " + outcome.details());
+        assertEquals("COMPLETED",
+                readSingleString("select status from process_execution order by id desc limit 1"));
+    }
+
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void laReanudacionNoCorreUnaTareaAgregadaDespuesDeSuspender() throws Exception {
+        // La otra direccion del mismo fallo: la ejecucion suspendio sin nada detras, asi que su plan
+        // congelado esta vacio. Antes `countDownstreamTasks` preguntaba a la definicion viva y una
+        // tarea agregada durante la suspension se ejecutaba sobre el resultado de un pago que nunca
+        // la contemplo.
+        RecordingFollowUpTaskProvider.resetRecording();
+        var processDefinitionId = insertProcessWithTask(
+                SuspendThenCompleteTaskProvider.TASK_TYPE, "suspend-plan-congelado-alta-it");
+
+        var execution = processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+        assertEquals(ExecutionStatus.SUSPENDED, execution.status);
+
+        // --- alguien agrega una tarea al proceso mientras la ejecucion espera ---
+        insertFollowUpTask(processDefinitionId, 2);
+
+        var token = readSingleString(
+                "select resume_token from process_task_execution where resume_token is not null "
+                        + "order by id desc limit 1");
+        var outcome = resumeService.resume(token, Map.of("bankRef", "BANK-LATE"));
+
+        assertEquals(0, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
+                "una tarea que no estaba en el plan de esta ejecucion no puede colarse en su reanudacion");
+        assertEquals(ProcessExecutionResumeService.Outcome.COMPLETED, outcome.outcome());
+        assertTrue(outcome.processCompleted(),
+                "sin nada pendiente en SU plan, la ejecucion cierra");
+    }
+
+    private void insertFollowUpTask(Long processDefinitionId, int taskOrder) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                    "insert into process_task_definition "
+                            + "(process_definition_id, task_order, task_type, active, configuration_json) "
+                            + "values (" + processDefinitionId + ", " + taskOrder + ", '"
+                            + RecordingFollowUpTaskProvider.TASK_TYPE
+                            + "', true, '{\"taskRef\":\"task-" + taskOrder + "\",\"executionMode\":\"once\"}')");
+        }
+    }
+
     private Long insertProcessWithSuspendableTask() throws Exception {
         return insertProcessWithTask(SuspendThenCompleteTaskProvider.TASK_TYPE, "suspend-it");
     }

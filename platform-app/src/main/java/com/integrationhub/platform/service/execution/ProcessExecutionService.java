@@ -109,8 +109,8 @@ public class ProcessExecutionService {
     public com.integrationhub.platform.entity.ProcessExecution continueAfterResume(
             Long processExecutionId,
             String executionToken,
-            Long processDefinitionId,
             int afterTaskOrder,
+            List<ProcessExecutionStateService.TaskPlan> remainingTasks,
             java.util.LinkedHashMap<String, Object> taskOutputs,
             Map<String, String> executionVariables,
             String triggerSource) {
@@ -120,11 +120,12 @@ public class ProcessExecutionService {
         processSpan.setAttribute("process.execution.id", processExecutionId);
         processSpan.setAttribute("process.continuation.after-order", afterTaskOrder);
 
-        var plan = processExecutionStateService.loadExecutionPlan(processDefinitionId);
-        var remaining = plan.tasks().stream()
-                .filter(taskPlan -> taskPlan.taskOrder() != null && taskPlan.taskOrder() > afterTaskOrder)
-                .toList();
-        return executeTasks(remaining, processExecutionId, executionToken, normalizedVariables, List.of(),
+        // El plan viene CONGELADO del envelope de suspension, no releido de la definicion. Antes se
+        // hacia `loadExecutionPlan(processDefinitionId)` + filtro por `taskOrder > afterTaskOrder`, y
+        // como el guardado de un proceso reasigna los `taskOrder`, editarlo durante la suspension
+        // cambiaba el conjunto de tareas que reanudaba: podia saltarse una o correr otra que nunca
+        // estuvo en su plan. Con MT101_PAY suspendido esperando al banco, eso mueve dinero.
+        return executeTasks(remainingTasks, processExecutionId, executionToken, normalizedVariables, List.of(),
                 normalizedTriggerSource, processSpan, taskOutputs);
     }
 
@@ -194,9 +195,13 @@ public class ProcessExecutionService {
                                 "resumeToken", token,
                                 "suspendedState", runResult.suspendedState());
                         // M-2.1: capturamos el contexto del pipeline para que el
-                        // resume pueda continuar las tareas downstream.
+                        // resume pueda continuar las tareas downstream. El PLAN restante viaja
+                        // congelado junto al contexto: si alguien edita el proceso mientras esta
+                        // suspendido, la reanudacion debe correr el grafo que esta ejecucion tenia,
+                        // no el que haya entonces.
                         var continuationJson = suspensionContinuation.marshal(
-                                taskOutputs, executionVariables, triggerSource);
+                                taskOutputs, executionVariables, triggerSource,
+                                List.copyOf(tasks.subList(index + 1, tasks.size())));
                         var suspensionExpiry = SuspensionExpiry.expiresAt(runResult.suspendedState());
                         if (runResult.scatterDispatch() != null) {
                             // Opción B: abre el tracker N→1 y encola los N work-items de slice en ESTA

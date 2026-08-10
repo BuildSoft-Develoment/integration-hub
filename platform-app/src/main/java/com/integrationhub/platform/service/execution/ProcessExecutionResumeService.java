@@ -1,6 +1,5 @@
 package com.integrationhub.platform.service.execution;
 
-import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessTaskExecutionRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.TaskProviderRegistry;
@@ -12,6 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -21,11 +21,13 @@ import java.util.Map;
  * <p><b>Continuacion downstream (M-2.1)</b>: tras un resume exitoso con tareas
  * pendientes despues de la suspendida, rehidrata el envelope capturado al
  * suspender ({@code taskOutputs} + variables + trigger), registra los outputs
- * del resume bajo el taskRef de la tarea y continua el pipeline desde
- * {@code taskOrder+1} — fuera de la transaccion del resume, con la misma
- * semantica del loop normal (incluida suspension anidada). Si el envelope no
- * existe (suspensiones pre-V16) o no fue serializable, degrada a
- * {@code COMPLETED_NEEDS_REDRIVE}.</p>
+ * del resume bajo el taskRef de la tarea y continua el pipeline con el
+ * <b>plan congelado</b> que ese envelope trae — fuera de la transaccion del
+ * resume, con la misma semantica del loop normal (incluida suspension anidada).
+ * Si el envelope no existe (suspensiones pre-V16), no fue serializable, o es
+ * anterior al congelado del plan, degrada a {@code COMPLETED_NEEDS_REDRIVE}: sin
+ * el plan de la ejecucion no se adivina releyendo la definicion, que pudo cambiar
+ * mientras estaba suspendida.</p>
  *
  * @trace spec 003-diseno-y-ejecucion-procesos T-017 (M-2 / M-2.1), ADR-009
  * @trace spec 008-mensajeria-pagos RF-019
@@ -35,7 +37,6 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
 
     private final ProcessExecutionStateService stateService;
     private final ProcessTaskExecutionRepository taskExecutionRepository;
-    private final ProcessTaskDefinitionRepository taskDefinitionRepository;
     private final TaskProviderRegistry taskProviderRegistry;
     private final JsonConfigurationMapper configurationMapper;
     private final SuspendedStateMarshaller stateMarshaller;
@@ -48,7 +49,6 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
     public ProcessExecutionResumeService(
             ProcessExecutionStateService stateService,
             ProcessTaskExecutionRepository taskExecutionRepository,
-            ProcessTaskDefinitionRepository taskDefinitionRepository,
             TaskProviderRegistry taskProviderRegistry,
             JsonConfigurationMapper configurationMapper,
             SuspendedStateMarshaller stateMarshaller,
@@ -59,7 +59,6 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
             ProcessExecutionService processExecutionService) {
         this.stateService = stateService;
         this.taskExecutionRepository = taskExecutionRepository;
-        this.taskDefinitionRepository = taskDefinitionRepository;
         this.taskProviderRegistry = taskProviderRegistry;
         this.configurationMapper = configurationMapper;
         this.stateMarshaller = stateMarshaller;
@@ -106,8 +105,8 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
             var execution = processExecutionService.continueAfterResume(
                     continuation.processExecutionId(),
                     executionToken,
-                    continuation.processDefinitionId(),
                     continuation.afterTaskOrder(),
+                    continuation.remainingTasks(),
                     continuation.taskOutputs(),
                     continuation.executionVariables(),
                     continuation.triggerSource());
@@ -176,13 +175,12 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
             throw new IllegalStateException("Suspended task " + taskExecution.id + " has no taskDefinition");
         }
         var processExecution = taskExecution.processExecution;
-        var processDefinition = taskDefinition.processDefinition;
         var configuration = configurationMapper.toMap(taskDefinition.configurationJson);
         var resolvedProcessExecutionId = processExecution == null ? null : processExecution.id;
         var taskExecutionId = taskExecution.id;
 
         stateService.markResumed(taskExecutionId);
-        return finishTerminalResult(taskExecution, taskDefinition, processDefinition,
+        return finishTerminalResult(taskExecution, taskDefinition,
                 resolvedProcessExecutionId, taskExecutionId, configuration, result, taskExecution.resumeToken);
     }
 
@@ -190,8 +188,8 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
     ResumeCompletion resumeTransactional(String token, Map<String, Object> externalEvent) {
         // Repo directo (no via stateService.findActiveSuspension) para que la entity
         // quede attached a la sesion del @Transactional de este metodo. Asi las
-        // relaciones lazy (taskDefinition.processDefinition) se resuelven sin
-        // LazyInitializationException.
+        // relaciones lazy (taskExecution.taskDefinition, .processExecution) se resuelven
+        // sin LazyInitializationException.
         var taskExecution = taskExecutionRepository.findActiveByResumeToken(token);
         if (taskExecution == null) {
             throw new SuspensionNotFoundException(
@@ -203,7 +201,6 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
                     "Suspended task " + taskExecution.id + " has no taskDefinition");
         }
         var processExecution = taskExecution.processExecution;
-        var processDefinition = taskDefinition.processDefinition;
 
         var provider = taskProviderRegistry.resolve(taskDefinition.taskType);
         if (!(provider instanceof SuspendableTaskProvider suspendable)) {
@@ -263,7 +260,7 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
                     new ResumeOutcome(Outcome.RE_SUSPENDED, newToken, false, result.details()));
         }
 
-        return finishTerminalResult(taskExecution, taskDefinition, processDefinition,
+        return finishTerminalResult(taskExecution, taskDefinition,
                 processExecutionId, taskExecutionId, configuration, result, token);
     }
 
@@ -309,7 +306,6 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
     private ResumeCompletion finishTerminalResult(
             com.integrationhub.platform.entity.ProcessTaskExecution taskExecution,
             com.integrationhub.platform.entity.ProcessTaskDefinition taskDefinition,
-            com.integrationhub.platform.entity.ProcessDefinition processDefinition,
             Long processExecutionId,
             Long taskExecutionId,
             Map<String, Object> configuration,
@@ -338,25 +334,28 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
                         "outputs", result.outputs(),
                         "resumeToken", token == null ? "" : token));
 
-        var downstreamCount = processDefinition == null
-                ? 0
-                : taskDefinitionRepository.countDownstreamTasks(processDefinition, taskDefinition.taskOrder);
-        if (downstreamCount == 0) {
+        // M-2.1: rehidratamos el envelope capturado al suspender. El PLAN CONGELADO que trae es la
+        // autoridad sobre que queda por ejecutar — tanto para decidir si el proceso ya termino como
+        // para saber que correr. Antes esto se preguntaba a la definicion VIVA
+        // (`countDownstreamTasks` + filtro por `taskOrder`), asi que una edicion del proceso durante
+        // la suspension cambiaba ambas respuestas: un proceso podia cerrarse como COMPLETED con
+        // tareas pendientes en su propio plan, o reanudar con tareas que nunca estuvieron en el.
+        var envelope = suspensionContinuation.unmarshal(taskExecution.suspendedContinuation);
+        var remainingTasks = envelope == null ? null : envelope.remainingTasks();
+        if (envelope == null || remainingTasks == null || processExecutionId == null
+                || taskDefinition.taskOrder == null) {
+            // Sin plan congelado (envelope ausente, corrupto, o escrito antes de este cambio) NO se
+            // adivina releyendo la definicion: se pide re-drive humano, que es el degrade que ya
+            // existia para un envelope irrecuperable.
+            return ResumeCompletion.terminal(
+                    new ResumeOutcome(Outcome.COMPLETED_NEEDS_REDRIVE, null, false, result.details()));
+        }
+        if (remainingTasks.isEmpty()) {
             if (processExecutionId != null) {
                 stateService.completeProcess(processExecutionId, executionToken, "Process completed after resume");
             }
             return ResumeCompletion.terminal(
                     new ResumeOutcome(Outcome.COMPLETED, null, true, result.details()));
-        }
-
-        // M-2.1: hay tareas downstream. Rehidratamos el envelope capturado al
-        // suspender y registramos los outputs del resume bajo el taskRef de la
-        // tarea, para continuar el pipeline fuera de esta transaccion.
-        var envelope = suspensionContinuation.unmarshal(taskExecution.suspendedContinuation);
-        if (envelope == null || processExecutionId == null || processDefinition == null
-                || taskDefinition.taskOrder == null) {
-            return ResumeCompletion.terminal(
-                    new ResumeOutcome(Outcome.COMPLETED_NEEDS_REDRIVE, null, false, result.details()));
         }
         var taskOutputs = envelope.taskOutputs();
         if (result.outputs() != null && !result.outputs().isEmpty()) {
@@ -367,8 +366,8 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
                 new ResumeOutcome(Outcome.COMPLETED, null, false, result.details()),
                 new ContinuationRequest(
                         processExecutionId,
-                        processDefinition.id,
                         taskDefinition.taskOrder,
+                        remainingTasks,
                         taskOutputs,
                         envelope.executionVariables(),
                         envelope.triggerSource()));
@@ -410,10 +409,17 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
         }
     }
 
-    /** Datos planos (sin entities) para continuar el pipeline fuera de la transaccion. */
+    /**
+     * Datos planos (sin entities) para continuar el pipeline fuera de la transaccion.
+     *
+     * <p>Lleva el plan CONGELADO en vez del {@code processDefinitionId} con el que antes se releia la
+     * definicion: quien reanuda ya no necesita volver a preguntar por el grafo, y por eso no puede
+     * recibir uno distinto del que la ejecucion tenia. {@code afterTaskOrder} queda solo como dato de
+     * traza.</p>
+     */
     record ContinuationRequest(Long processExecutionId,
-                               Long processDefinitionId,
                                int afterTaskOrder,
+                               List<ProcessExecutionStateService.TaskPlan> remainingTasks,
                                java.util.LinkedHashMap<String, Object> taskOutputs,
                                Map<String, String> executionVariables,
                                String triggerSource) {

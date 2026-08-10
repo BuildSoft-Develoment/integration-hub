@@ -4,6 +4,7 @@ package com.integrationhub.platform.service;
 import com.integrationhub.platform.api.response.branding.BrandingResponse;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
 import com.integrationhub.platform.service.execution.async.AsyncPageWorkItem;
 import com.integrationhub.platform.service.execution.async.AsyncSliceWorkItem;
 import com.integrationhub.platform.service.execution.async.QueuedProcessExecutionPayload;
@@ -41,6 +42,11 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
         // audit.fail-business-on-error=false hace que esta rotura sea SILENCIOSA en nativo.
         AuditEnvelope.class,
         AuditLevel.class,
+        // Plan congelado dentro del envelope de continuacion (SuspensionContinuation): el resume
+        // reanuda desde el grafo que la ejecucion tenia, y ese grafo se (de)serializa a mano por
+        // ObjectMapper. Sin registrar, en nativo la suspension escribiria `null` y CADA resume con
+        // tareas downstream degradaria a COMPLETED_NEEDS_REDRIVE.
+        ProcessExecutionStateService.TaskPlan.class,
         // Backbone async (AsyncTaskMessageCodec / AsyncTaskConsumer)
         AsyncTaskEnvelope.class,
         AsyncSliceWorkItem.class,
