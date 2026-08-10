@@ -5,20 +5,48 @@
  * Punto de entrada del agente a una tarea. Hace en UNA llamada todo lo que la
  * Capa 1 (execution discipline) requiere antes de tocar codigo:
  *
- *   1. Crea entrada en ai_task_runs (status=in_progress, run_uuid generado).
- *   2. Crea/reusa git worktree en worktrees/<slug>-<task>/.
- *   3. Corre baseline `npm run check:all` en el worktree (debe EXIT 0 antes de empezar).
- *   4. Genera context pack: .agent/context-pack/<slug>-<task>.md con:
+ * Precondiciones (se validan ANTES de la accion 1; todas abortan con exit 2 sin crear
+ * worktree, rama, entry en ai_task_runs ni context pack):
+ *   - existe ai/memory/framework-agent.db
+ *   - el run ACTIVO mas reciente de esa <feature>/<T-NNN> no es de OTRO agente
+ *   - existe specs/<slug>/spec-tareas.md y contiene la fila del T-NNN
+ *
+ *   1. Crea/reusa git worktree en worktrees/<slug>-<t-nnn>/ (rama agent/<slug>/<t-nnn>).
+ *      --task se pasa en MAYUSCULAS (T-001: el match contra spec-tareas.md es
+ *      case-sensitive), pero worktree, rama y context pack bajan la tarea a minusculas.
+ *   2. Crea/reusa entrada en ai_task_runs: si ya hay un run activo (in_progress o
+ *      implementer_done) del MISMO agente, reusa su run_uuid y deja su status
+ *      intacto (no lo devuelve a in_progress); si no, INSERT con run_uuid nuevo
+ *      y status=in_progress.
+ *   3. Genera context pack: .agent/context-pack/<slug>-<task>.md con:
  *      - RF de spec-funcional
- *      - touch_policy de la fase activa
  *      - Fila T-NNN completa de spec-tareas.md
  *      - Bloque correspondiente de tdd-evidence.md
- *      - Protocolo aplicable (de agent:protocol)
+ *      - Protocolo aplicable (de agent:protocol) + sus pasos OBLIGATORIOS
+ *      - Lectura obligatoria (CONSTITUTION / AGENTS / AGENT_RUNTIME + el protocolo)
+ *      - Seccion "## Trabajo" con los comandos exactos de agent:review y agent:finish
+ *      - (opcional) aviso de update del framework, solo si AIF_PLUGIN_REGISTRY esta
+ *        definido y plugin-check-updates reporta uno. Nunca auto-instala.
+ *      NO incluye el touch_policy resuelto de la fase (allowed_paths /
+ *      forbidden_paths): solo la advertencia heredada del protocolo, que lo
+ *      referencia sin entregarlo. Si lo necesitas resuelto: `npm run roadmap:next`.
+ *   4. Corre `npm run check:all` como baseline INFORMATIVO, al final y con
+ *      cwd = la raiz resuelta (--root o el cwd del proceso), nunca el worktree
+ *      recien creado. Si falla solo avisa: el script igual termina en exit 0.
+ *      Se omite con --skip-baseline.
+ *
+ * NO toma el lock de feature: eso es `npm run roadmap:claim`, que escribe
+ * ai/locks/<feature>.lock.json. AGENT_BOARD.md lo regenera `roadmap:sync`.
  *
  * Anti-patterns que bloquea:
- *   - Crear worktree concurrente con la misma T-NNN (race con otro agente)
- *   - Baseline check:all en rojo (NO se trabaja sobre arbol roto)
- *   - Implementer = reviewer (rompe Principio 1 — esto se evita en agent:review)
+ *   - Arrancar la misma <feature>/<T-NNN> cuando el run ACTIVO mas reciente
+ *     (status in_progress|implementer_done, ordenado por started_at) es de OTRO
+ *     agente: exit 2. El filtro de status precede al ORDER BY, asi que se mira el
+ *     mas reciente ENTRE LOS ACTIVOS, no el run mas reciente de la tarea. El mismo
+ *     agente reusa su run sin error.
+ *
+ * Anti-pattern relacionado que NO bloquea aqui:
+ *   - Implementer = reviewer (Principio 1) — lo bloquea agent:review con exit 3.
  *
  * Uso:
  *   node scripts/agent-start.mjs --feature 002-mi --task T-001 --agent codex
@@ -41,17 +69,28 @@ const root = resolve(args.root || ".");
 const dryRun = !!args["dry-run"];
 
 if (args.help || !args.feature || !args.task || !args.agent) {
-  console.log(`agent-start (v12.130) — inicio orquestado de tarea T-NNN.
+  console.log(`agent-start (v12.137) — inicio orquestado de tarea T-NNN.
 
 Uso:
   node scripts/agent-start.mjs --feature <slug> --task <T-NNN> --agent <implementer>
   node scripts/agent-start.mjs --feature <slug> --task <T-NNN> --agent <implementer> --dry-run
 
-Acciones:
-  1. Reserva run_uuid en ai_task_runs (status=in_progress).
-  2. Crea worktree aislado worktrees/<slug>-<task>/ (si no existe).
-  3. Baseline: npm run check:all en el worktree → debe EXIT 0.
-  4. Emite .agent/context-pack/<slug>-<task>.md con RF + touch_policy + fila T + tdd-evidence + protocolo aplicable.
+Opcionales:
+  --root <ruta>     raiz sobre la que se resuelve TODO: worktrees/, ai/memory/framework-agent.db,
+                    specs/<slug>/, .agent/context-pack/, scripts/agent-protocol.mjs, el cwd de
+                    'git worktree add' y el del baseline (default: cwd del proceso). La raiz DEBE
+                    contener scripts/agent-protocol.mjs: si falta, el script muere al parsear su
+                    salida vacia, ya creados el worktree y la entry en ai_task_runs.
+  --skip-baseline   omite la accion 4
+  --dry-run         reporta las acciones sin tocar estado
+
+Acciones (en este orden):
+  1. Crea worktree aislado worktrees/<slug>-<task>/ (si no existe). --task va en MAYUSCULAS (T-001); worktree, rama y pack usan minusculas (t-001).
+  2. Reserva run_uuid en ai_task_runs (INSERT con status=in_progress), o reusa el run activo si es del mismo agente (conserva su status, que puede ser implementer_done).
+  3. Emite .agent/context-pack/<slug>-<task>.md con RF + fila T + tdd-evidence + protocolo aplicable + pasos obligatorios. NO incluye el touch_policy resuelto de la fase: para eso, npm run roadmap:next.
+  4. Baseline informativo: npm run check:all sobre la raiz resuelta. Si falla solo avisa (exit 0). Omitible con --skip-baseline.
+
+No toma el lock de feature: para eso, npm run roadmap:claim -- --feature <slug> --agent <nombre>.
 
 Despues:
   - Trabaja SOLO en el worktree.
@@ -102,14 +141,22 @@ if (!rowMatch) {
 if (dryRun) {
   const branchName = `agent/${feature}/${task.toLowerCase()}`;
   const previewWorktree = join(root, "worktrees", `${feature}-${task.toLowerCase()}`);
+  const shortWt = previewWorktree.replace(root, "<root>");
+  const wtReuse = existsSync(previewWorktree);
   console.log("");
   console.log(`(DRY-RUN) NO se crea worktree, ni context pack, ni entry en SQLite. Acciones que se realizarian:`);
-  console.log(`  1. git worktree add -b ${branchName} ${previewWorktree.replace(root, "<root>")}`);
-  console.log(`  2. INSERT INTO ai_task_runs (run_uuid=<nuevo-uuid>, feature=${feature}, task_id=${task}, agent=${agent}, status='in_progress', worktree_path=${previewWorktree.replace(root, "<root>")})`);
+  console.log(wtReuse
+    ? `  1. (reuso) worktree existente ${shortWt} — no se corre git worktree add`
+    : `  1. git worktree add -b ${branchName} ${shortWt}`);
+  console.log(active
+    ? `  2. (reuso) run_uuid=${active.run_uuid} (status=${active.status}) — sin INSERT en ai_task_runs`
+    : `  2. INSERT INTO ai_task_runs (run_uuid=<nuevo-uuid>, feature=${feature}, task_id=${task}, agent=${agent}, status='in_progress', worktree_path=${shortWt})`);
   console.log(`  3. Escribir .agent/context-pack/${feature}-${task.toLowerCase()}.md`);
-  console.log(`  4. Correr 'npm run check:all' en el worktree (baseline)`);
+  console.log(args["skip-baseline"]
+    ? `  4. (omitida por --skip-baseline) baseline 'npm run check:all'`
+    : `  4. Correr 'npm run check:all' sobre la raiz resuelta ${root} — baseline informativo; si falla solo avisa`);
   console.log("");
-  console.log(`Sin --dry-run las 4 acciones se ejecutan en orden. Aborto (estado sin tocar).`);
+  console.log(`Sin --dry-run estas acciones se ejecutan en ese orden (la 4 se omite con --skip-baseline). Aborto (estado sin tocar).`);
   db.close();
   process.exit(0);
 }
@@ -153,7 +200,34 @@ const evid = existsSync(evidPath) ? readFileSync(evidPath, "utf8") : "(tdd-evide
 
 // Protocolo aplicable via agent:protocol (lo invocamos como child).
 const protoRes = spawnSync(process.execPath, [join(root, "scripts", "agent-protocol.mjs"), "--task", `ejecutar tarea ${task} del feature ${feature}`, "--json"], { cwd: root });
-const protoJson = protoRes.stdout ? JSON.parse(protoRes.stdout.toString()) : { protocol: "subagent-execution", reason: "default" };
+// v12.140: el guard anterior era `protoRes.stdout ? JSON.parse(...) : fallback`. Un Buffer
+// vacio es truthy, asi que con salida vacia (agent-protocol.mjs ausente bajo --root, o
+// caido) entraba igual a JSON.parse("") y moria con SyntaxError SIN capturar — ya creados
+// el worktree y la entry en ai_task_runs. El fallback era inalcanzable.
+const protoOut = protoRes.stdout ? protoRes.stdout.toString().trim() : "";
+// El fallback debe traer TODOS los campos que consume la plantilla del context pack
+// (protocol, reason, secondary_protocols, documentation, next_steps). Si no, el pack
+// degradado sale con "Documentacion: undefined" y sin pasos obligatorios.
+let protoJson = {
+  protocol: "subagent-execution",
+  reason: "default (agent-protocol no devolvio JSON)",
+  secondary_protocols: [],
+  documentation: `ai/protocols/subagent-execution.md`,
+  next_steps: [
+    "Lee ai/protocols/subagent-execution.md antes de tocar codigo.",
+    "Trabaja SOLO dentro del worktree.",
+    "NO toques archivos fuera del touch_policy de la fase (resuelvelo con 'npm run roadmap:next').",
+  ],
+};
+if (protoOut) {
+  try {
+    protoJson = JSON.parse(protoOut);
+  } catch {
+    console.error(`⚠ agent-protocol devolvio salida no-JSON; se usa el protocolo por defecto.`);
+  }
+} else {
+  console.error(`⚠ agent-protocol no devolvio salida (¿existe scripts/agent-protocol.mjs bajo --root?); se usa el protocolo por defecto.`);
+}
 
 // v12.137: chequeo opcional de updates del framework via plugin-check-updates.
 // Solo si AIF_PLUGIN_REGISTRY esta definido y el script existe en este proyecto.
@@ -177,7 +251,7 @@ if (process.env.AIF_PLUGIN_REGISTRY && existsSync(checkUpdScript)) {
 
 const ctxBody = `# Context pack — ${feature} / ${task}
 
-> Generado por \`agent:start\` (v12.123) para el agente \`${agent}\`.
+> Generado por \`agent:start\` (v12.137) para el agente \`${agent}\`.
 > run_uuid: \`${runUuid}\` | worktree: \`${worktreePath.replace(root, "<root>")}\`
 
 ## Protocolo aplicable
@@ -217,8 +291,11 @@ console.log(`✓ context pack: ${ctxPath.replace(root, "<root>")}`);
 // Baseline opcional — el flag --skip-baseline lo desactiva (util para no romper el flow
 // en proyectos donde check:all aun no esta 100% verde).
 if (!args["skip-baseline"]) {
-  console.log(`\nBaseline (check:all en repo principal — los proyectos sin worktree heredan):`);
-  const base = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "check:all"], { cwd: root, stdio: "inherit" });
+  console.log(`\nBaseline informativo (check:all sobre la raiz resuelta ${root}, no el worktree):`);
+  // shell:true — en Windows npm es un .cmd y desde Node 20.12 spawnSync lo rechaza con
+  // EINVAL: sin esto r.status era null y el baseline avisaba de fallo SIEMPRE, incluso
+  // con el repo en verde.
+  const base = spawnSync("npm run check:all", { cwd: root, stdio: "inherit", shell: true });
   if (base.status !== 0) {
     console.error(`\n⚠ Baseline check:all fallo. Considera --skip-baseline si esto es esperado.`);
   } else {

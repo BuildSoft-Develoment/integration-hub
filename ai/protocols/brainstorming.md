@@ -44,7 +44,11 @@ No aplica para: bugfix puntual sin cambio de comportamiento, refactor mecanico, 
 
 ```bash
 npm run project:clarify -- --feature <slug> --strict
-# debe devolver 0 preguntas blocker
+# con --strict: EXIT 2 si queda CUALQUIER pregunta pendiente (blocker, major o minor).
+#
+# OJO — EXIT 0 no significa "spec clara": tambien sale 0 cuando specs/<slug>/ o
+# spec-funcional.md NO existen todavia, es decir justo antes de escribir nada.
+# Confirma en la salida que efectivamente analizo la spec.
 ```
 
-Si quedan preguntas blocker, el protocolo brainstorming NO termino.
+Si queda cualquier pregunta pendiente —de la severidad que sea— el protocolo brainstorming NO termino.

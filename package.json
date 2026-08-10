@@ -43,7 +43,7 @@
     "check:test-documented": "node ci/scripts/check-test-documented.mjs",
     "check:runbook-documented": "node ci/scripts/check-runbook-documented.mjs",
     "check:evidence-exists": "node ci/scripts/check-evidence-exists.mjs",
-    "check:gates-mentioned": "node ci/scripts/check-gates-mentioned.mjs",
+    "check:gates-mentioned": "node ci/scripts/check-gates-mentioned.mjs --require-origin feature",
     "check:status-coherence": "node ci/scripts/check-status-coherence.mjs",
     "check:orphan-evidence": "node ci/scripts/check-orphan-evidence.mjs",
     "check:prototype-diversity": "node ci/scripts/check-prototype-diversity.mjs",

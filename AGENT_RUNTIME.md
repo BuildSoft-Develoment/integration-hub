@@ -1,7 +1,7 @@
 # AGENT_RUNTIME.md — disciplina de ejecucion del agente
 
 > **Que es esto.** El framework AI-first empresarial tiene 3 capas ortogonales:
-> 1. **Capa 2 — Governance del proyecto** (`AGENTS.md`, `CONSTITUTION.md`, `ROADMAP_STATE.json`, memoria SQLite, gates, 9 fases, 41 validadores). Responde **QUE es el proyecto y donde esta**.
+> 1. **Capa 2 — Governance del proyecto** (`AGENTS.md`, `CONSTITUTION.md`, `ROADMAP_STATE.json`, memoria SQLite, gates, 9 fases, 48 validadores encadenados por `check:all`). Responde **QUE es el proyecto y donde esta**.
 > 2. **Capa 3 — Lifecycle compat** (`specs/<slug>/.specify/`). Responde **como se mapea a Spec Kit**.
 > 3. **Capa 1 — Execution discipline** (este archivo + `ai/protocols/`). Responde **COMO debe comportarse el agente mientras trabaja**.
 >
@@ -29,8 +29,8 @@ Cada uno vive en `ai/protocols/<nombre>.md`. Su estructura es identica y validab
 | [planning](ai/protocols/planning.md) | toda tarea no-trivial — escribir `spec-tareas.md` ejecutable antes de tocar codigo |
 | [tdd](ai/protocols/tdd.md) | fase 5 (construccion) — test fallido ANTES del codigo de produccion (RED → GREEN → REFACTOR) |
 | [subagent-execution](ai/protocols/subagent-execution.md) | dispatch de tareas T-NNN a subagentes en worktrees aislados |
-| [code-review](ai/protocols/code-review.md) | tras cada T-NNN — 2 stages (spec-compliance + code-quality) por subagentes diferentes |
-| [finishing-branch](ai/protocols/finishing-branch.md) | cierre de feature — verify + reviews + traceability update + opciones humanas (PR/merge/keep/discard) |
+| [code-review](ai/protocols/code-review.md) | tras cada T-NNN — 2 stages secuenciales (spec-compliance, luego code-quality) con reviewer != implementer; el Stage 2 puede reusar el reviewer del Stage 1 |
+| [finishing-branch](ai/protocols/finishing-branch.md) | cierre de feature — verify + reviews + opciones humanas (PR/merge/keep/discard) |
 
 ## Skills activables (complementan los protocolos)
 
@@ -38,32 +38,52 @@ Las skills viven en `ai/skills/<nombre>.skill.md`. **Los protocolos son OBLIGATO
 
 Cuando una skill aplica al >50% (heuristica del agente al leer la descripcion), debe invocarla. Las skills clave de la capa 1 son:
 
+- `brainstorming.skill.md` — refinar diseño en Socratic (consumida por el protocolo `brainstorming`)
 - `writing-plans.skill.md` — escribir planes ejecutables (consumida por el protocolo `planning`)
 - `test-driven-development.skill.md` — disciplina TDD (consumida por el protocolo `tdd`)
 - `verification-before-completion.skill.md` — anti-auto-aprobacion empirica
-- `systematic-debugging.skill.md` — 4 fases root cause
+- `debugging-workflow.skill.md` — reproducir el sintoma y reducir el espacio de causa
 - `using-git-worktrees.skill.md` — aislamiento por tarea
-- `finishing-a-development-branch.skill.md` — cierre estructurado
+- `finishing-development-branch.skill.md` — cierre estructurado
 
 ## Flujo canonico del agente (resumen visual)
 
 ```text
-1. Recibe tarea / lock
+1. Recibe tarea
    ↓
 2. npm run agent:protocol -- --task "..."
    ↓
 3. Aplica protocolo(s) aplicable(s)
    ↓
-4. npm run agent:start --feature X --agent <yo>
-   (crea worktree + claim + baseline + context pack)
+4. (opcional, multiagente) npm run roadmap:claim -- --feature X --agent <yo>
+   (toma el lock de feature en ai/locks/<feature>.lock.json, TTL 240 min)
    ↓
-5. Ejecuta T-NNN segun protocolo
+5. npm run agent:start -- --feature X --task T-NNN --agent <yo>
+   (worktree + entry en ai_task_runs + context pack + baseline informativo)
    ↓
-6. (entre tareas) protocolo code-review (2 stages, subagentes diferentes)
+6. Ejecuta T-NNN segun protocolo
    ↓
-7. npm run agent:finish --feature X
-   (verify + reviews + traceability update + opciones humanas)
+7. (entre tareas) protocolo code-review (2 stages, reviewer != implementer)
+   ↓
+8. npm run agent:finish -- --feature X
+   (verify + reviews + opciones humanas; no escribe archivos)
+   ↓
+9. (si tomaste lock en el paso 4) npm run roadmap:release -- --feature X --agent <yo>
+   (agent:finish NO libera locks en ninguna opcion)
 ```
+
+> **agent:start NO toma el lock de feature.** Crea el worktree, registra el run en
+> `ai_task_runs` y emite el context pack; el `check:all` final es un baseline
+> informativo sobre la raiz del repo (si falla solo avisa, y se omite con
+> `--skip-baseline`). El lock lo toma `roadmap:claim`, y `AGENT_BOARD.md` es un
+> tablero de solo lectura que regenera `roadmap:sync` a partir de esos archivos
+> de lock (gitignored: se crean en runtime, no se versionan).
+>
+> **`agent:finish` no escribe archivos.** Su cabecera lo declara explicitamente: importa
+> `writeFileSync` y nunca lo llama. Verifica que todos los T-NNN no-pending esten
+> `approved` (si no, exit 3), corre los 4 checks y `roadmap:audit` —cuyos findings solo
+> avisan— y pregunta al humano entre PR / merge / keep / descartar. Mantener
+> `traceability.md` al dia sigue siendo trabajo del implementer en fase 5.
 
 ## Anti-patterns que esta capa bloquea
 
@@ -72,17 +92,17 @@ Cuando una skill aplica al >50% (heuristica del agente al leer la descripcion), 
 - **Self-approval** → bloqueado por `check:task-reviews` (reviewer != implementer).
 - **Plan con placeholders/paths inventados** → bloqueado por `check:tasks-executable`.
 - **Cerrar tarea sin verificar empiricamente** → skill `verification-before-completion`.
-- **Worktrees huerfanos o multi-agent races** → `agent:start` valida estado y bloquea concurrencia.
+- **Race sobre el mismo T-NNN** → `agent:start` aborta con exit 2 si ya hay un run activo (`in_progress` / `implementer_done`) de OTRO agente para ese feature+task. NO cubre worktrees huerfanos (si el directorio existe lo reusa sin validar) ni races a nivel de feature: eso lo da `roadmap:claim` con su lock por TTL.
 
 ## Como interactua con la Capa 2 (governance)
 
 | Capa 2 declara | Capa 1 ejecuta |
 |---|---|
-| Fase activa + touch_policy | `agent:start` lee y agrega al context pack |
-| Gate aplicable (gate-spdd-approved, etc.) | `agent:finish` verifica firma humana antes de cerrar |
+| Fase activa + touch_policy | `roadmap:next` lo resuelve e interpola al slug. **No** viaja en el context pack de `agent:start` |
+| Gate aplicable (gate-spdd-approved, etc.) | **Capa 1 no lo verifica.** `agent:finish` no lee gates ni firmas; solo corre `roadmap:audit`, que detecta `gate_self_approved` pero cuyo fallo **no aborta** (avisa y sigue). Lo bloqueante vive en `check:project` |
 | `spec-funcional.md` + `spec-tecnica.md` | Protocolo `planning` los consume para generar `spec-tareas.md` ejecutable |
-| `traceability.md` | `agent:finish` lo actualiza con codigo/test reales |
-| `check:project` (41 validators) | `agent:finish` lo corre antes de opciones humanas |
+| `traceability.md` | Lo actualiza el implementer durante la fase 5. **`agent:finish` NO lo escribe** (ver nota abajo) |
+| `check:project` (39 validadores encadenados) | `agent:finish` lo corre antes de opciones humanas |
 
 > **Tools write del MCP y gates humanos (Principio 1).** Las 3 tools de escritura del MCP
 > (`aif_agent_start`, `aif_agent_review`, `aif_agent_finish`) exigen `confirm:true` y **ninguna

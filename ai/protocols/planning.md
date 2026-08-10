@@ -19,7 +19,7 @@ No aplica para: cambios triviales de 1 linea, fixes de typo, edits de auto-zones
    - Granularidad 2-5 minutos por T.
 4. Para cada T tipo=impl: debe acompañarse de un T tipo=test que la precede (TDD).
 5. Declara dependencias entre T (`depende_de`) y paralelizables (`paralelizable=si`).
-6. Verifica con `npm run check:tasks-executable --feature <slug>` (debe EXIT 0).
+6. Verifica con `npm run check:tasks-executable -- --feature <slug>` (debe EXIT 0).
 
 ## Output esperado
 

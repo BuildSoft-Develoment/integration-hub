@@ -67,7 +67,10 @@ if (!sub || sub === "help" || sub === "--help" || sub === "-h") {
 
 if (sub === "check") {
   // Atajo: corre `npm run check:all` en el cwd actual.
-  const r = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "check:all"], { stdio: "inherit" });
+  // shell:true — en Windows npm es un .cmd y desde Node 20.12 spawnSync lo rechaza con
+  // EINVAL (mitigacion de CVE-2024-27980): sin esto r.status era null y 'aif check'
+  // salia SIEMPRE con 1 sin llegar a correr los validadores.
+  const r = spawnSync("npm run check:all", { stdio: "inherit", shell: true });
   process.exit(r.status ?? 1);
 }
 

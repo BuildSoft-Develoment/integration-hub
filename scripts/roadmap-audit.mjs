@@ -28,6 +28,11 @@
  *   npm run roadmap:audit -- --base origin/main     # audita un rango de commits
  *   npm run roadmap:audit -- --format text          # salida legible
  *
+ * La fase se resuelve de --phase, de roadmap:next, de los gates de la feature o, si no hay tarea
+ * activa, de una constante de partida. El origen viaja en `phase_source`, y cuando es la constante
+ * las rutas prohibidas NO bloquean: el veredicto dependeria de un supuesto, no de un hecho.
+ * `gate_self_approved` si bloquea siempre — no depende de en que fase estemos.
+ *
  * Exit codes:
  *   0 - sin violaciones (puede haber warnings).
  *   1 - hay violaciones (forbidden_path / gate_self_approved) -> falla.
@@ -51,13 +56,32 @@ let feature = args.feature || null;
 const NON_HUMAN = /\b(agente|agent|ia\b|a\.?i\.?|claude|gpt|codex|copilot|gemini|cursor|opencode|bot|automatico|automatic|sistema|script)\b/i;
 
 // 1. Resolver fase + feature objetivo.
+//
+// De donde sale la fase importa tanto como la fase: "2" porque roadmap:next prioriza una tarea en
+// fase 2 y "2" porque no hay ninguna tarea y esa es la constante de partida son cosas distintas.
+// El origen lo declara SIEMPRE quien calcula el valor, nunca la rama del if: etiquetarlo por rama
+// hacia que un fallo de roadmap:next (script ausente, exit != 0, JSON ilegible) devolviera la
+// constante disfrazada de "roadmap:next" — y asi SI bloqueaba.
+let phaseSource;
 let phase = typeof args.phase !== "undefined" ? Number(args.phase) : null;
-if (feature == null || phase == null) {
+if (phase != null && !Number.isNaN(phase)) {
+  phaseSource = "explicita";
+} else {
   const next = getRoadmapNext();
   if (feature == null) feature = next?.feature || null;
-  if (phase == null) phase = typeof next?.phase === "number" ? next.phase : inferPhaseForFeature(feature);
+  if (typeof next?.phase === "number" && next.phase >= 0) {
+    phase = next.phase;
+    phaseSource = "roadmap:next";
+  } else {
+    // roadmap:next devuelve -1 por DOS motivos distintos: no queda nada pendiente, o estan todas
+    // las features tomadas por un lock. El segundo es el estado NORMAL mientras se trabaja
+    // (roadmap:claim lo pone), y tratarlo como "no hay tarea" apagaba la politica de rutas justo
+    // durante la fase de construccion: una migracion prohibida salia como aviso y exit 0.
+    if (feature == null) feature = featureDeLock();
+    ({ phase, source: phaseSource } = inferPhaseForFeature(feature));
+  }
 }
-if (phase == null || phase < 0) phase = inferPhaseForFeature(feature);
+const faseConocida = phaseSource !== "por-defecto";
 
 // 2. touch_policy de la fase (con slug interpolado).
 const touch = getTouchPolicy(phase, feature || undefined, root);
@@ -73,7 +97,12 @@ for (const file of changed) {
   const inForbidden = matchAny(file, touch.forbidden_paths);
   const inAllowed = matchAny(file, touch.allowed_paths);
   if (inForbidden) {
-    violations.push({ type: "forbidden_path_modified", path: file, detail: `archivo en touch_policy.forbidden_paths para fase ${phase}` });
+    // Si la fase no se determino, esto NO bloquea. "Tocaste algo que la fase 2 prohibe" no
+    // significa nada cuando nadie ha dicho que estemos en la fase 2: el veredicto saldria de una
+    // constante, y de hecho cambia — el mismo arbol de trabajo pasa en las fases 5 y 6 y falla en
+    // las otras siete. Un exit 1 tiene que apoyarse en algo que el audit sepa, no en un supuesto.
+    const donde = faseConocida ? violations : warnings;
+    donde.push({ type: "forbidden_path_modified", path: file, detail: `archivo en touch_policy.forbidden_paths para fase ${phase}${faseConocida ? "" : " (fase POR DEFECTO, no determinada: esto NO bloquea — ver el motivo con --format text)"}` });
   } else if (!inAllowed) {
     warnings.push({ type: "outside_touch_policy", path: file, detail: `fuera de allowed_paths de fase ${phase} (revisar si corresponde a esta tarea)` });
   }
@@ -103,6 +132,7 @@ const report = {
   result,
   feature: feature || null,
   phase,
+  phase_source: phaseSource,
   base: base || "working-tree",
   changed_files: changed.length,
   touch_policy: touch,
@@ -127,18 +157,42 @@ function getRoadmapNext() {
   try { return JSON.parse(r.stdout); } catch { return null; }
 }
 
+/**
+ * La feature que este agente esta trabajando, deducida de los locks activos.
+ *
+ * Existe porque `roadmap:next` devuelve -1 cuando TODAS las features estan tomadas, que es el
+ * estado corriente en cuanto alguien hace `roadmap:claim`. Sin esto, el audit se quedaba sin
+ * feature y sin fase justo mientras se construye, que es cuando la politica de rutas mas importa.
+ * Con `--agent` se desempata a favor del lock propio; con un solo lock no hace falta desempatar.
+ */
+function featureDeLock() {
+  const activos = listLocks(root).filter((l) => !l.expired);
+  if (activos.length === 0) return null;
+  if (args.agent) {
+    const mio = activos.find((l) => String(l.agent) === String(args.agent));
+    if (mio) return mio.feature;
+  }
+  return activos.length === 1 ? activos[0].feature : null;
+}
+
+/**
+ * Devuelve { phase, source }. El origen lo decide QUIEN calcula el valor: si ningun gate matchea,
+ * el 2 que sale de aqui es la constante de partida y hay que decirlo, no presentarlo como inferido.
+ */
 function inferPhaseForFeature(slug) {
-  if (!slug) return 2;
+  const PARTIDA = { phase: 2, source: "por-defecto" };
+  if (!slug) return PARTIDA;
   const tracePath = join(root, "specs", slug, "traceability.md");
-  if (!existsSync(tracePath)) return 2;
+  if (!existsSync(tracePath)) return PARTIDA;
   const text = readFileSync(tracePath, "utf8");
   const has = (g) => new RegExp(`\\|\\s*${g}\\s*\\|\\s*approved\\b`, "i").test(text);
-  if (has("gate-operations-ready")) return 8;
-  if (has("gate-deploy-ready")) return 7;
-  if (has("gate-qa-passed")) return 6;
-  if (has("gate-build-ready")) return 5;
-  if (has("gate-sdd-approved")) return 4;
-  return 2;
+  const deGate = (phase) => ({ phase, source: "inferida-de-gates" });
+  if (has("gate-operations-ready")) return deGate(8);
+  if (has("gate-deploy-ready")) return deGate(7);
+  if (has("gate-qa-passed")) return deGate(6);
+  if (has("gate-build-ready")) return deGate(5);
+  if (has("gate-sdd-approved")) return deGate(4);
+  return PARTIDA;
 }
 
 function getChangedFiles(baseRef) {
@@ -201,7 +255,21 @@ function printText(r) {
   console.log(`\nROADMAP AUDIT (v12.63)`);
   console.log(`======================`);
   console.log(`Feature:        ${r.feature || "(transversal)"}`);
-  console.log(`Fase:           ${r.phase}`);
+  console.log(`Fase:           ${r.phase}  [${r.phase_source}]`);
+  if (r.phase_source === "por-defecto") {
+    const tomadas = listLocks(root).filter((l) => !l.expired);
+    console.log(`                ATENCION: la fase no se determino; esta es la de partida, y por eso`);
+    console.log(`                las rutas prohibidas salen como AVISO y no bloquean.`);
+    if (tomadas.length > 1) {
+      console.log(`                Causa: hay ${tomadas.length} features tomadas y no se puede saber cual`);
+      console.log(`                auditas. Desempata con --agent <tu-nombre> o con --feature <slug>.`);
+    } else if (r.feature) {
+      console.log(`                Causa: '${r.feature}' no tiene ningun gate approved todavia.`);
+    } else {
+      console.log(`                Causa: no hay tarea activa ni lock que la senale. Usa --phase N`);
+      console.log(`                o --feature <slug> para auditar contra algo concreto.`);
+    }
+  }
   console.log(`Base:           ${r.base}`);
   console.log(`Archivos tocados: ${r.changed_files}`);
   console.log(`Resultado:      ${r.result === "passed" ? "✓ PASSED" : "✗ FAILED"}`);

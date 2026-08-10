@@ -139,9 +139,14 @@ function runNode(scriptPath, args) {
 }
 
 function runTool(cwd, command, args) {
-  const result = spawnSync(executableName(command), args, { cwd, stdio: "inherit", shell: false });
+  // En Windows npm/npx/mvn/gradle se resuelven a .cmd/.bat y desde Node 20.12 spawnSync
+  // los rechaza con EINVAL (mitigacion de CVE-2024-27980) salvo con shell:true. Sin esto
+  // result.status quedaba en null y TODO smoke check fallaba en Windows, en los 4 stacks.
+  const useShell = process.platform === "win32";
+  const result = spawnSync(executableName(command), args, { cwd, stdio: "inherit", shell: useShell });
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} fallo con codigo ${result.status}`);
+    const detalle = result.error ? ` (${result.error.code})` : "";
+    throw new Error(`${command} ${args.join(" ")} fallo con codigo ${result.status}${detalle}`);
   }
 }
 

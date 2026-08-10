@@ -113,12 +113,12 @@ function renderPrompt(n, agent, focus) {
   lines.push(`Te devolvera el protocolo aplicable. Reglas no negociables:`);
   lines.push(``);
   lines.push(`- **Required protocol** (corre primero): brainstorming | planning | tdd | subagent-execution | code-review | finishing-branch (ver \`ai/protocols/<nombre>.md\`).`);
-  lines.push(`- **Required skills** (activables segun contexto): writing-plans, test-driven-development, verification-before-completion, systematic-debugging, using-git-worktrees, finishing-a-development-branch.`);
-  lines.push(`- **Worktree requirement**: para tareas T-NNN, corre \`npm run agent:start -- --feature <slug> --task <T-NNN> --agent <yo>\` ANTES de tocar codigo (v12.123+). Crea lock + worktree aislado + baseline verde + context pack.`);
+  lines.push(`- **Required skills** (activables segun contexto): brainstorming, writing-plans, test-driven-development, verification-before-completion, debugging-workflow, using-git-worktrees, finishing-development-branch.`);
+  lines.push(`- **Worktree requirement**: para tareas T-NNN, corre \`npm run agent:start -- --feature <slug> --task <T-NNN> --agent <yo>\` ANTES de tocar codigo (v12.123+; los 3 flags son obligatorios). Crea worktree aislado + entry en \`ai_task_runs\` + context pack, y corre \`check:all\` como baseline INFORMATIVO: si sale en rojo solo AVISA y termina en 0. NO toma el lock de feature — eso es \`npm run roadmap:claim\`.`);
   lines.push(`- **TDD requirement**: para T tipo=impl, ESCRIBE el test que falla ANTES del codigo de produccion. Captura RED en \`specs/<slug>/tdd-evidence.md\`. Despues GREEN. No al reves.`);
   lines.push(`- **Plan file**: \`specs/<slug>/spec-tareas.md\` (tabla ejecutable v12.119+) — paths/comandos exactos, no \`<placeholder>\`, granularidad 2-5 min por T.`);
   lines.push(`- **Task granularity**: si una T tarda >5 min, dividela en spec-tareas antes de empezar.`);
-  lines.push(`- **Review policy**: tras cada T en \`implementer_done\`, corre 2 stages — \`agent:review-spec\` + \`agent:review-quality\`. Reviewer DEBE ser distinto del implementer (Principio 1 anti-self-approval).`);
+  lines.push(`- **Review policy**: tras cada T en \`implementer_done\`, corre los 2 stages con \`npm run agent:review -- --task <T-NNN> --feature <slug> --stage spec-compliance --reviewer <otro-agente>\` y luego el mismo comando con \`--stage code-quality\` (o \`--stage both\` en una sola llamada). Reviewer DEBE ser distinto del implementer (Principio 1 anti-self-approval): con el mismo, el script sale con exit 3.`);
   lines.push(`- **Stop conditions**: si CUALQUIER \`check:*\` o validador bloquea (EXIT 1), NO continues. Reporta al humano y pide intervencion.`);
   lines.push(`- **Finish policy**: cuando todos los T del feature esten \`approved\`, corre \`npm run agent:finish -- --feature <slug>\` (v12.123+) — el humano elige PR/merge/keep/discard. No mergees ni borres worktrees sin confirmacion humana.`);
   lines.push(``);

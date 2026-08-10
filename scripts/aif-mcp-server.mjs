@@ -19,7 +19,7 @@
  *   aif_agent_runtime      — devuelve AGENT_RUNTIME.md
  *   aif_roadmap_status     — estado de 9 fases (JSON)
  *   aif_roadmap_next       — siguiente tarea segura + contrato (JSON)
- *   aif_memory_query       — query SQLite via preset o free-text
+ *   aif_memory_query       — query SQLite via preset (18 presets; 4 requieren arg)
  *   aif_list_protocols     — los 6 protocolos canonicos
  *   aif_list_skills        — skills foundacionales (opt foundational_only)
  *   aif_agent_protocol     — selector heuristico de protocolo dado una tarea
@@ -84,7 +84,7 @@ const TOOLS = [
   },
   {
     name: "aif_roadmap_status",
-    description: "Returns the current roadmap state as JSON: status of 9 phases (Iniciacion → Operacion), prototype semaforo per feature, gate runs, agent readiness, phase2to3 granular. Equivalent to `npm run roadmap:status -- --json`.",
+    description: "Returns the current roadmap state as JSON con 7 claves top-level: `project`, `templateVersion`, `phases` (las 9, Iniciacion → Operacion, con status y detalle), `features` (slug, fase, gates declarados en traceability.md, archivos canonicos faltantes), `prototypeStates` (el semaforo de prototipo por feature — NO vive dentro de features[]), `blockers` y `nextAction`. Equivalente a `npm run roadmap:status -- --json`. Nota: `agent_readiness` NO viene aqui — lo produce aif_roadmap_next.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     handler: () => runJsonScript("scripts/roadmap-status.mjs", ["--json"]),
   },
@@ -96,12 +96,19 @@ const TOOLS = [
   },
   {
     name: "aif_memory_query",
-    description: "Query the SQLite memory BD. Provide ONE of: `preset` (rf-implemented | rf-validated | rf-not-implemented | gates-blocked | recent-decisions | recent-sessions) for predefined queries, OR `query` for free-text FTS5 search across docs/specs/decisions.",
+    description: "Query the SQLite memory BD. `preset` es OBLIGATORIO (18 disponibles). Cuatro de ellos exigen ademas `arg`: docs-for, apis-for, by-evidence y decisions-about.",
     inputSchema: {
       type: "object",
       properties: {
-        preset: { type: "string", description: "One of: rf-implemented | rf-validated | rf-not-implemented | gates-blocked | recent-decisions | recent-sessions" },
-        query: { type: "string", description: "Free-text query (alternative to preset)" },
+        preset: {
+          type: "string",
+          enum: ["docs-for", "apis-for", "features-pending-qa", "validated-prototypes", "decisions-pending",
+                 "failed-gates", "rf-without-code", "rf-without-test", "rf-implemented", "rf-validated",
+                 "rf-planned", "rf-not-implemented", "links-drift", "artifacts-pending", "artifacts-documented",
+                 "artifacts-approved", "by-evidence", "decisions-about"],
+          description: "Uno de los 18 presets. Requieren `arg`: docs-for, apis-for, by-evidence, decisions-about",
+        },
+        arg: { type: "string", description: "Argumento del preset (obligatorio para docs-for, apis-for, by-evidence y decisions-about)" },
       },
       additionalProperties: false,
     },
@@ -180,13 +187,13 @@ const TOOLS = [
   },
   {
     name: "aif_check_all",
-    description: "Ejecuta 'npm run check:all' completo (48 validators). Operacion read-only sobre el repo pero costosa (~30s). Devuelve EXIT code + tail del output. Util para confirmar estado verde antes/despues de cambios.",
+    description: "Ejecuta 'npm run check:all' completo (48 validadores encadenados: 9 de check:template + 39 de check:project; la cadena para al primer fallo). Read-only sobre el repo pero costosa (~30s). Devuelve EXIT code + las ultimas lineas de STDOUT unicamente: los validadores imprimen sus blockers por STDERR, que aqui se descarta. Si falla, sirve para saber que validador corto — no por que. Corre el comando en terminal para ver el detalle.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     handler: () => runNpmCheckAll(),
   },
   {
     name: "aif_plugin_check_updates",
-    description: "Read-only. Compara version local del framework (.claude-plugin/manifest.json) contra el registry interno definido en AIF_PLUGIN_REGISTRY (file://, UNC, http://, https://). Devuelve JSON: { local_version, remote_version, status, remote_bundle, remote_sha256, command_to_update }. NO instala — el humano decide. Sin AIF_PLUGIN_REGISTRY definido, devuelve estado 'no-registry-configured'.",
+    description: "Read-only. Compara version local del framework (.claude-plugin/manifest.json) contra el registry interno definido en AIF_PLUGIN_REGISTRY (file://, UNC, http://, https://). Devuelve JSON: { registry, local_version, remote_version, status, remote_bundle, remote_sha256, remote_size_bytes, remote_released_at, template_compatibility }. NO trae `command_to_update`: el comando de instalacion solo se imprime en el modo texto del script. NO instala — el humano decide. Sin AIF_PLUGIN_REGISTRY definido, devuelve estado 'no-registry-configured'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -198,7 +205,7 @@ const TOOLS = [
   },
   {
     name: "aif_agent_start",
-    description: "WRITE. Inicio orquestado de T-NNN: lock + worktree aislado + baseline + context pack + protocolo aplicable. REQUIERE confirm=true. Sin confirm, devuelve el PLAN de lo que haria. Anti-collision: rechaza si hay run activo con OTRO agente para el mismo T.",
+    description: "WRITE. Inicio orquestado de T-NNN: worktree aislado + entry en ai_task_runs + context pack + protocolo aplicable, y al final un baseline informativo (npm run check:all sobre la raiz del repo; si falla solo avisa). NO toma el lock de feature: eso es 'npm run roadmap:claim'. REQUIERE confirm=true. Sin confirm, devuelve el PLAN de lo que haria. Anti-collision: rechaza si hay run activo con OTRO agente para el mismo T.",
     inputSchema: {
       type: "object",
       properties: {
@@ -231,12 +238,12 @@ const TOOLS = [
   },
   {
     name: "aif_agent_finish",
-    description: "WRITE (planning-only por default). Cierre estructurado de feature: verifica T approved, corre checks, devuelve plan. NUNCA hace merge/PR automaticamente — devuelve las opciones (pr/merge/keep/discard) para que UN HUMANO confirme.",
+    description: "WRITE en el nombre, dry-run en los hechos. Invoca 'agent-finish.mjs --feature <slug> --action keep --dry-run' con flags fijos (el schema es additionalProperties:false, no se pueden sobreescribir). Con --dry-run NO verifica que los T esten approved, NO ejecuta ninguno de los 4 checks (solo los lista) y NO corre roadmap:audit. No cambia nada: ni PR, ni merge, ni SQLite, ni archivos. Para un cierre real corre el CLI 'npm run agent:finish -- --feature <slug>' en una terminal, donde el humano elige entre pr/merge/keep/discard.",
     inputSchema: {
       type: "object",
       properties: {
         feature: { type: "string", description: "NNN-slug" },
-        confirm: { type: "boolean", description: "DEBE ser true para ejecutar el verify+report. Aun asi NO hace merge — el humano elige." },
+        confirm: { type: "boolean", description: "DEBE ser true para invocar el script; sin esto solo devuelve el plan. Aun con true corre con --dry-run --action keep: no comprueba que los T esten approved, solo lista los 4 checks sin ejecutarlos, omite roadmap:audit y no cambia nada." },
       },
       required: ["feature"],
       additionalProperties: false,
@@ -293,13 +300,18 @@ function runJsonScript(scriptRelPath, extraArgs) {
   return { content: [{ type: "text", text: (r.stdout || Buffer.from("")).toString() }] };
 }
 
+const MEMORY_PRESETS_NEEDING_ARG = new Set(["docs-for", "apis-for", "by-evidence", "decisions-about"]);
+
 function runMemoryQuery(args) {
-  if (!args.preset && !args.query) {
-    return { isError: true, content: [{ type: "text", text: "Provide either `preset` or `query`. See description for valid preset values." }] };
+  if (!args.preset) {
+    return { isError: true, content: [{ type: "text", text: "`preset` es obligatorio. Ver la lista en la description de la tool." }] };
+  }
+  if (MEMORY_PRESETS_NEEDING_ARG.has(String(args.preset)) && !args.arg) {
+    return { isError: true, content: [{ type: "text", text: `El preset '${args.preset}' requiere ademas \`arg\`.` }] };
   }
   const cmdArgs = [join(root, "scripts", "ai-framework-agent.mjs"), "memory-query"];
-  if (args.preset) cmdArgs.push("--preset", String(args.preset));
-  if (args.query) cmdArgs.push("--query", String(args.query));
+  cmdArgs.push("--preset", String(args.preset));
+  if (args.arg) cmdArgs.push("--arg", String(args.arg));
   const r = spawnSync(process.execPath, cmdArgs, { cwd: root, stdio: "pipe" });
   if (r.status !== 0 && r.status !== null) {
     return { isError: true, content: [{ type: "text", text: `memory-query exit=${r.status}\n${(r.stderr || Buffer.from("")).toString().slice(0, 1500)}` }] };

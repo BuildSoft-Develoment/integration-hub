@@ -38,14 +38,23 @@ export function mavenModules(root) {
     .filter(Boolean);
 }
 
-/** Workspaces del frontend que existen de verdad (apps/ y libs/ de Nx). */
-export function frontendRoots(root) {
-  const out = [];
-  for (const grupo of ["apps", "libs"]) {
-    const dir = join(root, "frontend", grupo);
-    if (existsSync(dir)) out.push(`frontend/${grupo}/**`);
-  }
-  return out.length > 0 ? out : ["frontend/**"];
+/**
+ * Raiz del frontend.
+ *
+ * Devuelve la RAIZ, no los workspaces de Nx. Enumerar `frontend/apps` y `frontend/libs` parecia
+ * mas preciso y dejaba un agujero: `frontend/**` ya los cubre, mientras que la lista de
+ * workspaces deja fuera lo que cuelga de la raiz —`package.json`, `angular.json`, `nx.json`—
+ * que tambien es frontend. Como `touchForbid`, prohibir el codigo de las apps pero no el fichero
+ * que declara sus dependencias no prohibe nada: se cambia la version de una libreria y pasa.
+ *
+ * Sigue siendo funcion, y no una constante, porque es el punto donde entra un frontend que no
+ * viva en `frontend/` — y donde este comentario queda a la vista de quien lo intente otra vez.
+ *
+ * Devuelve la ruta SIN sufijo de glob, igual que el resto de derivadores de este fichero: quien
+ * la consume ya trae su propio sufijo en el glob del contrato.
+ */
+export function frontendRoots() {
+  return ["frontend"];
 }
 
 /**
@@ -66,7 +75,7 @@ export function expandCodeTokens(glob, root) {
   for (const token of ["<backend>", "<backend-test>", "<migrations>", "<frontend>", "<frontend-test>"]) {
     if (!glob.includes(token)) continue;
     if (token === "<frontend>") {
-      for (const f of frontendRoots(root)) salida.push(glob.replace(token, f.replace(/\/\*\*$/, "")));
+      for (const f of frontendRoots()) salida.push(glob.replace(token, f));
     } else if (token === "<frontend-test>") {
       salida.push(glob.replace(token, "frontend/**/*.spec.ts"));
     } else if (token === "<migrations>") {
@@ -106,6 +115,8 @@ export function globsMuertos(globs, root) {
 /**
  * Igual que globsMuertos pero diciendo POR QUE, que es lo que decide la accion:
  *   - "inexistente": la ruta no esta. O se crea, o sobra en el contrato.
+ *   - "vacio": la carpeta esta pero no contiene nada, asi que el glob no describe ningun fichero.
+ *     Es estrictamente peor que "solo-readme" y antes no se reportaba.
  *   - "solo-readme": la carpeta existe con un README que explica su regla. Puede ser correcto —
  *     `diagramas/` declara en su propio README que guarda exportaciones y que el modelo maestro
  *     vive en `likec4/`—, o puede ser una puerta documental a una estructura que ya no existe,
@@ -123,7 +134,8 @@ export function globsSinDestino(globs, root) {
     if (!existsSync(join(root, raiz))) { salida.push({ glob: g, motivo: "inexistente" }); continue; }
     try {
       const hijos = readdirSync(join(root, raiz));
-      if (hijos.length > 0 && hijos.every((h) => /^readme\.md$/i.test(h))) {
+      if (hijos.length === 0) { salida.push({ glob: g, motivo: "vacio" }); continue; }
+      if (hijos.every((h) => /^readme\.md$/i.test(h))) {
         salida.push({ glob: g, motivo: "solo-readme" });
       }
     } catch { /* fichero suelto: vale */ }

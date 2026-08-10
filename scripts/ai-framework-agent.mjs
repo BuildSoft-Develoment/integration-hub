@@ -3052,6 +3052,12 @@ async function streamExecAction(root, dbPath, actionId, userArg, onEvent) {
   const startedAt = Date.now();
   const runId = persistRunBegin(__serverDb, plan, "stream", "ui");
   const child = spawn(plan.cmd || process.execPath, plan.argv, { cwd: root, shell: plan.shell || false });
+  // EOF inmediato en stdin. Sin esto, cualquier script que pregunte al humano (agent:finish
+  // llega a askAction()) se queda esperando una respuesta que el panel nunca va a escribir:
+  // el pipe sigue abierto, el hijo cuelga hasta EXEC_TIMEOUT_MS y durante esos 5 minutos
+  // __execJob esta ocupado, asi que toda otra accion del panel responde 409.
+  // Con EOF, ask() devuelve "" y askAction() cae en su default no destructivo ("keep").
+  try { child.stdin.end(); } catch { /* el hijo puede no tener stdin */ }
   __execJob = { actionId, pid: child.pid, child, mode: "stream", startedAt, runId };
   const argvSafe = plan.argv.map((p) => p.replace(root, "<root>"));
   onEvent({ type: "meta", data: { actionId, argv: argvSafe, pid: child.pid, startedAt, runId } });

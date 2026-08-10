@@ -80,8 +80,8 @@ const RULES = [
     secondary: [],
     reason: "Review post-tarea requiere 2 stages (spec-compliance + code-quality) con reviewer != implementer.",
     next_steps: [
-      "Corre `npm run agent:review-spec -- --task <T-NNN> --feature <slug>` (Stage 1).",
-      "Si pass, corre `npm run agent:review-quality -- --task <T-NNN> --feature <slug>` (Stage 2).",
+      "Corre `npm run agent:review -- --task <T-NNN> --feature <slug> --stage spec-compliance --reviewer <otro>` (Stage 1).",
+      "Si pass, el mismo comando con `--stage code-quality` (Stage 2). Los 4 flags son obligatorios; el reviewer debe ser distinto del implementer o sale con exit 3.",
       "NUNCA seas reviewer de tu propio implementer_done (Principio 1 anti-self-approval).",
     ],
   },
