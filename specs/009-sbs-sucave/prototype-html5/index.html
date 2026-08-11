@@ -1,0 +1,1179 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cierre regulatorio SBS — Integration Hub</title>
+<style>
+  :root {
+    --azul-tinta: #0f1c2e;
+    --azul-acero: #1b3a5c;
+    --azul-vivo: #2563a8;
+    --acento: #0f6b60;
+    --acento-fondo: #e6f2f0;
+    --papel: #f4f6f9;
+    --papel-alto: #ffffff;
+    --borde: #d3dae4;
+    --texto: #16202e;
+    --texto-suave: #5b6a7d;
+    --ambar: #b45309;
+    --ambar-fondo: #fdf3e3;
+    --rojo: #b3261e;
+    --rojo-fondo: #fdeceb;
+    --verde: #14663f;
+    --verde-fondo: #e8f5ee;
+    --info: #1d4ed8;
+    --info-fondo: #e9effd;
+    --radio: 10px;
+    --sombra: 0 1px 2px rgba(15, 28, 46, .08), 0 8px 24px rgba(15, 28, 46, .06);
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--texto);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  .barra {
+    display: flex; align-items: center; gap: 1rem;
+    padding: .7rem 1.2rem;
+    background: var(--azul-tinta); color: #eaf0f7;
+  }
+  .barra__marca { font-weight: 700; }
+  .barra__periodo {
+    font-size: .8rem; color: #b9c8da;
+    border-left: 1px solid #33455c; padding-left: 1rem;
+  }
+  .barra__sep { flex: 1; }
+  .barra__hub { color: #b9c8da; text-decoration: none; font-size: .82rem; border-right: 1px solid #33455c; padding-right: 1rem; }
+  .barra__hub:hover { color: #eaf0f7; }
+  .barra__quien { display: flex; align-items: center; gap: .5rem; font-size: .84rem; color: #b9c8da; }
+  .barra__avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--acento); color: #fff;
+    display: grid; place-items: center; font-size: .74rem; font-weight: 700;
+  }
+
+  .disposicion { display: grid; grid-template-columns: 224px 1fr; min-height: calc(100vh - 46px); }
+
+  .rail { background: var(--papel-alto); border-right: 1px solid var(--borde); padding: 1rem .6rem; }
+  .rail__grupo { font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-suave); padding: .5rem .6rem .3rem; }
+  .rail__item {
+    display: flex; align-items: center; gap: .5rem; width: 100%;
+    background: none; border: 0; text-align: left; cursor: pointer;
+    padding: .5rem .6rem; border-radius: 8px; font: inherit; font-size: .92rem; color: var(--texto);
+  }
+  .rail__item:hover { background: var(--papel); }
+  .rail__item[aria-current="page"] { background: var(--acento-fondo); color: var(--acento); font-weight: 600; }
+  .rail__pico {
+    margin-left: auto; background: var(--ambar-fondo); color: var(--ambar);
+    border-radius: 999px; padding: 0 .45rem; font-size: .72rem; font-weight: 700;
+  }
+
+  .lienzo { padding: 1.4rem 1.6rem 3rem; max-width: 1160px; }
+  .titular { font-size: 1.35rem; margin: 0 0 .2rem; }
+  .bajada { color: var(--texto-suave); margin: 0 0 1.2rem; font-size: .92rem; }
+
+  .panel { background: var(--papel-alto); border: 1px solid var(--borde); border-radius: var(--radio); box-shadow: var(--sombra); margin-bottom: 1.1rem; }
+  .panel__cabecera { display: flex; align-items: center; gap: .7rem; padding: .8rem 1rem; border-bottom: 1px solid var(--borde); }
+  .panel__titulo { font-size: .98rem; margin: 0; }
+  .panel__cuerpo { padding: 1rem; }
+  .panel__sep { flex: 1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .89rem; }
+  th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-suave); padding: .5rem 1rem; border-bottom: 1px solid var(--borde); }
+  td { padding: .62rem 1rem; border-bottom: 1px solid #eceff4; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .cod { font-family: var(--mono); font-size: .84rem; }
+
+  .marca { display: inline-flex; align-items: center; gap: .3rem; border-radius: 999px; padding: .1rem .55rem; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+  .marca--ok { background: var(--verde-fondo); color: var(--verde); }
+  .marca--espera { background: var(--ambar-fondo); color: var(--ambar); }
+  .marca--alto { background: var(--rojo-fondo); color: var(--rojo); }
+  .marca--info { background: var(--info-fondo); color: var(--info); }
+  .marca--neutra { background: #eef1f5; color: var(--texto-suave); }
+
+  .boton { border: 1px solid var(--borde); background: var(--papel-alto); color: var(--texto); border-radius: 8px; padding: .42rem .85rem; font: inherit; font-size: .87rem; cursor: pointer; }
+  .boton:hover { background: var(--papel); }
+  .boton--fuerte { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+  .boton--fuerte:hover { background: #0c574e; }
+  .boton--fuerte[disabled] { background: #9fb8b4; border-color: #9fb8b4; cursor: not-allowed; }
+  .boton--sutil { border-color: transparent; color: var(--azul-vivo); }
+
+  .rejilla { display: grid; gap: 1rem; }
+  .rejilla--2 { grid-template-columns: 1fr 1fr; }
+  .rejilla--3 { grid-template-columns: repeat(3, 1fr); }
+
+  .cifra { background: var(--papel-alto); border: 1px solid var(--borde); border-radius: var(--radio); padding: .9rem 1rem; }
+  .cifra__valor { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cifra__nombre { font-size: .78rem; color: var(--texto-suave); }
+  .cifra__pie { font-size: .78rem; margin-top: .3rem; }
+
+  .campo { display: block; margin-bottom: .85rem; }
+  .campo__nombre { display: block; font-size: .8rem; color: var(--texto-suave); margin-bottom: .25rem; }
+  .campo select, .campo input {
+    width: 100%; padding: .45rem .6rem; border: 1px solid var(--borde);
+    border-radius: 8px; font: inherit; font-size: .89rem; background: var(--papel-alto); color: var(--texto);
+  }
+
+  .paso { display: flex; gap: .7rem; padding: .6rem 0; border-bottom: 1px solid #eceff4; align-items: flex-start; }
+  .paso:last-child { border-bottom: 0; }
+  .paso__punto { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: .7rem; font-weight: 700; margin-top: .1rem; }
+  .paso__punto--listo { background: var(--verde-fondo); color: var(--verde); }
+  .paso__punto--falta { background: var(--ambar-fondo); color: var(--ambar); }
+  .paso__que { font-size: .9rem; }
+  .paso__nota { font-size: .8rem; color: var(--texto-suave); }
+
+  .aviso { border-left: 3px solid var(--ambar); background: var(--ambar-fondo); padding: .7rem .9rem; border-radius: 0 8px 8px 0; font-size: .87rem; margin-bottom: 1rem; }
+  .aviso--info { border-left-color: var(--info); background: var(--info-fondo); }
+  .aviso strong { display: block; margin-bottom: .15rem; }
+
+  .vacio { text-align: center; padding: 2.4rem 1rem; color: var(--texto-suave); }
+  .vacio__titulo { font-weight: 600; color: var(--texto); margin-bottom: .25rem; }
+
+  .fila-sel { cursor: pointer; }
+  .fila-sel:hover td { background: var(--acento-fondo); }
+  .fila-sel[aria-selected="true"] td { background: var(--acento-fondo); box-shadow: inset 3px 0 0 var(--acento); }
+
+  .tostada {
+    position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 40;
+    background: var(--azul-tinta); color: #eaf0f7; padding: .7rem 1rem;
+    border-radius: 8px; box-shadow: var(--sombra); font-size: .88rem;
+    opacity: 0; transform: translateY(8px); transition: .18s; pointer-events: none;
+  }
+  .tostada[data-ver="si"] { opacity: 1; transform: none; }
+
+  .velo { position: fixed; inset: 0; background: rgba(15,28,46,.45); display: none; place-items: center; z-index: 50; padding: 1rem; }
+  .velo[data-ver="si"] { display: grid; }
+  .dialogo { background: var(--papel-alto); border-radius: var(--radio); max-width: 480px; width: 100%; box-shadow: var(--sombra); }
+  .dialogo__cuerpo { padding: 1.1rem; }
+  .dialogo__pie { display: flex; gap: .5rem; justify-content: flex-end; padding: .8rem 1.1rem; border-top: 1px solid var(--borde); }
+
+  .archivo { font-family: var(--mono); font-size: .8rem; background: #0f1c2e; color: #cfe0f0; padding: .8rem 1rem; border-radius: 8px; overflow-x: auto; white-space: pre; }
+
+  .barra-prog { height: 7px; background: #e6eaf0; border-radius: 999px; overflow: hidden; }
+  .barra-prog__llena { display: block; height: 100%; width: 0; background: var(--acento); transition: width .25s; }
+
+  .panel--fallo { border-color: #edc4c1; }
+  .panel--fallo .panel__cabecera { background: var(--rojo-fondo); border-bottom-color: #edc4c1; }
+
+  .cadena { display: flex; flex-wrap: wrap; gap: .45rem; align-items: stretch; }
+  .ficha {
+    display: flex; flex-direction: column; gap: .1rem; align-items: flex-start;
+    border: 1px solid var(--borde); background: var(--papel-alto);
+    border-radius: 8px; padding: .45rem .7rem; cursor: pointer; font: inherit; text-align: left;
+  }
+  .ficha:hover { background: var(--papel); }
+  .ficha__nom { font-size: .85rem; }
+  .ficha__tipo { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-suave); }
+  .ficha--sbs { border-color: #b7d8d2; }
+  .ficha--sbs .ficha__tipo { color: var(--acento); font-weight: 700; }
+  .ficha--motor { background: #fafbfc; }
+  .ficha[aria-current="true"] { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento-fondo); }
+
+  .barra__perfil {
+    background: transparent; border: 1px solid #33455c; color: #b9c8da;
+    border-radius: 8px; padding: .2rem .4rem; font: inherit; font-size: .82rem; cursor: pointer;
+  }
+  .barra__perfil option { color: var(--texto); }
+
+  /* Solo el analista ajusta el formato; cumplimiento lo ve en solo lectura. */
+  body[data-perfil="cumplimiento"] .forma input,
+  body[data-perfil="cumplimiento"] .forma select { pointer-events: none; background: #f7f8fa; color: var(--texto-suave); }
+  body[data-perfil="cumplimiento"] .solo-analista { display: none; }
+  body[data-perfil="analista"] .solo-cumplimiento { display: none; }
+
+  [hidden] { display: none !important; }
+
+  @media (max-width: 860px) {
+    .barra { flex-wrap: wrap; gap: .4rem .8rem; }
+    .barra__periodo { border-left: 0; padding-left: 0; flex-basis: 100%; order: 3; }
+    .barra__hub { border-right: 0; padding-right: 0; }
+    .barra__sep { display: none; }
+    .barra__quien { margin-left: auto; min-width: 0; }
+    .barra__perfil { max-width: 190px; }
+    .disposicion { grid-template-columns: 1fr; }
+    .disposicion > * { min-width: 0; }
+    .panel { overflow-x: auto; }
+    .rejilla > * { min-width: 0; }
+    .cadena { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; }
+    .ficha { flex: none; }
+    .rail { display: flex; overflow-x: auto; gap: .3rem; border-right: 0; border-bottom: 1px solid var(--borde); padding: .5rem; }
+    .rail__grupo { display: none; }
+    .rail__item { width: auto; white-space: nowrap; }
+    .rejilla--2, .rejilla--3 { grid-template-columns: 1fr; }
+    .lienzo { padding: 1rem; }
+  }
+</style>
+</head>
+<body data-perfil="analista">
+
+<header class="barra">
+  <span class="barra__marca">Integration Hub</span>
+  <span class="barra__periodo">Cierre regulatorio · Periodo agosto 2026</span>
+  <span class="barra__sep"></span>
+  <a class="barra__hub" href="../../../prototype/index.html">← Hub del producto</a>
+  <span class="barra__quien">
+    <span class="barra__avatar" id="avatar">MQ</span>
+    <select id="sel-perfil" class="barra__perfil" aria-label="Perfil activo">
+      <option value="analista">Milagros Quiroz · Analista regulatorio</option>
+      <option value="cumplimiento">Ernesto Valdez · Responsable de cumplimiento</option>
+    </select>
+  </span>
+</header>
+
+<div class="disposicion">
+  <nav class="rail" aria-label="Secciones del cierre regulatorio">
+    <div class="rail__grupo">Este periodo</div>
+    <button class="rail__item" data-vista="cierre" aria-current="page">Obligaciones <span class="rail__pico">3</span></button>
+    <button class="rail__item" data-vista="preparar">Preparar envío</button>
+    <button class="rail__item" data-vista="tareas">Ajustes del formato</button>
+    <button class="rail__item" data-vista="revision">Revisión previa <span class="rail__pico">18</span></button>
+    <button class="rail__item" data-vista="entrega">Archivo generado</button>
+    <div class="rail__grupo">Consulta</div>
+    <button class="rail__item" data-vista="historial">Periodos anteriores</button>
+    <button class="rail__item" data-vista="catalogo">Formatos vigentes</button>
+  </nav>
+
+  <main class="lienzo">
+
+    <!-- ══════════ OBLIGACIONES ══════════ -->
+    <section class="vista" id="vista-cierre">
+      <h1 class="titular">Obligaciones de agosto 2026</h1>
+      <p class="bajada">Faltan 6 días hábiles para el vencimiento del periodo.</p>
+
+      <div class="rejilla rejilla--3" style="margin-bottom:1.1rem">
+        <div class="cifra">
+          <div class="cifra__valor">7</div>
+          <div class="cifra__nombre">Archivos del periodo</div>
+          <div class="cifra__pie"><span class="marca marca--neutra">6 formatos, uno con dos anexos</span></div>
+        </div>
+        <div class="cifra">
+          <div class="cifra__valor">4</div>
+          <div class="cifra__nombre">Pendientes de generar</div>
+          <div class="cifra__pie"><span class="marca marca--espera">vencen el 15/09</span></div>
+        </div>
+        <div class="cifra">
+          <div class="cifra__valor">18</div>
+          <div class="cifra__nombre">Registros con reparo</div>
+          <div class="cifra__pie"><span class="marca marca--alto">bloquean el 0228</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">Formatos a presentar</h2>
+          <span class="panel__sep"></span>
+          <span style="font-size:.8rem;color:var(--texto-suave)">Diseño de registro SUCAVE 5.10.00</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Formato</th><th>Descripción</th><th>Vence</th><th class="num">Registros</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cod">0228 · 01</td>
+              <td>Créditos directos — detalle por deudor</td>
+              <td>15/09/2026</td>
+              <td class="num">12 486</td>
+              <td><span class="marca marca--alto">18 con reparo</span></td>
+              <td><button class="boton boton--sutil" data-ir="revision">Revisar</button></td>
+            </tr>
+            <tr>
+              <td class="cod">0228 · 02</td>
+              <td>Créditos directos — resumen por agencia</td>
+              <td>15/09/2026</td>
+              <td class="num">148</td>
+              <td><span class="marca marca--espera">espera al 01</span></td>
+              <td><button class="boton boton--sutil" data-ir="tareas">Ajustes</button></td>
+            </tr>
+            <tr>
+              <td class="cod">0224 · 01</td>
+              <td>Reclamos de usuarios</td>
+              <td>15/09/2026</td>
+              <td class="num">341</td>
+              <td><span class="marca marca--espera">sin generar</span></td>
+              <td><button class="boton boton--sutil" data-ir="preparar">Preparar</button></td>
+            </tr>
+            <tr>
+              <td class="cod">0301 · 01</td>
+              <td>Posición mensual de liquidez</td>
+              <td>15/09/2026</td>
+              <td class="num">1 104</td>
+              <td><span class="marca marca--espera">sin generar</span></td>
+              <td><button class="boton boton--sutil" data-ir="preparar">Preparar</button></td>
+            </tr>
+            <tr>
+              <td class="cod">0231 · 01</td>
+              <td>Comisiones y gastos por servicios</td>
+              <td>10/09/2026</td>
+              <td class="num">2 917</td>
+              <td><span class="marca marca--ok">generado</span></td>
+              <td><button class="boton boton--sutil" data-ir="entrega">Ver archivo</button></td>
+            </tr>
+            <tr>
+              <td class="cod">0238 · 01</td>
+              <td>Grupos económicos vinculados</td>
+              <td>10/09/2026</td>
+              <td class="num">88</td>
+              <td><span class="marca marca--ok">generado</span></td>
+              <td><button class="boton boton--sutil" data-ir="entrega">Ver archivo</button></td>
+            </tr>
+            <tr>
+              <td class="cod">0500 · 01</td>
+              <td>Movimiento de oficinas</td>
+              <td>10/09/2026</td>
+              <td class="num">42</td>
+              <td><span class="marca marca--ok">generado</span></td>
+              <td><button class="boton boton--sutil" data-ir="entrega">Ver archivo</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══════════ PREPARAR ══════════ -->
+    <section class="vista" id="vista-preparar" hidden>
+      <h1 class="titular">Preparar envío</h1>
+      <p class="bajada">Elige el formato y de dónde salen los datos. Lo demás viene resuelto.</p>
+
+      <div class="rejilla rejilla--2">
+        <div class="panel">
+          <div class="panel__cabecera"><h2 class="panel__titulo">Qué se va a generar</h2></div>
+          <div class="panel__cuerpo">
+            <label class="campo">
+              <span class="campo__nombre">Formato</span>
+              <select id="sel-formato">
+                <option value="0224">0224 — Reclamos de usuarios</option>
+                <option value="0301">0301 — Posición mensual de liquidez</option>
+                <option value="0228">0228 — Créditos directos por tipo de deudor</option>
+              </select>
+            </label>
+            <label class="campo">
+              <span class="campo__nombre">Anexo</span>
+              <select><option>Anexo 01 — Detalle por agencia</option></select>
+            </label>
+            <label class="campo">
+              <span class="campo__nombre">Periodo</span>
+              <select id="sel-periodo">
+                <option>Agosto 2026</option>
+                <option>Julio 2026</option>
+              </select>
+            </label>
+            <label class="campo">
+              <span class="campo__nombre">De dónde salen los datos</span>
+              <select id="sel-origen">
+                <option value="tabla">Tabla de la entidad · reclamos_consolidado</option>
+                <option value="archivo">Archivo cargado · reclamos-agosto.csv</option>
+                <option value="sp">Procedimiento · sp_reclamos_sbs</option>
+              </select>
+            </label>
+            <label class="campo">
+              <span class="campo__nombre">Dónde se deja el archivo</span>
+              <select id="sel-destino">
+                <option value="red">Carpeta compartida · \\fileserver\sucave-in</option>
+                <option value="local">Disco local de la estación SUCAVE</option>
+                <option value="s3">Almacenamiento S3 · solo histórico</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel">
+            <div class="panel__cabecera">
+              <h2 class="panel__titulo">Cómo se va a preparar</h2>
+              <span class="panel__sep"></span>
+              <span class="marca marca--info">recomendado</span>
+            </div>
+            <div class="panel__cuerpo" style="padding-top:.4rem">
+              <div class="paso"><span class="paso__punto paso__punto--listo">✓</span><span><span class="paso__que">Resolver el diseño de registro</span><br /><span class="paso__nota">Versión SUCAVE 5.10.00, vigente para agosto 2026</span></span></div>
+              <div class="paso"><span class="paso__punto paso__punto--listo">✓</span><span><span class="paso__que">Tomar los datos del origen</span><br /><span class="paso__nota">341 registros previstos</span></span></div>
+              <div class="paso"><span class="paso__punto paso__punto--listo">✓</span><span><span class="paso__que">Revisar contra las reglas del formato</span><br /><span class="paso__nota">Catálogos de tipo de documento, moneda y agencia</span></span></div>
+              <div class="paso"><span class="paso__punto paso__punto--listo">✓</span><span><span class="paso__que">Escribir el archivo de ancho fijo</span><br /><span class="paso__nota">24 columnas · 180 posiciones · CRLF</span></span></div>
+              <div class="paso" id="paso-destino"><span class="paso__punto paso__punto--listo">✓</span><span><span class="paso__que">Dejarlo donde SUCAVE lo tome</span><br /><span class="paso__nota" id="nota-destino">Carpeta compartida · \\fileserver\sucave-in</span></span></div>
+            </div>
+          </div>
+
+          <div class="aviso aviso--info">
+            <strong>Puedes cambiar estos pasos</strong>
+            Si tus datos ya vienen con la estructura del formato, quita la preparación intermedia. Lo único que no se puede omitir es que el archivo se revise antes de salir.
+          </div>
+
+          <div class="panel" id="panel-progreso" hidden>
+            <div class="panel__cabecera">
+              <h2 class="panel__titulo">Generando el archivo…</h2>
+              <span class="panel__sep"></span>
+              <span class="marca marca--info" id="prog-pct">0 %</span>
+            </div>
+            <div class="panel__cuerpo">
+              <div class="barra-prog"><span class="barra-prog__llena" id="prog-llena"></span></div>
+              <p style="font-size:.85rem;color:var(--texto-suave);margin:.5rem 0 0" id="prog-texto">Cargando el origen…</p>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:.5rem;justify-content:flex-end">
+            <button class="boton">Guardar sin generar</button>
+            <button class="boton boton--fuerte" id="btn-generar">Generar archivo</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ AJUSTES DEL FORMATO (tareas) ══════════ -->
+    <section class="vista" id="vista-tareas" hidden>
+      <h1 class="titular">Ajustes del formato 0228</h1>
+      <p class="bajada">Este formato tiene dos anexos, y cada uno produce su propio archivo. Elige un anexo y luego el paso que quieras afinar.</p>
+
+      <div class="panel">
+        <div class="panel__cabecera"><h2 class="panel__titulo">Grupo de envío 01</h2><span class="panel__sep"></span><span class="marca marca--info">los dos anexos van juntos</span></div>
+        <div class="panel__cuerpo">
+          <div class="cadena">
+            <button class="ficha ficha--sbs" data-anexo="01" aria-current="true"><span class="ficha__nom">Anexo 01 — Detalle por deudor</span><span class="ficha__tipo">01260831.228 · obligatorio</span></button>
+            <button class="ficha ficha--sbs" data-anexo="02"><span class="ficha__nom">Anexo 02 — Resumen por agencia</span><span class="ficha__tipo">02260831.228 · obligatorio</span></button>
+          </div>
+          <p style="font-size:.82rem;color:var(--texto-suave);margin:.7rem 0 0">Cada anexo tiene su propio diseño de registro: se prepara, materializa, escribe y revisa por separado. Comparten la revisión del conjunto y la entrega.</p>
+          <div class="aviso" style="margin:.8rem 0 0"><strong>Quién decide qué va junto</strong>La SBS. Este grupo lo declara la definición vigente del formato para agosto 2026, no se configura aquí. Si falta uno de los dos, el envío no sale — una presentación incompleta parece completa.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel__cabecera"><h2 class="panel__titulo">Pasos del <span id="cad-anexo">anexo 01</span></h2><span class="panel__sep"></span><span style="font-size:.8rem;color:var(--texto-suave)">en orden de ejecución</span></div>
+        <div class="panel__cuerpo">
+          <div class="cadena">
+            <button class="ficha ficha--sbs" data-tarea="preparar" aria-current="true"><span class="ficha__nom">Contexto del periodo</span><span class="ficha__tipo">SBS</span></button>
+            <button class="ficha ficha--motor" data-tarea="leer"><span class="ficha__nom">Leer el origen</span><span class="ficha__tipo">motor</span></button>
+            <button class="ficha ficha--motor" data-tarea="staging"><span class="ficha__nom">Guardar en trabajo</span><span class="ficha__tipo">motor</span></button>
+            <button class="ficha ficha--sbs" data-tarea="mapear"><span class="ficha__nom">Llevar al formato</span><span class="ficha__tipo">SBS</span></button>
+            <button class="ficha ficha--sbs" data-tarea="validar"><span class="ficha__nom">Revisar los datos</span><span class="ficha__tipo">SBS</span></button>
+            <button class="ficha ficha--motor" data-tarea="escribir"><span class="ficha__nom">Escribir el archivo</span><span class="ficha__tipo">motor</span></button>
+            <button class="ficha ficha--sbs" data-tarea="revisar"><span class="ficha__nom">Revisar el archivo</span><span class="ficha__tipo">SBS</span></button>
+            <button class="ficha ficha--sbs" data-tarea="paquete"><span class="ficha__nom">Revisar el paquete</span><span class="ficha__tipo">SBS · común al grupo</span></button>
+            <button class="ficha ficha--motor" data-tarea="entregar"><span class="ficha__nom">Dejar donde SUCAVE lo tome</span><span class="ficha__tipo">motor</span></button>
+            <button class="ficha ficha--motor" data-tarea="avisar"><span class="ficha__nom">Avisar</span><span class="ficha__tipo">motor · opcional</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PREPARE -->
+      <div class="panel forma" id="forma-preparar">
+        <div class="panel__cabecera"><h2 class="panel__titulo">Contexto del periodo</h2><span class="panel__sep"></span><span class="marca marca--info">define la versión para todo el envío</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">Formato</span><select><option>0228 — Créditos directos por tipo de deudor</option><option>0224 — Reclamos de usuarios</option></select></label>
+              <label class="campo"><span class="campo__nombre">Anexo</span><select id="prep-anexo"><option value="01">01 — Detalle por deudor</option><option value="02">02 — Resumen por agencia</option></select></label>
+              <label class="campo"><span class="campo__nombre">Nombre del archivo</span><input value="${anexo}${aa}${mm}${dd}.${formatoCorto}" /></label>
+              <p style="font-size:.8rem;color:var(--texto-suave);margin:-.5rem 0 0">Quedaría <span class="cod">01260831.228</span> — la extensión son los tres últimos dígitos del formato.</p>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">De dónde sale el periodo</span>
+                <select id="sel-modo-periodo"><option value="ejecucion">Del calendario de la ejecución</option><option value="fijo">Fijo</option></select>
+              </label>
+              <label class="campo" id="campo-periodo-fijo" hidden><span class="campo__nombre">Periodo</span><input value="2026-08" /></label>
+              <label class="campo"><span class="campo__nombre">Diseño de registro</span>
+                <select id="sel-modo-version"><option value="vigente">El vigente para ese periodo</option><option value="fijada">Fijar una versión</option></select>
+              </label>
+              <label class="campo" id="campo-version" hidden><span class="campo__nombre">Versión</span><select><option>5.10.00 — desde julio 2026</option><option>5.09.00 — enero a junio 2026</option></select></label>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>Por qué se elige aquí y no en cada paso</strong>Todos los pasos siguientes usan esta versión. Si cada uno pudiera elegir la suya, dos pasos de la misma corrida trabajarían con diseños distintos y el archivo saldría incoherente sin que nada avisara.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MAP -->
+      <div class="panel forma" id="forma-mapear" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Llevar al formato</h2></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">Datos de entrada</span><select><option>Tabla de trabajo · staging</option></select></label>
+              <label class="campo"><span class="campo__nombre">Tabla de salida</span><input value="sucave_dataset" /></label>
+              <label class="campo" style="display:flex;gap:.5rem;align-items:flex-start">
+                <input type="checkbox" checked style="width:auto;margin-top:.2rem" />
+                <span><span class="campo__nombre" style="margin:0">Aplicar las reglas de carácter del formato</span><span style="font-size:.8rem;color:var(--texto-suave)">Sustituye la Ñ por # y descarta los no admitidos.</span></span>
+              </label>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>La cabecera y el trailer no se configuran aquí</strong>Este paso prepara el detalle. Las líneas de cabecera y cierre, con sus totales de control, las escribe «Escribir el archivo» a partir del diseño de registro.</div>
+            </div>
+            <div>
+              <span class="campo__nombre">Correspondencia con el diseño de registro</span>
+              <table style="border:1px solid var(--borde);border-radius:8px;overflow:hidden">
+                <thead><tr><th>Columna del origen</th><th>Campo del formato</th><th>Catálogo</th></tr></thead>
+                <tbody>
+                  <tr><td class="cod">tipo_doc</td><td>Tipo de documento</td><td><span class="marca marca--info">traduce</span></td></tr>
+                  <tr><td class="cod">num_doc</td><td>Número de documento</td><td>—</td></tr>
+                  <tr><td class="cod">razon_social</td><td>Razón social</td><td>—</td></tr>
+                  <tr><td class="cod">saldo</td><td>Saldo capital</td><td>—</td></tr>
+                  <tr><td class="cod">moneda</td><td>Moneda</td><td><span class="marca marca--info">traduce</span></td></tr>
+                </tbody>
+              </table>
+              <p style="font-size:.8rem;color:var(--texto-suave);margin-top:.5rem">Los campos de la derecha salen del diseño de registro: no se escriben a mano. Un valor sin equivalencia en el catálogo se reporta como reparo, no se deja en blanco.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VALIDATE -->
+      <div class="panel forma" id="forma-validar" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Revisar los datos</h2></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">Datos de entrada</span><select><option>Salida de «Llevar al formato»</option></select></label>
+              <label class="campo"><span class="campo__nombre">Qué detiene el envío</span><select><option>Cualquier error</option><option>Solo errores graves</option></select></label>
+              <label class="campo"><span class="campo__nombre">Reglas propias de la entidad</span><input placeholder="opcional — se suman a las del formato" /></label>
+              <p style="font-size:.8rem;color:var(--texto-suave);margin:-.5rem 0 0">Se aplican <strong>encima</strong> de las de la SBS; nunca las sustituyen.</p>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">Dónde se guardan los reparos</span><input value="sucave_validation_issue" /></label>
+              <label class="campo"><span class="campo__nombre">Conexión</span><select><option>Base de la plataforma</option><option>Base regulatoria</option></select></label>
+              <label class="campo"><span class="campo__nombre">Reparos en el resumen</span><input value="1000" /></label>
+              <div class="aviso" style="margin-bottom:0"><strong>Vaciar la tabla apaga el registro de reparos</strong>Si se deja en blanco no se guardará el detalle y solo quedará el contador. Con doce mil registros, eso deja a la analista sin saber qué corregir.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- POST_VALIDATE -->
+      <div class="panel forma" id="forma-revisar" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Revisar el archivo</h2><span class="panel__sep"></span><span class="marca marca--espera">última red antes de entregar</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <span class="campo__nombre">Qué se comprueba sobre el archivo escrito</span>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Número de líneas contra los registros declarados</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Todas las líneas con la longitud del diseño</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Codificación y caracteres admitidos</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Nombre del archivo según el formato y periodo</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Cuadre del trailer con el contenido real</span></label>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">Si algo no cuadra</span><select><option>Detener el envío</option><option>Continuar y avisar</option></select></label>
+              <div class="aviso" style="margin-bottom:0"><strong>Por qué existe este paso</strong>Un archivo cuyo trailer dice 12 486 y contiene 12 480 líneas pasa todas las revisiones anteriores —los registros eran válidos uno a uno— y lo rechaza la SBS. El descuadre solo se ve mirando el archivo terminado.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MOTOR -->
+      <div class="aviso solo-cumplimiento" style="margin-top:-.6rem">
+        <strong>Estás viendo los ajustes en solo lectura</strong>
+        El ajuste del formato lo hace el analista regulatorio. Tú revisas y autorizas el envío ya generado.
+      </div>
+
+      <div class="panel forma" id="forma-paquete" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Revisar el paquete</h2><span class="panel__sep"></span><span class="marca marca--espera">solo con envío en grupo</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">Archivos que componen el envío</span><select><option>Los del grupo 01 — anexos 01 y 02</option></select></label>
+              <span class="campo__nombre">Qué se comprueba antes de entregar</span>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Están los dos anexos obligatorios del grupo</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Los dos son del mismo periodo</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Los dos usan diseños compatibles entre sí</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Ninguno pertenece a otro grupo</span></label>
+              <label class="campo" style="display:flex;gap:.5rem"><input type="checkbox" checked style="width:auto" /><span>Los cuadres entre anexos coinciden</span></label>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">Si falta algo</span><select><option>Detener: no entregar nada</option></select></label>
+              <div class="aviso" style="margin-bottom:.8rem"><strong>Por qué no basta revisar cada archivo</strong>Los dos anexos pueden estar perfectos por separado y aun así no formar un envío válido: distinto periodo, un obligatorio ausente, o un total del resumen que no cuadra con el detalle. Eso solo se ve mirando el conjunto.</div>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>Una presentación incompleta parece completa</strong>Si una cadena falla y se entregaran igual los demás, alguien cargaría en SUCAVE un envío al que le falta un anexo. La SBS lo recibe como presentación válida y la observa después.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel forma" id="forma-leer" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Leer el origen</h2><span class="panel__sep"></span><span class="marca marca--neutra">de la plataforma</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">De dónde se lee</span><select><option>Carpeta contable · \\fs01\core\extractos</option><option>SFTP core bancario</option></select></label>
+              <label class="campo"><span class="campo__nombre">Cómo se interpreta</span><select><option>CSV con cabecera · separador ;</option><option>TXT ancho fijo</option></select></label>
+              <label class="campo"><span class="campo__nombre">Qué archivos toma</span><input value="creditos-${aaaa}${mm}.csv" /></label>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">Cómo los procesa</span><select><option>Por lotes de 5 000 filas</option><option>Todo de una vez</option></select></label>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>Este paso se puede sustituir</strong>Si los datos ya viven en una tabla de la entidad, cámbialo por un procedimiento almacenado o quítalo y apunta «Llevar al formato» directamente a esa tabla.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel forma" id="forma-staging" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Guardar en trabajo</h2><span class="panel__sep"></span><span class="marca marca--neutra">de la plataforma</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">Datos de entrada</span><select><option>Salida de «Leer el origen»</option></select></label>
+              <label class="campo"><span class="campo__nombre">Conexión</span><select><option>Base de la plataforma</option><option>Base regulatoria</option></select></label>
+              <label class="campo"><span class="campo__nombre">Tabla</span><input value="staging_record" /></label>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">Cómo escribe</span><select><option>Insertar</option><option>Insertar o actualizar</option></select></label>
+              <label class="campo"><span class="campo__nombre">Filas por lote</span><input value="5000" /></label>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>Existe para aguantar el volumen</strong>Con doce mil registros da igual, pero un formato de dos millones no cabe en memoria. Si tu origen ya es una tabla, este paso sobra.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel forma" id="forma-escribir" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Escribir el archivo</h2><span class="panel__sep"></span><span class="marca marca--info">el diseño lo pone el contexto</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">Datos a escribir</span><select><option>Salida de «Llevar al formato»</option></select></label>
+              <label class="campo"><span class="campo__nombre">Diseño de registro</span><input value="Del contexto del periodo · SUCAVE 5.10.00" readonly /></label>
+              <p style="font-size:.8rem;color:var(--texto-suave);margin:-.5rem 0 .85rem">Los anchos, rellenos y alineaciones salen de la versión que resolvió el contexto. No se teclean aquí ni se pueden cambiar por proceso.</p>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>¿Y si tu formato no está en el catálogo?</strong>Se registra una versión nueva en el catálogo de formatos, que queda fechada y disponible para todos los procesos. Teclearla en un proceso suelto haría que ese archivo no se pudiera regenerar igual más adelante.</div>
+            </div>
+            <div>
+              <span class="campo__nombre" id="esc-campos">Campos resueltos · 24 campos, 180 posiciones</span>
+              <table style="border:1px solid var(--borde);border-radius:8px;overflow:hidden">
+                <thead><tr><th>Campo</th><th class="num">Pos.</th><th class="num">Long.</th><th>Relleno</th></tr></thead>
+                <tbody>
+                  <tr><td>Código de formato</td><td class="num">1-4</td><td class="num">4</td><td>—</td></tr>
+                  <tr><td>Tipo de documento</td><td class="num">12-13</td><td class="num">2</td><td>ceros</td></tr>
+                  <tr><td>Número de documento</td><td class="num">14-24</td><td class="num">11</td><td>ceros</td></tr>
+                  <tr><td>Razón social</td><td class="num">25-64</td><td class="num">40</td><td>espacios</td></tr>
+                  <tr><td>Saldo capital</td><td class="num">65-78</td><td class="num">14</td><td>ceros</td></tr>
+                  <tr><td>Moneda</td><td class="num">79-80</td><td class="num">2</td><td>ceros</td></tr>
+                </tbody>
+              </table>
+              <div class="aviso" style="margin:.6rem 0 0"><strong>Codificación pendiente de confirmar</strong>La SBS pide «ANSI», que no identifica una codificación concreta. Hasta confirmar cuál, este formato no es apto para producción.</div>
+              <p style="font-size:.8rem;color:var(--texto-suave);margin-top:.5rem">Solo lectura. Fin de línea CRLF, del diseño. Si un valor no cabe en su columna, el envío se detiene: nunca se recorta una cifra.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel forma" id="forma-entregar" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Dejar donde SUCAVE lo tome</h2><span class="panel__sep"></span><span class="marca marca--neutra">de la plataforma</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">Qué se deja</span><select><option>El archivo de «Escribir el archivo»</option></select></label>
+              <label class="campo"><span class="campo__nombre">Dónde</span><select><option>Carpeta compartida · \\fileserver\sucave-in</option><option>Disco local de la estación SUCAVE</option></select></label>
+              <label class="campo"><span class="campo__nombre">Subcarpeta</span><input value="/${formato}/${aaaa}-${mm}/" /></label>
+              <p style="font-size:.8rem;color:var(--texto-suave);margin:-.5rem 0 0">Quedaría en <span class="cod">\\fileserver\sucave-in\0228\2026-09\01260930.228</span></p>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">Si ya existe un archivo igual</span><select><option>Detener</option><option>Sobrescribir</option></select></label>
+              <div class="aviso" style="margin-bottom:.8rem"><strong>Aquí acaba el sistema</strong>El archivo queda listo para que una persona lo cargue en SUCAVE. El aplicativo lo valida, arma su propio envío, lo comprime si hace falta y lo transmite a la SBS.</div>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>Por qué no aparece el almacenamiento en la nube</strong>El archivo se elige desde SUCAVE con un explorador, así que tiene que estar donde esa estación llegue. Un bucket sirve para guardar histórico, no para que lo abran desde ahí.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel forma" id="forma-avisar" hidden>
+        <div class="panel__cabecera"><h2 class="panel__titulo">Avisar</h2><span class="panel__sep"></span><span class="marca marca--neutra">opcional</span></div>
+        <div class="panel__cuerpo">
+          <div class="rejilla rejilla--2">
+            <div>
+              <label class="campo"><span class="campo__nombre">A quién</span><input value="cumplimiento@entidad.pe" /></label>
+              <label class="campo"><span class="campo__nombre">Asunto</span><input value="Formato ${formato} de ${periodo} listo para revisar" /></label>
+            </div>
+            <div>
+              <label class="campo"><span class="campo__nombre">Cuándo</span><select><option>Al terminar, salga bien o mal</option><option>Solo si algo falla</option></select></label>
+              <div class="aviso aviso--info" style="margin-bottom:0"><strong>Es el enlace con la autorización</strong>Sin este paso, el responsable de cumplimiento no se entera de que hay algo esperándole. Se puede quitar si tu equipo ya revisa la bandeja a diario.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ REVISIÓN PREVIA ══════════ -->
+    <section class="vista" id="vista-revision" hidden>
+      <h1 class="titular">Revisión previa · 0228 Anexo 01</h1>
+      <p class="bajada">18 de 12 486 registros no cumplen el diseño de registro. Corrígelos en el origen y vuelve a generar.</p>
+
+      <div class="aviso">
+        <strong>Esta revisión es nuestra, no de la SBS</strong>
+        Comprueba lo que el diseño de registro exige. Que un registro pase aquí no significa que la SBS lo acepte.
+      </div>
+
+      <div class="rejilla rejilla--2">
+        <div class="panel">
+          <div class="panel__cabecera">
+            <h2 class="panel__titulo">Registros con reparo</h2>
+            <span class="panel__sep"></span>
+            <select id="filtro-motivo" style="padding:.3rem .5rem;border:1px solid var(--borde);border-radius:8px;font:inherit;font-size:.82rem">
+              <option value="">Todos los motivos</option>
+              <option value="catalogo">Fuera de catálogo</option>
+              <option value="ancho">Excede el ancho</option>
+              <option value="formato">Formato inválido</option>
+              <option value="caracter">Carácter no admitido</option>
+              <option value="rango">Valor fuera de rango</option>
+            </select>
+          </div>
+          <table id="tabla-reparos">
+            <thead><tr><th>Fila</th><th>Deudor</th><th>Campo</th></tr></thead>
+            <tbody>
+              <tr class="fila-sel" data-motivo="catalogo" data-id="r1" aria-selected="true"><td class="cod">4 812</td><td>Comercial Andina SAC</td><td>Tipo de documento</td></tr>
+              <tr class="fila-sel" data-motivo="ancho" data-id="r2"><td class="cod">5 037</td><td>Inversiones del Sur EIRL</td><td>Saldo capital</td></tr>
+              <tr class="fila-sel" data-motivo="formato" data-id="r3"><td class="cod">6 190</td><td>Textiles Piura SA</td><td>Fecha de desembolso</td></tr>
+              <tr class="fila-sel" data-motivo="caracter" data-id="r4"><td class="cod">7 244</td><td>Cañete Distribuciones</td><td>Razón social</td></tr>
+              <tr class="fila-sel" data-motivo="catalogo" data-id="r5"><td class="cod">8 015</td><td>Agroexportadora Chira</td><td>Moneda</td></tr>
+              <tr class="fila-sel" data-motivo="formato" data-id="r6"><td class="cod">9 663</td><td>Servicios Marítimos Callao</td><td>Número de documento</td></tr>
+            </tbody>
+          </table>
+          <div class="vacio" id="reparos-vacio" hidden>
+            <div class="vacio__titulo">Ningún registro con ese motivo</div>
+            En este periodo no hay reparos de ese tipo.
+          </div>
+        </div>
+
+        <div class="panel" id="panel-detalle">
+          <div class="panel__cabecera"><h2 class="panel__titulo" id="det-titulo">Fila 4 812 · Comercial Andina SAC</h2></div>
+          <div class="panel__cuerpo">
+            <p style="margin-top:0"><span class="marca marca--alto" id="det-marca">Fuera de catálogo</span></p>
+            <p id="det-texto" style="font-size:.92rem">El tipo de documento <strong>7</strong> no existe en el catálogo vigente para agosto 2026. Los valores admitidos son 1 (DNI), 4 (Carné de extranjería), 6 (RUC) y 7 fue retirado en la versión 5.09.00.</p>
+            <div class="archivo" id="det-linea">posición 12-13 · esperado: 01|04|06
+recibido:  07</div>
+            <p style="font-size:.85rem;color:var(--texto-suave);margin-bottom:0">Origen: <span class="cod">reclamos_consolidado</span>, fila 4 812. Corrige el dato en la fuente y vuelve a generar.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ ARCHIVO GENERADO ══════════ -->
+    <section class="vista" id="vista-entrega" hidden>
+      <h1 class="titular">Archivo generado · 0231</h1>
+      <p class="bajada">Comisiones y gastos por servicios · agosto 2026</p>
+
+      <div class="rejilla rejilla--2">
+        <div class="panel">
+          <div class="panel__cabecera"><h2 class="panel__titulo">Paquete depositado</h2><span class="panel__sep"></span><span class="marca marca--ok">en el destino</span></div>
+          <div class="panel__cuerpo">
+            <div class="archivo">31260831.231
+2 917 registros · 524 060 bytes
+Codificación por confirmar · CRLF · 180 posiciones por línea</div>
+            <table style="margin-top:.8rem">
+              <tbody>
+                <tr><td style="color:var(--texto-suave);width:45%">Archivo</td><td class="cod">01260831.231</td></tr>
+                <tr><td style="color:var(--texto-suave)">Destino</td><td><span class="cod">\\fileserver\sucave-in\0231\2026-08\</span></td></tr>
+                <tr><td style="color:var(--texto-suave)">Depositado</td><td>08/09/2026 09:14</td></tr>
+                <tr><td style="color:var(--texto-suave)">Diseño de registro</td><td><span class="marca marca--info">SUCAVE 5.10.00</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel">
+            <div class="panel__cabecera"><h2 class="panel__titulo">Primeras líneas</h2></div>
+            <div class="panel__cuerpo">
+              <div class="archivo">0231202608000029170000524060
+0000000001060012345678901COMERCIAL ANDINA SAC
+0000000002010045218890 GUTIERREZ ROJAS MARIA ELENA
+0000000003060020147856932IMPORTACIONES PACIFICO SA   </div>
+            </div>
+          </div>
+
+          <div class="aviso">
+            <strong>Falta presentarlo</strong>
+            El archivo está listo para cargarlo en SUCAVE. El aplicativo lo valida, arma su envío y lo transmite a la SBS. Este sistema no envía nada al regulador.
+          </div>
+
+          <div class="panel" style="margin-bottom:1rem">
+            <div class="panel__cabecera">
+              <h2 class="panel__titulo">Autorización para presentar</h2>
+              <span class="panel__sep"></span>
+              <span class="marca marca--espera" id="marca-autoriza">espera al responsable</span>
+            </div>
+            <div class="panel__cuerpo">
+              <p style="margin-top:0;font-size:.9rem">Preparado por <strong>Milagros Quiroz</strong> el 08/09/2026 09:14.</p>
+              <div class="solo-analista">
+                <p style="font-size:.87rem;color:var(--texto-suave)">Quien prepara el envío no lo autoriza. Avisa al responsable de cumplimiento para que lo revise.</p>
+                <div style="display:flex;justify-content:flex-end">
+                  <button class="boton boton--fuerte" disabled title="Lo autoriza el responsable de cumplimiento, no quien preparó el envío">Autorizar la presentación</button>
+                </div>
+              </div>
+              <div class="solo-cumplimiento">
+                <p style="font-size:.87rem;color:var(--texto-suave)">Revisa el archivo antes de autorizar. Al autorizarlo queda registrado a tu nombre.</p>
+                <div style="display:flex;justify-content:flex-end;gap:.5rem">
+                  <button class="boton" id="btn-devolver">Devolver con observaciones</button>
+                  <button class="boton boton--fuerte" id="btn-autorizar">Autorizar la presentación</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:.5rem;justify-content:flex-end">
+            <button class="boton" id="btn-copiar">Copiar la ruta</button>
+            <button class="boton boton--fuerte" data-ir="cierre">Volver a obligaciones</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel panel--fallo">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">0301 · no se pudo dejar el archivo</h2>
+          <span class="panel__sep"></span>
+          <span class="marca marca--alto">falló la entrega</span>
+        </div>
+        <div class="panel__cuerpo">
+          <p style="margin-top:0;font-size:.92rem">El archivo <strong>se generó bien</strong> —1 104 registros, sin reparos— pero no se pudo dejar en el destino.</p>
+          <div class="archivo">\\fileserver\sucave-in\0301\2026-08\
+Acceso denegado a la carpeta compartida
+usuario: svc_regulatorio · intento 3 de 3 · 08/09/2026 09:41</div>
+          <p style="font-size:.87rem;margin-bottom:.8rem">La credencial del recurso compartido caducó el 06/09. El archivo está a salvo: se reintenta en cuanto se actualice, sin volver a generarlo.</p>
+          <div style="display:flex;gap:.5rem;justify-content:flex-end">
+            <button class="boton" id="btn-otro-destino">Elegir otro destino</button>
+            <button class="boton boton--fuerte" id="btn-reintentar">Reintentar la entrega</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ HISTORIAL ══════════ -->
+    <section class="vista" id="vista-historial" hidden>
+      <h1 class="titular">Periodos anteriores</h1>
+      <p class="bajada">Cada archivo conserva el diseño de registro con el que se generó.</p>
+
+      <div class="panel">
+        <div class="panel__cabecera"><h2 class="panel__titulo">Envíos preparados</h2></div>
+        <table>
+          <thead><tr><th>Periodo</th><th>Formato</th><th class="num">Registros</th><th>Diseño de registro</th><th>Depositado</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>Julio 2026</td><td class="cod">0228 · Anexo 01</td><td class="num">12 204</td><td><span class="marca marca--neutra">SUCAVE 5.09.00</span></td><td>08/08/2026</td><td><button class="boton boton--sutil" data-regenerar="Julio 2026|0228|5.09.00">Volver a generar</button></td></tr>
+            <tr><td>Julio 2026</td><td class="cod">0231</td><td class="num">2 850</td><td><span class="marca marca--neutra">SUCAVE 5.09.00</span></td><td>07/08/2026</td><td><button class="boton boton--sutil" data-regenerar="Julio 2026|0231|5.09.00">Volver a generar</button></td></tr>
+            <tr><td>Junio 2026</td><td class="cod">0228 · Anexo 01</td><td class="num">11 977</td><td><span class="marca marca--neutra">SUCAVE 5.09.00</span></td><td>09/07/2026</td><td><button class="boton boton--sutil" data-regenerar="Junio 2026|0228|5.09.00">Volver a generar</button></td></tr>
+            <tr><td>Mayo 2026</td><td class="cod">0224</td><td class="num">298</td><td><span class="marca marca--neutra">SUCAVE 5.08.00</span></td><td>10/06/2026</td><td><button class="boton boton--sutil" data-regenerar="Mayo 2026|0224|5.08.00">Volver a generar</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="aviso aviso--info">
+        <strong>Por qué se guarda la versión</strong>
+        La SBS actualiza los diseños de registro varias veces al año. Volver a generar un periodo pasado usa la versión que regía entonces, no la de hoy: así el archivo sale igual al que se presentó.
+      </div>
+    </section>
+
+    <!-- ══════════ FORMATOS VIGENTES ══════════ -->
+    <section class="vista" id="vista-catalogo" hidden>
+      <h1 class="titular">Formatos vigentes</h1>
+      <p class="bajada">Lo que la SBS exige hoy, y con qué versión. De aquí sale el diseño de registro de cada envío.</p>
+
+      <div class="panel">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo">Definiciones registradas</h2>
+          <span class="panel__sep"></span>
+          <button class="boton solo-cumplimiento" id="btn-importar">Registrar una versión nueva</button>
+          <button class="boton solo-analista" disabled title="El catálogo lo mantiene el responsable de cumplimiento; tú lo consultas">Registrar una versión nueva</button>
+        </div>
+        <table>
+          <thead><tr><th>Formato</th><th>Anexos</th><th>Grupo de envío</th><th>Versión</th><th>Vigente desde</th><th>Periodicidad</th></tr></thead>
+          <tbody>
+            <tr><td class="cod">0228</td><td>01, 02</td><td>Grupo 01 — juntos</td><td><span class="marca marca--ok">5.10.00</span></td><td>01/07/2026</td><td>Trimestral · 45 días</td></tr>
+            <tr><td class="cod">0228</td><td>01, 02</td><td>Grupo 01 — juntos</td><td><span class="marca marca--neutra">5.09.00</span></td><td>01/01/2026</td><td>Trimestral · 45 días</td></tr>
+            <tr><td class="cod">0224</td><td>01</td><td>Individual</td><td><span class="marca marca--ok">5.10.00</span></td><td>01/07/2026</td><td>Mensual · 15 días</td></tr>
+            <tr><td class="cod">0301</td><td>01</td><td>Individual</td><td><span class="marca marca--ok">5.10.00</span></td><td>01/07/2026</td><td>Mensual · 15 días</td></tr>
+            <tr><td class="cod">0231</td><td>01</td><td>Individual</td><td><span class="marca marca--ok">5.10.00</span></td><td>01/07/2026</td><td>Mensual · 10 días</td></tr>
+            <tr><td class="cod">0238</td><td>01</td><td>Individual</td><td><span class="marca marca--ok">5.10.00</span></td><td>01/07/2026</td><td>Mensual · 10 días</td></tr>
+            <tr><td class="cod">0500</td><td>01</td><td>Individual</td><td><span class="marca marca--ok">5.10.00</span></td><td>01/07/2026</td><td>Mensual · 10 días</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rejilla rejilla--2">
+        <div class="aviso aviso--info">
+          <strong>Un formato nuevo no necesita una versión del sistema</strong>
+          Se registra aquí importando el diseño de registro que publica la SBS, y queda disponible para armar envíos. Las versiones anteriores no se borran: son las que permiten regenerar un periodo pasado tal como se presentó.
+        </div>
+        <div class="aviso">
+          <strong>Si la SBS publica y aquí no se registra</strong>
+          Los envíos del periodo siguiente se seguirían generando con el diseño viejo. Nada fallaría al ejecutar; el rechazo llegaría del regulador, semanas después.
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="velo" id="velo">
+  <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="dlg-titulo">
+    <div class="dialogo__cuerpo">
+      <h2 class="panel__titulo" id="dlg-titulo" style="margin-bottom:.5rem">Volver a generar un periodo cerrado</h2>
+      <p style="font-size:.92rem" id="dlg-texto"></p>
+      <p style="font-size:.85rem;color:var(--texto-suave);margin-bottom:0">Se usará ese diseño de registro y no el vigente, para que el archivo salga idéntico al que se presentó.</p>
+    </div>
+    <div class="dialogo__pie">
+      <button class="boton" id="dlg-no">Cancelar</button>
+      <button class="boton boton--fuerte" id="dlg-si">Generar con esa versión</button>
+    </div>
+  </div>
+</div>
+
+<!-- toast de confirmacion: feedback breve tras una accion -->
+<div class="tostada toast" id="tostada" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  var vistas = document.querySelectorAll('.vista');
+  var items = document.querySelectorAll('.rail__item');
+
+  function mostrar(nombre) {
+    vistas.forEach(function (v) { v.hidden = v.id !== 'vista-' + nombre; });
+    items.forEach(function (b) {
+      if (b.dataset.vista === nombre) { b.setAttribute('aria-current', 'page'); }
+      else { b.removeAttribute('aria-current'); }
+    });
+    window.scrollTo(0, 0);
+  }
+
+  items.forEach(function (b) {
+    b.addEventListener('click', function () { mostrar(b.dataset.vista); });
+  });
+  document.querySelectorAll('[data-ir]').forEach(function (b) {
+    b.addEventListener('click', function () { mostrar(b.dataset.ir); });
+  });
+
+  var tostada = document.getElementById('tostada');
+  var reloj;
+  function avisar(texto) {
+    tostada.textContent = texto;
+    tostada.dataset.ver = 'si';
+    clearTimeout(reloj);
+    reloj = setTimeout(function () { tostada.dataset.ver = 'no'; }, 3200);
+  }
+
+  // Destino elegido se refleja en el resumen de preparación
+  var selDestino = document.getElementById('sel-destino');
+  var notaDestino = document.getElementById('nota-destino');
+  var textoDestino = {
+    red: 'Carpeta compartida · \\\\fileserver\\sucave-in',
+    local: 'Disco local de la estación SUCAVE',
+    s3: 'Almacenamiento S3 · solo histórico'
+  };
+  selDestino.addEventListener('change', function () {
+    notaDestino.textContent = textoDestino[selDestino.value];
+  });
+
+  // Generar: estado de carga con progreso real sobre el numero de registros
+  var panelProgreso = document.getElementById('panel-progreso');
+  var progLlena = document.getElementById('prog-llena');
+  var progPct = document.getElementById('prog-pct');
+  var progTexto = document.getElementById('prog-texto');
+  var btnGenerar = document.getElementById('btn-generar');
+  var tramos = [
+    { pct: 18, texto: 'Cargando el origen… 62 de 341 registros' },
+    { pct: 46, texto: 'Revisando contra las reglas del formato…' },
+    { pct: 74, texto: 'Escribiendo el archivo de ancho fijo…' },
+    { pct: 100, texto: 'Dejando el archivo en su carpeta…' }
+  ];
+  btnGenerar.addEventListener('click', function () {
+    var formato = document.getElementById('sel-formato');
+    var codigo = formato.options[formato.selectedIndex].text.split(' — ')[0];
+    panelProgreso.hidden = false;
+    btnGenerar.disabled = true;
+    var i = 0;
+    (function avanzar() {
+      if (i >= tramos.length) {
+        btnGenerar.disabled = false;
+        panelProgreso.hidden = true;
+        progLlena.style.width = '0%';
+        avisar('Formato ' + codigo + ' generado y depositado en el destino.');
+        mostrar('entrega');
+        return;
+      }
+      progLlena.style.width = tramos[i].pct + '%';
+      progPct.textContent = tramos[i].pct + ' %';
+      progTexto.textContent = tramos[i].texto;
+      i++;
+      setTimeout(avanzar, 620);
+    })();
+  });
+
+  // Perfil activo: quien prepara no autoriza (segregacion de funciones)
+  var selPerfil = document.getElementById('sel-perfil');
+  var avatar = document.getElementById('avatar');
+  var marcaAutoriza = document.getElementById('marca-autoriza');
+  selPerfil.addEventListener('change', function () {
+    var esCumplimiento = selPerfil.value === 'cumplimiento';
+    document.body.dataset.perfil = selPerfil.value;
+    avatar.textContent = esCumplimiento ? 'EV' : 'MQ';
+    marcaAutoriza.textContent = esCumplimiento ? 'pendiente de tu revisión' : 'espera al responsable';
+    marcaAutoriza.className = 'marca ' + (esCumplimiento ? 'marca--info' : 'marca--espera');
+    avisar(esCumplimiento
+      ? 'Como responsable de cumplimiento puedes autorizar, pero no ajustar el formato.'
+      : 'Como analista ajustas y generas el envío; autorizarlo es del responsable.');
+  });
+
+  document.getElementById('btn-autorizar').addEventListener('click', function () {
+    marcaAutoriza.textContent = 'autorizado por Ernesto Valdez';
+    marcaAutoriza.className = 'marca marca--ok';
+    avisar('Presentación autorizada. Queda registrada a nombre de Ernesto Valdez.');
+  });
+  document.getElementById('btn-devolver').addEventListener('click', function () {
+    marcaAutoriza.textContent = 'devuelto al analista';
+    marcaAutoriza.className = 'marca marca--alto';
+    avisar('Devuelto a Milagros Quiroz con observaciones.');
+  });
+
+  // Un formato con varios anexos tiene una cadena por anexo: cambiar de anexo cambia el diseño de
+  // registro de todos sus pasos. La revision del conjunto y la entrega son comunes.
+  var anexos = document.querySelectorAll('[data-anexo]');
+  var datosAnexo = {
+    '01': { nombre: 'anexo 01', campos: '24 campos, 180 posiciones' },
+    '02': { nombre: 'anexo 02', campos: '11 campos, 64 posiciones' }
+  };
+  anexos.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      anexos.forEach(function (c) { c.removeAttribute('aria-current'); });
+      chip.setAttribute('aria-current', 'true');
+      var d = datosAnexo[chip.dataset.anexo];
+      document.getElementById('cad-anexo').textContent = d.nombre;
+      document.getElementById('prep-anexo').value = chip.dataset.anexo;
+      document.getElementById('esc-campos').textContent = 'Campos resueltos · ' + d.campos;
+      avisar('Mostrando los pasos del ' + d.nombre + '. Su diseño de registro es distinto: ' + d.campos + '.');
+    });
+  });
+
+  // Ajustes del formato: cada paso muestra su formulario
+  var fichas = document.querySelectorAll('.ficha');
+  var formas = document.querySelectorAll('.forma');
+  fichas.forEach(function (ficha) {
+    ficha.addEventListener('click', function () {
+      fichas.forEach(function (f) { f.removeAttribute('aria-current'); });
+      ficha.setAttribute('aria-current', 'true');
+      formas.forEach(function (f) { f.hidden = f.id !== 'forma-' + ficha.dataset.tarea; });
+    });
+  });
+
+  // El periodo fijo y la version fijada solo se piden cuando se eligen
+  var modoPeriodo = document.getElementById('sel-modo-periodo');
+  modoPeriodo.addEventListener('change', function () {
+    document.getElementById('campo-periodo-fijo').hidden = modoPeriodo.value !== 'fijo';
+  });
+  var modoVersion = document.getElementById('sel-modo-version');
+  modoVersion.addEventListener('change', function () {
+    var fijada = modoVersion.value === 'fijada';
+    document.getElementById('campo-version').hidden = !fijada;
+    if (fijada) { avisar('Con una versión fijada, el envío no seguirá las actualizaciones de la SBS.'); }
+  });
+
+  document.getElementById('btn-importar').addEventListener('click', function () {
+    avisar('Se importaría el diseño de registro publicado por la SBS y quedaría como versión nueva.');
+  });
+
+  document.getElementById('btn-reintentar').addEventListener('click', function () {
+    avisar('La credencial del destino sigue caducada. Actualízala en el catálogo de fuentes.');
+  });
+  document.getElementById('btn-otro-destino').addEventListener('click', function () {
+    mostrar('preparar');
+    avisar('Elige otro destino y reintenta sin volver a generar el archivo.');
+  });
+
+  document.getElementById('btn-copiar').addEventListener('click', function () {
+    avisar('Ruta copiada: \\fileserver\sucave-in\0231\2026-08\01260831.231');
+  });
+
+  // Detalle del reparo seleccionado
+  var reparos = {
+    r1: {
+      titulo: 'Fila 4 812 · Comercial Andina SAC',
+      marca: 'Fuera de catálogo', clase: 'marca--alto',
+      texto: 'El tipo de documento <strong>7</strong> no existe en el catálogo vigente para agosto 2026. Los valores admitidos son 1 (DNI), 4 (Carné de extranjería) y 6 (RUC); el 7 se retiró en la versión 5.09.00.',
+      linea: 'posición 12-13 · esperado: 01|04|06\nrecibido:  07',
+      origen: 'reclamos_consolidado, fila 4 812'
+    },
+    r2: {
+      titulo: 'Fila 5 037 · Inversiones del Sur EIRL',
+      marca: 'Excede el ancho', clase: 'marca--alto',
+      texto: 'El saldo de capital ocupa 16 caracteres y la columna admite <strong>14 posiciones</strong>. El archivo no se escribe con un valor recortado: se detiene para que nadie reporte una cifra distinta a la real.',
+      linea: 'posición 48-61 · ancho: 14\nrecibido:  1248000000000000 (16)',
+      origen: 'reclamos_consolidado, fila 5 037'
+    },
+    r3: {
+      titulo: 'Fila 6 190 · Textiles Piura SA',
+      marca: 'Formato inválido', clase: 'marca--alto',
+      texto: 'La fecha de desembolso <strong>20260231</strong> no existe. Las fechas van en 8 posiciones con formato aaaammdd.',
+      linea: 'posición 62-69 · formato: aaaammdd\nrecibido:  20260231',
+      origen: 'reclamos_consolidado, fila 6 190'
+    },
+    r4: {
+      titulo: 'Fila 7 244 · Cañete Distribuciones',
+      marca: 'Carácter no admitido', clase: 'marca--alto',
+      texto: 'La razón social contiene <strong>Ñ</strong>. El diseño de registro exige reportarla como <strong>#</strong>.',
+      linea: 'posición 24-63\nrecibido:  CAÑETE DISTRIBUCIONES\nesperado:  CA#ETE DISTRIBUCIONES',
+      origen: 'reclamos_consolidado, fila 7 244'
+    },
+    r5: {
+      titulo: 'Fila 8 015 · Agroexportadora Chira',
+      marca: 'Fuera de catálogo', clase: 'marca--alto',
+      texto: 'La moneda <strong>CLP</strong> no está en el catálogo del formato. Admite 01 (soles), 02 (dólares) y 03 (euros).',
+      linea: 'posición 70-71 · esperado: 01|02|03\nrecibido:  CLP',
+      origen: 'reclamos_consolidado, fila 8 015'
+    },
+    r6: {
+      titulo: 'Fila 9 663 · Servicios Marítimos Callao',
+      marca: 'Formato inválido', clase: 'marca--alto',
+      texto: 'El RUC <strong>20487561234</strong> tiene dígito verificador incorrecto.',
+      linea: 'posición 14-24 · 11 dígitos\nrecibido:  20487561234',
+      origen: 'reclamos_consolidado, fila 9 663'
+    }
+  };
+
+  var filas = document.querySelectorAll('.fila-sel');
+  filas.forEach(function (fila) {
+    fila.addEventListener('click', function () {
+      filas.forEach(function (f) { f.setAttribute('aria-selected', 'false'); });
+      fila.setAttribute('aria-selected', 'true');
+      var d = reparos[fila.dataset.id];
+      document.getElementById('det-titulo').textContent = d.titulo;
+      var marca = document.getElementById('det-marca');
+      marca.textContent = d.marca;
+      marca.className = 'marca ' + d.clase;
+      document.getElementById('det-texto').innerHTML = d.texto;
+      document.getElementById('det-linea').textContent = d.linea;
+    });
+  });
+
+  // Filtro con estado vacío
+  var filtro = document.getElementById('filtro-motivo');
+  var vacio = document.getElementById('reparos-vacio');
+  var tabla = document.getElementById('tabla-reparos');
+  filtro.addEventListener('change', function () {
+    var v = filtro.value;
+    var visibles = 0;
+    filas.forEach(function (f) {
+      var ok = !v || f.dataset.motivo === v;
+      f.hidden = !ok;
+      if (ok) { visibles++; }
+    });
+    tabla.hidden = visibles === 0;
+    vacio.hidden = visibles !== 0;
+  });
+
+  // Regenerar un periodo cerrado
+  var velo = document.getElementById('velo');
+  var pendiente = null;
+  document.querySelectorAll('[data-regenerar]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = b.dataset.regenerar.split('|');
+      pendiente = p;
+      document.getElementById('dlg-texto').innerHTML =
+        'Vas a regenerar el <strong>' + p[1] + '</strong> de <strong>' + p[0] +
+        '</strong>, que se preparó con el diseño de registro <strong>SUCAVE ' + p[2] +
+        '</strong>. Hoy rige la versión 5.10.00.';
+      velo.dataset.ver = 'si';
+    });
+  });
+  document.getElementById('dlg-no').addEventListener('click', function () { velo.dataset.ver = 'no'; });
+  document.getElementById('dlg-si').addEventListener('click', function () {
+    velo.dataset.ver = 'no';
+    avisar('Regenerando ' + pendiente[1] + ' de ' + pendiente[0] + ' con SUCAVE ' + pendiente[2] + '.');
+  });
+  velo.addEventListener('click', function (e) { if (e.target === velo) { velo.dataset.ver = 'no'; } });
+})();
+</script>
+</body>
+</html>

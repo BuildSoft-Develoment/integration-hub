@@ -202,16 +202,25 @@ emparejamientos y por banderas de config, con mensajes de error que explican la 
 Y el propio análisis previo **concede en su §13** que declarar una capacidad no basta —hace falta un
 `SucaveDatasetAdapter` que inspeccione columnas, tipos, orden, unicidad y conteo—. Es decir: el grafo
 no elimina la inspección específica del vertical, **le añade una capa encima**. Coste: declarar
-`consumes`/`produces` en los **21** tipos de tarea existentes; beneficio sobre lo que ya hay: feedback
-del editor al borrar un nodo (§12). Eso es una mejora de UX real, pero no es un P0 ni un requisito de
-cumplimiento.
+`consumes`/`produces` en **todos los tipos de tarea existentes**
+([catálogo de tipos](../transversal/90.17-catalogo-de-tipos.md), auto-generado); beneficio sobre lo
+que ya hay: feedback del editor al borrar un nodo (§12). Eso es una mejora de UX real, pero no es un
+P0 ni un requisito de cumplimiento.
 
-> **Corrección (3ª pasada).** La 1ª versión decía "~34 tipos de tarea". Eran **21**: el grep de
-> `public String type()` barrió también los providers de FUENTE (`SFTP`, `S3`, `FTP`, `GCS`,
-> `AZURE_BLOB`, `FILESYSTEM`, `REST`) y de LECTOR (`CSV`, `TXT`, `XLS`, `XLSX`, `JSON`, `XML`), que no
-> son tareas. Lista real confirmada por el arranque del motor en el log del IT. El grafo de
-> capacidades es por tanto ~40% más barato de lo que decía este documento — lo cual **acerca** la
-> propuesta del análisis previo, sin cambiar el orden recomendado.
+> **Corrección (3ª pasada, y su corrección en la 4ª).** La 1ª versión decía "~34 tipos de tarea" — el
+> grep de `public String type()` barrió también los providers de FUENTE y de LECTOR, que no son
+> tareas. La 3ª pasada lo corrigió a "21" contando el log de arranque del motor. **También estaba
+> mal: son 22.** Faltaba `FILE_READ`, que es fast-path del motor y **no tiene provider**, así que no
+> aparece ni en el grep ni en el registro de providers.
+>
+> La lección no es el número: es que
+> [`90.17-catalogo-de-tipos.md`](../transversal/90.17-catalogo-de-tipos.md) existe justamente porque
+> las listas escritas a mano caducan, y aquí escribí una a mano dos veces seguidas. Por eso este
+> documento ya no enumera: enlaza al catálogo, que lo genera el código y lo verifica el CI.
+>
+> Detalle que sí importa para el diseño: si algún día se declara el contrato de capacidades,
+> **`FILE_READ` no tiene clase donde colgarlo**. El productor canónico del stream de registros es
+> precisamente el que no es un provider.
 
 **Recomendación:** no construir el grafo para el primer formato. Si más adelante el editor lo pide,
 introducirlo como declaración opt-in en `TaskProvider` (el patrón exacto de `movesMoney()`), nunca
@@ -325,6 +334,16 @@ producir abstracciones equivocadas y caras de revertir.
 ---
 
 ## 4. Orden recomendado
+
+> **Alcance cerrado (2026-08-10, tras la conversación).** La finalidad es **GENERAR**: producir los
+> archivos de formato, empaquetarlos en ZIP y depositarlos en un destino ya configurado. El sistema
+> **no presenta a la SBS** — eso lo hace una persona. Con ello **desaparece la pregunta abierta de
+> §3.5**, y con ella `GENERATE_AND_DELIVER`, `DELIVERY_RECEIPT`, el guard de entrega y el ciclo de
+> vida ante el regulador (§3.4). Se añade un requisito nuevo que no es de SUCAVE sino del motor:
+> **toda fuente de entrada debe tener su salida** — hoy hay 8 tipos de entrada y 2 de salida.
+>
+> El plan detallado y ejecutable vive ahora en **[`specs/009-sbs-sucave/`](../../specs/009-sbs-sucave/README.md)**;
+> lo que sigue queda como el razonamiento que lo originó.
 
 **F0 — Congelar el plan en la continuación. ✅ HECHO (2026-08-10).** Era un fallo vivo del motor que
 afectaba al money-path (§1.4), independiente de SUCAVE. El envelope lleva ahora `remainingTasks` y la

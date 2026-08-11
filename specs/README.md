@@ -14,6 +14,7 @@ Carpeta base para features gestionadas bajo `Spec-Driven Development (SDD)`.
 - [006-programacion-procesos](006-programacion-procesos/spec-funcional.md)
 - [007-tema-del-sistema](007-tema-del-sistema/spec-funcional.md)
 - [008-mensajeria-pagos](008-mensajeria-pagos/spec-funcional.md)
+- [009-sbs-sucave](009-sbs-sucave/spec-funcional.md) — *documentacion previa a la construccion; nada implementado*
 
 ## Regla
 
