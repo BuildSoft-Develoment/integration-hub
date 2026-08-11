@@ -17,6 +17,7 @@ Consolidar la experiencia operativa real del frontend del producto: usuarios, jo
 - [02.00-ux-ui](02.00-ux-ui.md)
 - [journeys/journey-administracion-catalogos](journeys/journey-administracion-catalogos.md)
 - [journeys/journey-diseno-ejecucion-y-seguimiento](journeys/journey-diseno-ejecucion-y-seguimiento.md)
+- [journeys/journey-reporteria-regulatoria](journeys/journey-reporteria-regulatoria.md) — *planificado (feature 009)*
 - [pantallas/mapa-pantallas-y-rutas](pantallas/mapa-pantallas-y-rutas.md)
 - [pantallas/pantalla-catalogos-y-configuracion](pantallas/pantalla-catalogos-y-configuracion.md)
 - [pantallas/pantalla-diseno-operacion-y-trazabilidad](pantallas/pantalla-diseno-operacion-y-trazabilidad.md)

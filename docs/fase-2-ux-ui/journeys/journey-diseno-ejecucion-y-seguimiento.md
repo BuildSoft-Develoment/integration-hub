@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [Journey de administracion de catalogos](journey-administracion-catalogos.md)
-- Siguiente: [Mapa de pantallas y rutas](../pantallas/mapa-pantallas-y-rutas.md)
+- Siguiente: [Journey de reporteria regulatoria (SBS SUCAVE)](journey-reporteria-regulatoria.md)
 <!-- nav-guided:end -->
 
 ## Objetivo

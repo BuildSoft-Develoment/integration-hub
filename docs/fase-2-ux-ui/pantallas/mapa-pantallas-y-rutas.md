@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Journey de diseno, ejecucion y seguimiento](../journeys/journey-diseno-ejecucion-y-seguimiento.md)
+- Anterior: [Journey de reporteria regulatoria (SBS SUCAVE)](../journeys/journey-reporteria-regulatoria.md)
 - Siguiente: [Pantalla de catalogos y configuracion](pantalla-catalogos-y-configuracion.md)
 <!-- nav-guided:end -->
 
@@ -32,6 +32,13 @@ Mapear las rutas reales del frontend y su responsabilidad UX dentro del producto
 | `swift-mt101/pay-conflicts` | conflictos de pago | conciliar contradicciones terminales del money-path | listar abiertos, solicitar y aprobar acknowledge (maker-checker) | `Payments Operator`, `pay-conflict-maker`, `pay-conflict-checker` |
 | `swift-mt101/pay-dispatch` | despacho de pagos | ver el estado de despacho por fragmento y su motivo | listar, filtrar, abrir lineage | `Auditor`, `Operator`, `Payments Operator` |
 | `executions/async-dlq` | cola muerta asincrona | trabajo del motor que murio tras agotar reintentos | listar, redrive, requeue | `Platform Admin`, `Integration Admin` |
+| `sbs-sucave/*` | reporteria regulatoria SBS | *(planificado, sin construir)* consultar formatos generados y su version de layout | por definir en el prototipo SPDD de la feature | por definir |
+
+> `sbs-sucave/*` esta **planificada, no implementada**: figura aqui para que el mapa refleje el
+> espacio de rutas reservado por [`specs/009-sbs-sucave`](../../../specs/009-sbs-sucave/README.md).
+> Su detalle de pantallas sale del prototipo de Fase 2, que esa feature si debe recorrer por ser la
+> primera `origin: nueva`. Lo que SI existe ya para el operador es el arbol de plantillas dentro de
+> `processes` (SBS → SUCAVE → formato → anexo), no una seccion propia.
 
 ## Patron de navegacion
 

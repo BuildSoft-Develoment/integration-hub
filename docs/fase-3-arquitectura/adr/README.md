@@ -35,6 +35,9 @@
 - [ADR-023 Cada modulo es dueno de su esquema de base de datos](ADR-023-separacion-schemas-motor-vertical.md)
 - [ADR-024 Despliegue nativo bajo un subpath, horneado en build-time](ADR-024-despliegue-nativo-bajo-subpath.md)
 - [ADR-025 Credenciales de fuente: el control vive en el servidor y lo declara el provider](ADR-025-credenciales-de-fuente-control-en-el-servidor.md)
+- [ADR-026 Vertical SBS SUCAVE, y toda fuente de entrada debe tener su salida](ADR-026-vertical-sbs-sucave-y-paridad-entrada-salida.md) *(propuesto)*
+- ADR-027 Salida `REST` y `OCI_OBJECT_STORAGE`: publicar no es el espejo de leer *(reservado, sin redactar — ver ADR-026)*
+- [ADR-028 Llamar a otro proceso como una tarea más](ADR-028-llamada-a-otro-proceso-como-tarea.md) *(propuesto)*
 
 ## Regla
 
