@@ -3,7 +3,7 @@
  * gen-catalogo-tipos.mjs
  *
  * Genera la zona <!-- auto:start name=catalogo-tipos --> del documento canonico de catalogos, leyendo
- * los providers REALES del codigo: fuentes, readers y task types.
+ * los providers REALES del codigo: fuentes, readers, task types y destinos de salida (sinks).
  *
  * POR QUE EXISTE
  * La auditoria de las 9 fases encontro el mismo error repetido en seis documentos: enumeraban "4
@@ -51,6 +51,10 @@ function table(rows, titulo) {
 const fuentes = collect('SourceProvider', ['sourceType', 'type']);
 const readers = collect('ReaderProvider', ['readerType', 'type']);
 const tareas = collect('TaskProvider', ['type']);
+// Las clases de salida no se llaman `*Provider`: implementan `OutputSink` y se llaman `*Sink`
+// (`FilesystemSink`, `SftpSink`). El sufijo captura tambien la interfaz del SPI, que `collectProviders`
+// descarta por ser interfaz -no declara un tipo, declara el contrato para declararlo-.
+const sinks = collect('Sink', ['type']);
 
 /**
  * No todo tipo de tarea tiene una clase `*TaskProvider`. `FILE_READ` es una constante de
@@ -74,6 +78,39 @@ if (existsSync(taskTypeFile)) {
   tareas.sort((a, b) => a.tipo.localeCompare(b.tipo));
 }
 
+/**
+ * Cruce entrada/salida (RF-011).
+ *
+ * El catalogo de `/sources` admite 8 tipos de ENTRADA y la salida sabe escribir en 2. Esa asimetria es
+ * real y esta decidida (ADR-026; REST y OCI como destino quedan pendientes de ADR-027), pero era
+ * INVISIBLE: habia que leer dos tablas distintas y restarlas mentalmente para verla, y nadie lo hacia.
+ *
+ * Esto NO falla: un hueco aceptado a proposito no es una rotura. Lo que hace es que el hueco no se
+ * pueda no ver, y que la lista se mueva sola. `--check` ya falla si el documento no coincide con el
+ * codigo, asi que el dia que alguien registre la novena FUENTE, el CI le obliga a regenerar y el
+ * agujero nuevo aparece aqui firmado en el commit — en vez de descubrirse en una ejecucion.
+ */
+function paridad(fuentes, sinks) {
+  const norm = (t) => t.toUpperCase();
+  const entrada = new Set(fuentes.map((f) => norm(f.tipo)));
+  // El registry resuelve el sink case-insensitive, asi que el cruce se hace igual.
+  const salida = new Set(sinks.map((s) => norm(s.tipo)));
+  const tipos = [...new Set([...entrada, ...salida])].sort();
+  const conAmbas = tipos.filter((t) => entrada.has(t) && salida.has(t)).length;
+  return [
+    `### Paridad entrada/salida (${conAmbas}/${tipos.length})`,
+    '',
+    '| Tipo | Entrada (`/sources`) | Salida (`FILE_DELIVER`) |',
+    '|---|---|---|',
+    ...tipos.map((t) => `| \`${t}\` | ${entrada.has(t) ? 'si' : '—'} | ${salida.has(t) ? 'si' : '—'} |`),
+    '',
+    'Un tipo sin salida se puede definir como fuente y **no** se puede elegir como destino de una',
+    'entrega: el selector no lo ofrece y publicar el proceso lo rechaza nombrando los que si',
+    '(`FileDeliverSinkValidator`). Antes se aceptaba y fallaba en la primera ejecucion.',
+    '',
+  ].join('\n');
+}
+
 const body = [
   '',
   `_Generado por \`ci/scripts/gen-catalogo-tipos.mjs\` leyendo los providers del codigo._`,
@@ -82,6 +119,8 @@ const body = [
   table(fuentes, 'Fuentes'),
   table(readers, 'Readers'),
   table(tareas, 'Tipos de tarea'),
+  table(sinks, 'Destinos de salida (sinks)'),
+  paridad(fuentes, sinks),
 ].join('\n');
 
 if (!existsSync(TARGET)) {
@@ -104,9 +143,9 @@ if (check) {
     console.error('  Corre `npm run gen:catalogo` y commitea el resultado.');
     process.exit(1);
   }
-  console.log(`gen-catalogo-tipos: al dia (${fuentes.length} fuentes, ${readers.length} readers, ${tareas.length} tipos de tarea).`);
+  console.log(`gen-catalogo-tipos: al dia (${fuentes.length} fuentes, ${readers.length} readers, ${tareas.length} tipos de tarea, ${sinks.length} sinks).`);
   process.exit(0);
 }
 
 writeFileSync(TARGET, updated);
-console.log(`gen-catalogo-tipos: ${fuentes.length} fuentes, ${readers.length} readers, ${tareas.length} tipos de tarea -> ${TARGET}`);
+console.log(`gen-catalogo-tipos: ${fuentes.length} fuentes, ${readers.length} readers, ${tareas.length} tipos de tarea, ${sinks.length} sinks -> ${TARGET}`);
