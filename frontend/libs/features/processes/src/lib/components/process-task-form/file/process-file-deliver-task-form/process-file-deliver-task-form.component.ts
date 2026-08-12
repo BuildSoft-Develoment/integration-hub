@@ -8,6 +8,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { FileDeliverTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskFormModel, SourceRef } from '../../../../models/process.models';
+import { OutputSinkCatalogService } from '../../../../api/output-sink-catalog.service';
 import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
 import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
@@ -32,6 +33,12 @@ export class ProcessFileDeliverTaskFormComponent {
   readonly i18n = inject(I18nService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bridge = inject(ProcessTaskFormBridgeService);
+  private readonly sinkCatalog = inject(OutputSinkCatalogService);
+
+  constructor() {
+    // Una sola vez por sesion: la lista solo cambia con un despliegue.
+    this.sinkCatalog.load();
+  }
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
@@ -42,10 +49,18 @@ export class ProcessFileDeliverTaskFormComponent {
 
   readonly draft = computed<FileDeliverTaskDraft>(() => this.manager.draftFor<FileDeliverTaskDraft>(this.task()));
 
-  // El destino (sinkRef) debe ser una fuente activa con direction OUTPUT/BOTH (un sink). El backend lo valida
-  // igual, pero el picker ya ofrece solo candidatos validos para no dejar elegir una fuente de solo lectura.
+  // El destino (sinkRef) debe ser una fuente activa con direction OUTPUT/BOTH (un sink) Y de un tipo al que
+  // el motor sepa entregar. `direction` solo dice que la fuente QUIERE ser destino; que se pueda escribir en
+  // ella lo dice el catalogo de sinks. Sin ese segundo filtro se podia elegir una fuente FTP, guardar, activar
+  // y descubrirlo en la primera ejecucion con "Unsupported output sink: FTP". El backend tambien lo rechaza
+  // ahora al publicar; aqui directamente no se ofrece.
   readonly sinkOptions = computed(() =>
-    this.sources().filter((source) => source.active !== false && this.isSink(source.direction)),
+    this.sources().filter(
+      (source) =>
+        source.active !== false &&
+        this.isSink(source.direction) &&
+        this.sinkCatalog.canDeliverTo(source.sourceType),
+    ),
   );
 
   private isSink(direction?: string): boolean {

@@ -34,4 +34,21 @@ public class OutputSinkRegistry {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported output sink: " + type));
     }
+
+    /**
+     * ¿Hay sink para este tipo? Lo mismo que pregunta {@link #resolve} justo antes de fallar, pero sin
+     * excepción: sirve para poder decirlo ANTES, al guardar el proceso.
+     *
+     * <p>Existía la asimetría de que el catálogo de {@code /sources} admite tipos que la salida no
+     * sabe entregar —hay 8 de entrada y 2 de salida—, y el único momento en que eso se notaba era la
+     * ejecución, con el proceso ya publicado y alguien esperando el archivo.</p>
+     */
+    public boolean supports(String type) {
+        return type != null && sinks.get().anyMatch(sink -> sink.type().equalsIgnoreCase(type));
+    }
+
+    /** Tipos con sink, en orden estable. Para decir en el error QUÉ sí se puede elegir. */
+    public List<String> availableTypes() {
+        return sinks.get().map(OutputSink::type).sorted(String.CASE_INSENSITIVE_ORDER).toList();
+    }
 }
