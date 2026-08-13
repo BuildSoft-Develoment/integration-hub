@@ -41,12 +41,15 @@ Matriz viva RF → API → BD → Codigo → Test, detalle por feature del rollu
 | RF-014 | - | product-design.md | prototype-html5/index.html | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
 
 > **RF-011 esta en `Implementado` con una salvedad honesta.** Las fases A0, A1 y A2 estan cerradas y
-> la paridad es de **6 tipos de 8**: `FILESYSTEM`, `SFTP`, `S3`, `GCS`, `AZURE_BLOB` y `FTP` se pueden
-> usar de entrada y de salida. Faltan `REST` y `OCI_OBJECT_STORAGE`, y su ausencia no es un olvido:
-> la decide la fase A3 en un ADR propio (`REST` como destino no es el espejo de `REST` como fuente).
-> Mientras tanto, elegir uno de esos dos como destino se **rechaza al publicar el proceso**, no al
-> ejecutarlo. El estado del cruce completo, generado desde el codigo, esta en
-> [el catalogo de tipos](../../docs/transversal/90.17-catalogo-de-tipos.md).
+> **solo `REST` sigue sin salida**. Su ausencia no es un olvido: la decide la fase A3 en un ADR propio,
+> porque entregar un archivo por HTTP no es el espejo de leerlo —hay que decidir metodo, cuerpo,
+> multipart, reintentos e idempotencia—. Mientras tanto, elegirlo como destino se **rechaza al publicar
+> el proceso**, no al ejecutarlo.
+>
+> El cruce completo, con su cuenta, **no se copia aqui**: se genera desde el codigo en
+> [el catalogo de tipos](../../docs/transversal/90.17-catalogo-de-tipos.md), y `gen:catalogo:check`
+> falla si se desactualiza. Esta nota ya llevo una cuenta escrita a mano —"6 de 8"— que caduco el mismo
+> dia, al escribir el sink de OCI; es exactamente el fallo que ese generador existe para evitar.
 
 > **La fila de RF-011 declara un artefacto por columna, no la lista entera.** El requerimiento lo
 > sostienen seis sinks, un validador de publicacion, un endpoint y un servicio de frontend; la

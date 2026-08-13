@@ -1156,7 +1156,7 @@ paths:
       operationId: listOutputSinkTypes
       responses:
         '200':
-          description: OK
+
       x-source-feature: "009-sbs-sucave"
 
 components:

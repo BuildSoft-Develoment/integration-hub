@@ -98,8 +98,13 @@ public class OciObjectStorageSourceProvider implements SourceProvider {
      * par namespace+region (salvo override explicito), fuerza path-style y default de
      * auth por Customer Secret Keys. El resto de claves (bucket, prefix, fileNameTemplate,
      * selectionMode, mediaType, credenciales...) pasan tal cual.
+     *
+     * <p>Es publico porque lo usa tambien {@code OciObjectStorageSink}: la traduccion es la MISMA en
+     * las dos direcciones —una definicion {@code /sources} de OCI describe una conexion, no un
+     * sentido—, y tenerla dos veces significaria que el endpoint compat o el path-style se corrigen en
+     * una y no en la otra.</p>
      */
-    Map<String, Object> toS3Configuration(Map<String, Object> configuration) {
+    public Map<String, Object> toS3Configuration(Map<String, Object> configuration) {
         var s3 = new LinkedHashMap<String, Object>(configuration);
 
         var explicitEndpoint = stringValue(configuration.get("endpoint"));
@@ -120,8 +125,9 @@ public class OciObjectStorageSourceProvider implements SourceProvider {
     private static String requireText(Map<String, Object> configuration, String key) {
         var value = stringValue(configuration.get(key));
         if (value == null) {
+            // "connection", no "source": esta traduccion la usan la entrada Y la salida.
             throw new IllegalArgumentException(
-                    "OCI Object Storage source requires '" + key + "' (or an explicit 'endpoint')");
+                    "OCI Object Storage connection requires '" + key + "' (or an explicit 'endpoint')");
         }
         return value;
     }

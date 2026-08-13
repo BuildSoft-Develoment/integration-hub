@@ -443,7 +443,7 @@ escribir, y `direction: OUTPUT`
 solo dice que una fuente *quiere* ser destino, no que se pueda escribir en ella. El editor cruza esta
 lista con el `sourceType` de cada fuente para no ofrecer como destino algo que fallaría al ejecutar.
 
-Respuesta: `{ "deliverableTypes": ["AZURE_BLOB", "FILESYSTEM", "FTP", "GCS", "S3", "SFTP"] }` —
+Respuesta: `{ "deliverableTypes": ["AZURE_BLOB", "FILESYSTEM", "FTP", "GCS", "OCI_OBJECT_STORAGE", "S3", "SFTP"] }` —
 ordenados y sin distinguir mayúsculas, tal y como los resuelve `OutputSinkRegistry`. La lista sale de
 los beans registrados, así que **cambia sola** cuando se añade un sink; no hay ninguna copia que
 mantener.

@@ -24,7 +24,7 @@ estación que ejecuta SUCAVE, que el motor ya sabe escribir.
 | **A0** | Motor | Cerrar la trampa del picker de destino — **HECHA** | — |
 | **A1** | Motor | Sinks de objeto: `S3`, `GCS`, `AZURE_BLOB` — **HECHA** | A0 |
 | **A2** | Motor | `FtpSink` — **HECHA** | A0 |
-| **A3** | Motor | Decisión de diseño: `REST` y `OCI` como salida | A1 |
+| **A3** | Motor | Decisión de diseño: `REST` como salida | A1 |
 | **B1** | Vertical | Andamiaje: módulo, lib, migraciones, registro, i18n | — |
 | **B2** | Vertical | Un formato **de un solo anexo** de punta a punta: hasta el archivo en la carpeta de importación | B1 |
 | **B3** | Vertical | Jerarquía de la paleta (SBS → SUCAVE → formato → anexo) | B1 |
@@ -72,8 +72,18 @@ ejecución. Se cerró primero, y así cada sink nuevo que llegue entra en un sis
 > la tabla.
 
 > **A1 y A2 ✅ hechas (2026-08-12).** Cuatro sinks nuevos —`S3Sink`, `GcsSink`, `AzureBlobSink`,
-> `FtpSink`— dejan la paridad en **6 de 8**: sólo quedan fuera `REST` y `OCI_OBJECT_STORAGE`, que son
-> justo los que decide A3. 20 pruebas nuevas.
+> `FtpSink`— dejaron la paridad en **6 de 8**, y `OciObjectStorageSink` la subió a **7 de 8**. Sólo
+> queda fuera `REST`, que es lo que decide A3.
+>
+> **`OCI_OBJECT_STORAGE` no necesitaba decisión ninguna, y yo lo había metido en A3 por no mirar.**
+> `OciObjectStorageSourceProvider` ya es una fachada delgada sobre `S3SourceProvider`: OCI expone una
+> API S3-compatible, así que la fuente no lleva SDK de Oracle — sólo traduce namespace+region al
+> endpoint compat y fuerza path-style. El sink es el mismo espejo, y **delega esa traducción en el
+> provider de fuente** en vez de reimplementarla: una definición `/sources` de OCI describe una
+> conexión, no un sentido, y derivar el endpoint en dos sitios significaría corregirlo en uno solo el
+> día que Oracle cambie el formato. De `S3Sink` hereda el PutObject atómico, la medida del artefacto
+> y el rechazo de prefijos con plantilla. Lo había agrupado con REST porque los dos estaban en la
+> misma casilla del catálogo — una razón de tabla, no de diseño.
 >
 > **Ninguno de los tres de objeto sube a un temporal y renombra**, y no es un olvido. Ese rito existe
 > porque en un filesystem o en un (S)FTP el archivo se ve mientras se escribe y un consumidor puede
@@ -191,6 +201,7 @@ una sola revisión del conjunto.
 | T-004 | RF-011 | impl | platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/S3Sink.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/sink/S3SinkTest.java | mvn -o -pl platform-app -am -Dtest=S3SinkTest -Dsurefire.failIfNoSpecifiedTests=false test | FAIL sin la implementacion | idem | PASS | T-001 | si | done |
 | T-005 | RF-011 | impl | platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/GcsSink.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/sink/GcsSinkTest.java | mvn -o -pl platform-app -am -Dtest=GcsSinkTest -Dsurefire.failIfNoSpecifiedTests=false test | FAIL sin la implementacion | idem | PASS | T-001 | si | done |
 | T-006 | RF-011 | impl | platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/AzureBlobSink.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/sink/AzureBlobSinkTest.java | mvn -o -pl platform-app -am -Dtest=AzureBlobSinkTest -Dsurefire.failIfNoSpecifiedTests=false test | FAIL sin la implementacion | idem | PASS | T-001 | si | done |
+| T-032 | RF-011 | impl | platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/OciObjectStorageSink.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/sink/OciObjectStorageSinkTest.java | mvn -o -pl platform-app -am -Dtest=OciObjectStorageSinkTest -Dsurefire.failIfNoSpecifiedTests=false test | FAIL sin la implementacion: OCI se queda sin salida pese a ser S3-compatible | idem | PASS: entrega contra el endpoint compat, con path-style forzado | T-004 | si | done |
 
 ### A2 — FtpSink — HECHA
 
@@ -199,11 +210,11 @@ una sola revisión del conjunto.
 | T-007 | RF-011 | impl | platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/FtpSink.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/sink/FtpSinkTest.java | mvn -o -pl platform-app -am -Dtest=FtpSinkTest -Dsurefire.failIfNoSpecifiedTests=false test | FAIL sin la implementacion | idem | PASS | T-001 | si | done |
 | T-019 | RF-011 | impl | platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/SftpSink.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/sink/SftpSinkTest.java | mvn -o -pl platform-app -am -Dtest=SftpSinkTest -Dsurefire.failIfNoSpecifiedTests=false test | FAIL: borra el destino ANTES de renombrar, asi que un rename fallido deja el directorio sin la entrega anterior y sin la nueva | idem | PASS: renombra primero y solo borra si el destino estorba de verdad | T-007 | no | done |
 
-### A3 — REST y OCI como salida: decision de diseno
+### A3 — REST como salida: decision de diseno
 
 | id | rf | tipo | archivo | test | comando_red | expected_red | comando_green | expected_green | depende_de | paralelizable | estado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| T-008 | RF-011 | doc | docs/fase-3-arquitectura/adr/ADR-027-salida-rest-y-oci.md | (los propios gates de documentacion) | node ci/scripts/check-docs.mjs && node ci/scripts/check-markdown-paths.mjs | FAIL: el ADR no existe, asi que los dos tipos sin salida del catalogo no tienen decision escrita detras | node ci/scripts/check-docs.mjs && node ci/scripts/check-markdown-paths.mjs | PASS con el ADR enlazado: REST y OCI como destino, resueltos o diferidos con motivo | T-004 | no | pending |
+| T-008 | RF-011 | doc | docs/fase-3-arquitectura/adr/ADR-027-salida-rest.md | (los propios gates de documentacion) | node ci/scripts/check-docs.mjs && node ci/scripts/check-markdown-paths.mjs | FAIL: el ADR no existe, asi que el unico tipo sin salida del catalogo no tiene decision escrita detras | node ci/scripts/check-docs.mjs && node ci/scripts/check-markdown-paths.mjs | PASS con el ADR enlazado: REST como destino, resuelto o diferido con motivo | T-004 | no | pending |
 
 ### B1 — Andamiaje del vertical
 
@@ -334,6 +345,6 @@ Son baratas de comprobar con el documento delante y caras de descubrir a mitad d
 - [ ] Cambios de contrato, seguridad, datos o UX crítica con revisión humana.
 - [ ] Pruebas registradas en `qa/fase-6-qa/`.
 - [ ] Preguntas abiertas del funcional resueltas o escaladas.
-- [ ] ADR de `REST`/`OCI` como salida (T-008) resuelto o explícitamente diferido.
+- [ ] ADR de `REST` como salida (T-008) resuelto o explícitamente diferido.
 
 Referencia: `docs/transversal/90.33-flujo-delivery-ia-proveedores.md`

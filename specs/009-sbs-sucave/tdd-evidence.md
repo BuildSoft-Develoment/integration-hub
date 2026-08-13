@@ -82,6 +82,15 @@ Evidencia auditable del ciclo RED-GREEN por cada tarea `tipo=impl` de [spec-tare
 - Resultado GREEN: `mvn -o -pl platform-app -am -Dtest=AzureBlobSinkTest -Dsurefire.failIfNoSpecifiedTests=false test` → PASS (6 tests), incluidos el `overwrite=true` que permite reintentar una entrega y el mismo defecto de cierre que salió en GCS (T-005): cerrar es commitear la lista de bloques, así que el cierre va fuera del try-with-resources.
 - Verificado: 2026-08-12 — suite completa del backend en verde tras el cambio.
 
+## RF-011 / T-032
+
+- Archivo: `platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/OciObjectStorageSink.java`
+- Comando RED: `mvn -o -pl platform-app -am -Dtest=OciObjectStorageSinkTest -Dsurefire.failIfNoSpecifiedTests=false test`
+- Resultado RED: No capturado como corrida: el test se escribió junto a la implementación. El FAIL real y verificable era del catálogo: la tabla de paridad marcaba `OCI_OBJECT_STORAGE` con entrada y sin salida, y publicar una entrega contra una conexión OCI se rechazaba nombrando los tipos que sí.
+- Comando GREEN: `mvn -o -pl platform-app -am -Dtest=OciObjectStorageSinkTest -Dsurefire.failIfNoSpecifiedTests=false test`
+- Resultado GREEN: `mvn -o -pl platform-app -am -Dtest=OciObjectStorageSinkTest -Dsurefire.failIfNoSpecifiedTests=false test` → PASS (5 tests): endpoint compat derivado de namespace+region, path-style forzado, `access-key` por defecto, override explícito de endpoint respetado, y la composición de clave y el `Content-Length` heredados de `S3Sink`.
+- Verificado: 2026-08-12 — suite completa del backend en verde tras el cambio.
+
 ## RF-011 / T-007
 
 - Archivo: `platform-app/src/main/java/com/integrationhub/platform/provider/task/sink/FtpSink.java`
