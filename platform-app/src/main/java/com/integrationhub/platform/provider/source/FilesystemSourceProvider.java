@@ -50,6 +50,11 @@ public class FilesystemSourceProvider implements SourceProvider {
         try {
             if (fileNameRule == null) {
                 Path filePath = Path.of(resolvedPath);
+                // Un directorio (o la raiz, cuyo getFileName() es null) exige fileNameTemplate:
+                // sin este guard el nombre se derivaba con NPE en vez de un error accionable.
+                if (Files.isDirectory(filePath) || filePath.getFileName() == null) {
+                    throw new IllegalStateException("Filesystem source requires 'fileNameTemplate' when 'path' is a directory: " + resolvedPath);
+                }
                 return List.of(toSelectedFile(filePath, mediaType));
             }
             return resolveFromDirectory(Path.of(resolvedPath), fileNameRule, selectionMode, mediaType);

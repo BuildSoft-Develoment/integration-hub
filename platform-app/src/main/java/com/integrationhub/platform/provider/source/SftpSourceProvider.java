@@ -13,7 +13,6 @@ import io.quarkus.arc.properties.UnlessBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -73,15 +72,7 @@ public class SftpSourceProvider implements SourceProvider {
             channel.connect(timeoutMillis);
 
             if (fileNameRule == null) {
-                // 015: verificar que la ruta remota EXISTE. Antes "Probar" solo validaba la conexion
-                // (usuario/clave) y aceptaba cualquier remotePath; stat() falla fail-loud si no existe.
-                try {
-                    channel.stat(resolvedRemotePath);
-                } catch (SftpException notFound) {
-                    throw new IllegalStateException("Remote path not found on SFTP server: " + resolvedRemotePath, notFound);
-                }
-                String fileName = Path.of(resolvedRemotePath).getFileName().toString();
-                return List.of(new SelectedSourceFile(fileName, resolvedRemotePath, SourceConfigurationSupport.detectMediaType(fileName, mediaType), null, null));
+                return List.of(selectSingleRemoteFile(channel, resolvedRemotePath, mediaType));
             }
             return selectRemoteFiles(channel, resolvedRemotePath, fileNameRule, selectionMode, mediaType);
         } catch (JSchException | SftpException e) {
@@ -94,6 +85,32 @@ public class SftpSourceProvider implements SourceProvider {
                 session.disconnect();
             }
         }
+    }
+
+    /**
+     * Seleccion sin {@code fileNameTemplate}: {@code remotePath} debe apuntar a UN archivo.
+     * <p>015: stat() verifica que la ruta remota EXISTE (antes "Probar" solo validaba
+     * usuario/clave). Un directorio —p.ej. {@code remotePath="/"}— exige
+     * {@code fileNameTemplate}: sin este guard el nombre se derivaba con
+     * {@code Path.getFileName()}, que en la raiz devuelve null y reventaba con NPE.
+     * El nombre se deriva por substring (como en FTP), no con {@code Path.of}: en una
+     * JVM Windows este ultimo rechaza nombres SFTP legitimos con {@code *}, {@code ?} o
+     * {@code :}.</p>
+     */
+    static SelectedSourceFile selectSingleRemoteFile(ChannelSftp channel, String resolvedRemotePath, String mediaType) {
+        SftpATTRS attrs;
+        try {
+            attrs = channel.stat(resolvedRemotePath);
+        } catch (SftpException notFound) {
+            throw new IllegalStateException("Remote path not found on SFTP server: " + resolvedRemotePath, notFound);
+        }
+        String fileName = resolvedRemotePath.contains("/")
+                ? resolvedRemotePath.substring(resolvedRemotePath.lastIndexOf('/') + 1)
+                : resolvedRemotePath;
+        if (attrs.isDir() || fileName.isBlank()) {
+            throw new IllegalStateException("SFTP source requires 'fileNameTemplate' when 'remotePath' is a directory: " + resolvedRemotePath);
+        }
+        return new SelectedSourceFile(fileName, resolvedRemotePath, SourceConfigurationSupport.detectMediaType(fileName, mediaType), null, null);
     }
 
     @Override

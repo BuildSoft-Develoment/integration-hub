@@ -57,8 +57,7 @@ public class FtpSourceProvider implements SourceProvider {
             ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
             if (fileNameRule == null) {
-                String fileName = resolvedRemotePath.contains("/") ? resolvedRemotePath.substring(resolvedRemotePath.lastIndexOf('/') + 1) : resolvedRemotePath;
-                return List.of(new SelectedSourceFile(fileName, resolvedRemotePath, SourceConfigurationSupport.detectMediaType(fileName, mediaType), null, null));
+                return List.of(selectSingleRemoteFile(ftpClient, resolvedRemotePath, mediaType));
             }
             return selectRemoteFiles(ftpClient, resolvedRemotePath, fileNameRule, selectionMode, mediaType);
         } catch (IOException e) {
@@ -72,6 +71,20 @@ public class FtpSourceProvider implements SourceProvider {
                 }
             }
         }
+    }
+
+    /**
+     * Seleccion sin {@code fileNameTemplate}: {@code remotePath} debe apuntar a UN archivo.
+     * <p>La raiz ({@code "/"}) o una ruta con slash final derivan un nombre vacio, y un
+     * directorio (CWD exitoso) no es un archivo: ambos exigen {@code fileNameTemplate}
+     * en vez de emitir un SelectedSourceFile sin nombre que falla rio abajo.</p>
+     */
+    static SelectedSourceFile selectSingleRemoteFile(FTPClient ftpClient, String resolvedRemotePath, String mediaType) throws IOException {
+        String fileName = resolvedRemotePath.contains("/") ? resolvedRemotePath.substring(resolvedRemotePath.lastIndexOf('/') + 1) : resolvedRemotePath;
+        if (fileName.isBlank() || ftpClient.changeWorkingDirectory(resolvedRemotePath)) {
+            throw new IllegalStateException("FTP source requires 'fileNameTemplate' when 'remotePath' is a directory: " + resolvedRemotePath);
+        }
+        return new SelectedSourceFile(fileName, resolvedRemotePath, SourceConfigurationSupport.detectMediaType(fileName, mediaType), null, null);
     }
 
     @Override

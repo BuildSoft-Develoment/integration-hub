@@ -42,6 +42,17 @@ class FilesystemSourceProviderTest {
     }
 
     @Test
+    void rejectsDirectoryPathWithoutFileNameTemplate(@TempDir Path tempDir) {
+        // path="carpeta" sin fileNameTemplate reventaba con NPE (Path.getFileName() de una raiz
+        // es null) o con un IllegalStateException tecnico; ahora el error dice que hacer.
+        var error = assertThrows(IllegalStateException.class,
+                () -> provider.selectFiles(Map.of("path", tempDir.toString())));
+
+        assertEquals(true, error.getMessage().contains("requires 'fileNameTemplate'"));
+        assertEquals(true, error.getMessage().contains(tempDir.toString()));
+    }
+
+    @Test
     void selectsAllMatchingFilesUsingTemplate(@TempDir Path tempDir) throws Exception {
         Path directory = Files.createDirectories(tempDir.resolve("archivos"));
         Path first = directory.resolve("EDBV_20250326_C910_V.txt");
