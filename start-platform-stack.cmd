@@ -11,8 +11,16 @@ set "PATH=%JAVA_HOME%\bin;%MAVEN_HOME%\bin;%PATH%"
 
 cd /d "%ROOT%"
 
-echo [0/4] Empaquetando audit-consumer (fast-jar) para el contenedor...
-call "%MAVEN_HOME%\bin\mvn.cmd" -q -pl platform-contract,audit-consumer -am install -DskipTests
+rem El install es del REACTOR COMPLETO, no solo de platform-contract+audit-consumer.
+rem
+rem El dev de platform-app (paso 2) corre como build de un modulo, asi que resuelve platform-spi y
+rem platform-contract del repositorio local. Instalando solo dos modulos, un platform-spi viejo en
+rem ~/.m2 sobrevive a cada arranque: el dev compila contra el, falla con "cannot find symbol" en
+rem clases que en el codigo estan bien, y como revienta antes de abrir el puerto, el sintoma que se ve
+rem es "localhost:8080 no levanta". Paso el 2026-08-13 con un jar del 4 de agosto y `credentialKeys()`
+rem (QA-006) anadido el 5: ocho dias de desfase silencioso.
+echo [0/4] Instalando el reactor (incluye el fast-jar del audit-consumer para el contenedor)...
+call "%MAVEN_HOME%\bin\mvn.cmd" -q install -DskipTests
 if errorlevel 1 goto :fail
 
 echo [1/4] Levantando dependencias con Docker Compose (con build del consumer)...
