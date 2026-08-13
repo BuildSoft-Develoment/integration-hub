@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { OutputSinkCatalogService } from './output-sink-catalog.service';
 
 /**
- * El catálogo de fuentes admite ocho tipos de entrada y la salida sólo escribe en dos. Sin este
+ * El catálogo de fuentes admite más tipos de entrada de los que la salida sabe escribir. Sin este
  * servicio el selector de destino ofrecía tipos que no se pueden entregar, y el fallo aparecía en la
  * primera ejecución con el proceso ya publicado.
  */

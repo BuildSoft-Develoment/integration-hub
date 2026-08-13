@@ -3,6 +3,42 @@
 Mesa de cierre de un analista regulatorio: producir los archivos que la entidad debe presentar a la
 SBS por un periodo, revisarlos y dejarlos listos. Quien la usa no diseña procesos: **cierra un mes**.
 
+## Contrato del prototipo
+
+- Estados: sin generar, generado, en el destino, con reparo, falló la entrega
+- Roles: Analista regulatorio, Responsable de cumplimiento
+- Entidades: Obligaciones, formato, anexo, grupo de envío, periodo
+- RF / HU: RF-001, RF-002, RF-003, RF-004, RF-005, RF-006, RF-007, RF-008, RF-009, RF-010, RF-011, RF-012, RF-013, RF-014
+
+Los estados se declaran con las palabras que **se leen en pantalla**, no con identificadores internos:
+lo que este prototipo contrata es la experiencia, y quien cierra un mes no ve enums.
+
+### Estados
+
+- **sin generar** — la obligación del periodo no ha producido archivo todavía. Es el estado de
+  entrada: lo que la mesa de cierre responde nada más abrir.
+- **generado** — el archivo existe y quedó con su version de layout congelada (RF-009). Generado no
+  es entregado, y por eso son dos estados y no uno.
+- **en el destino** — depositado en la carpeta desde la que la estación de SUCAVE lo importa
+  (RF-008). Aquí acaba el alcance del producto: **presentar lo hace SUCAVE**, no nosotros.
+- **con reparo** — hay registros que las reglas del formato rechazaron (RF-004). El motivo se lee
+  por registro, en la fila; un contador no sirve para decidir si queda una corrección o cien.
+- **falló la entrega** — se generó pero no llegó al destino. Se separa de «con reparo» a propósito:
+  uno es un problema de los datos y el otro del camino, y se arreglan en sitios distintos.
+
+### Roles
+
+- **Analista regulatorio** — prepara el envío, corrige los reparos y genera. No autoriza.
+- **Responsable de cumplimiento** — revisa y autoriza lo ya generado; ve los ajustes en solo lectura.
+  Quien prepara no puede autorizar, y el control aparece apagado con el motivo debajo (RF-012).
+
+### Alcance frente al spec
+
+- **RF / HU**: los catorce del funcional. Trece se ven en pantalla; **RF-011 no tiene pantalla propia
+  a propósito**: es la paridad entrada/salida del motor, y lo que el prototipo representa de él es su
+  consecuencia visible — que el selector de destino de la entrega solo ofrezca sitios donde de verdad
+  se puede escribir. Declararlo aquí sin decir esto haría creer que hay una vista que no existe.
+
 ## Decision de patron de producto
 
 - **Dominio del spec**: cumplimiento regulatorio periodico. No es operacion continua como el
@@ -14,6 +50,12 @@ SBS por un periodo, revisarlos y dejarlos listos. Quien la usa no diseña proces
   ya generado, y ve los ajustes en solo lectura.
 - **Tarea principal recorrible**: ver que falta del periodo → preparar un formato → entender por que
   seis registros no pasan → dejar el archivo donde SUCAVE lo tome.
+- **Golden de referencia**: `saas-operativo-bandeja` — consola de trabajo densa, la misma familia que
+  la bandeja del money-path. Se toma su **disposicion** (barra superior fija, columna de contexto,
+  tablas densas con cifras tabulares), no su contenido ni su ritmo: alli el trabajo es continuo y
+  aqui tiene calendario, asi que la primera pantalla no abre con "que hay sin resolver ahora mismo"
+  sino con "que debo presentar este periodo y cuanto queda". El golden aporta el andamio visual; el
+  vencimiento y el estado del periodo son de este dominio y no salen de el.
 - **Patron elegido**: **mesa de cierre por periodo**. Abre con las obligaciones del mes y su
   vencimiento, no con un menu ni un dashboard. La metafora del dominio es el cierre contable: que
   debo presentar, que llevo, que me falta y cuanto tiempo queda.

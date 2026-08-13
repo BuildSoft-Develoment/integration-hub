@@ -427,3 +427,36 @@ SBS → SUCAVE → Formato 0228 → Anexo 01 → desde archivo
 
 Sin esa variante, la regla se cumple igual pero el operador paga el precio de montarla a mano. Es
 trabajo de **B3** (jerarquía de la paleta), no del contrato.
+
+---
+
+## HTTP: el catálogo de destinos entregables
+
+RF-011 añade un endpoint al motor, y es el único de esta feature: todo lo demás son contratos de
+configuración de tareas, no rutas.
+
+### GET /api/output-sinks
+**Trace**: `RF-011` · **Auth**: platform-admin, integration-admin, auditor · Devuelve los tipos a los
+que el motor sabe ENTREGAR. Es el espejo de salida de `GET /api/source-types`, y existe porque las
+dos listas no coinciden: el catálogo de fuentes admite más tipos de entrada de los que la salida sabe
+escribir, y `direction: OUTPUT`
+solo dice que una fuente *quiere* ser destino, no que se pueda escribir en ella. El editor cruza esta
+lista con el `sourceType` de cada fuente para no ofrecer como destino algo que fallaría al ejecutar.
+
+Respuesta: `{ "deliverableTypes": ["AZURE_BLOB", "FILESYSTEM", "FTP", "GCS", "S3", "SFTP"] }` —
+ordenados y sin distinguir mayúsculas, tal y como los resuelve `OutputSinkRegistry`. La lista sale de
+los beans registrados, así que **cambia sola** cuando se añade un sink; no hay ninguna copia que
+mantener.
+
+## Paths OpenAPI
+
+```yaml
+paths:
+  /api/output-sinks:
+    get:
+      summary: Tipos a los que el motor sabe ENTREGAR (espejo de salida de /api/source-types). El editor lo cruza con el sourceType de cada fuente para no ofrecer como destino algo que no se puede escribir
+      operationId: listOutputSinkTypes
+      responses:
+        '200':
+          description: OK
+```

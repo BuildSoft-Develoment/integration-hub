@@ -5,7 +5,7 @@ import { catchError, of, tap } from 'rxjs';
 /**
  * Tipos de fuente a los que el motor sabe ENTREGAR (`GET /api/output-sinks`).
  *
- * <p>El catálogo de fuentes admite ocho tipos de entrada y la salida sólo escribe en dos, así que
+ * <p>El catálogo de fuentes admite más tipos de entrada de los que la salida sabe escribir, así que
  * `direction: OUTPUT` no basta para saber si un destino sirve: dice que la fuente *quiere* ser
  * destino, no que el motor *pueda* escribir en ella. Sin este dato el selector ofrece destinos que
  * fallan al ejecutar, con el proceso ya publicado.</p>

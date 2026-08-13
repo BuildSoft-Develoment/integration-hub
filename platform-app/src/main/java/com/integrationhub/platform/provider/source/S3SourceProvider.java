@@ -134,6 +134,19 @@ public class S3SourceProvider implements SourceProvider {
         return normalized.contains("/") ? normalized.substring(normalized.lastIndexOf('/') + 1) : normalized;
     }
 
+    /**
+     * Cliente S3 para una definicion de conexion, cacheado por hash de config.
+     *
+     * <p>Es publico porque lo usa tambien {@code S3Sink}: la MISMA definicion {@code /sources} se lee al
+     * entrar y se escribe al salir, asi que el cliente —y sobre todo la cadena de credenciales:
+     * {@code default} / {@code access-key} / {@code assume-role}— tiene que ser uno solo. Duplicarla en el
+     * sink habria hecho que un modo de autenticacion soportado a la entrada no lo estuviera a la salida sin
+     * que nada lo dijera, y de paso duplicaria el pool de conexiones de la misma cuenta.</p>
+     */
+    public S3Client clientFor(Map<String, Object> configuration) {
+        return resolveClient(configuration);
+    }
+
     private S3Client resolveClient(Map<String, Object> configuration) {
         String region = SourceConfigurationSupport.requireString(configuration, "region");
         String authMode = SourceConfigurationSupport.optionalString(configuration, "authMode", "default");

@@ -13,12 +13,13 @@ import java.util.List;
 /**
  * Un {@code FILE_DELIVER} solo se puede publicar si su destino se puede entregar de verdad.
  *
- * <p><b>Por que existe.</b> El catalogo de {@code /sources} tiene 8 tipos de ENTRADA y la salida solo
- * sabe entregar a 2 ({@code FILESYSTEM} y {@code SFTP}). El selector de destino ofrece cualquier fuente
- * marcada {@code direction} OUTPUT/BOTH sin comprobar que exista sink, asi que hoy se puede elegir una
- * fuente FTP, <b>guardar el proceso sin ningun error</b>, activarlo, programarlo — y descubrirlo en la
+ * <p><b>Por que existe.</b> El catalogo de {@code /sources} admite mas tipos de ENTRADA de los que la
+ * salida sabe escribir —el cruce al dia, generado desde el codigo, esta en el catalogo de tipos de
+ * {@code docs/transversal}—. El selector de destino ofrecia cualquier fuente marcada {@code direction}
+ * OUTPUT/BOTH sin comprobar que existiera sink, asi que se podia elegir una fuente de un tipo sin
+ * salida, <b>guardar el proceso sin ningun error</b>, activarlo, programarlo — y descubrirlo en la
  * primera ejecucion, cuando {@code OutputSinkRegistry.resolve} lanza
- * {@code "Unsupported output sink: FTP"} con alguien esperando el archivo.</p>
+ * {@code "Unsupported output sink: <tipo>"} con alguien esperando el archivo.</p>
  *
  * <p>Falla ruidoso, si. Pero <b>tarde</b>: despues de que alguien creyo tenerlo listo. Esta clase mueve
  * esa deteccion al momento en que se toma la decision.</p>

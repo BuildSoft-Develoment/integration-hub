@@ -86,6 +86,32 @@ por bueno un archivo generado:
 
 El segundo no es de SUCAVE — afecta a cualquier archivo que escriba el motor.
 
+## Revision visual humana
+
+**Resultado: pending.**
+
+- **Revisor**: —
+- **Fecha**: —
+- **Evidencia a revisar**: [prototype-html5/index.html](prototype-html5/index.html), que se abre en
+  cualquier navegador sin servidor.
+
+Nadie lo ha mirado todavia con ojos. Declararlo `approved` porque el prototipo esta construido y los
+validadores automaticos pasan seria justo el fallo que este apartado existe para evitar: los
+validadores comprueban estructura, no lectura.
+
+Lo que hay que mirar con ojos, porque ningun validador lo comprueba:
+
+1. Que el estado del periodo se lea **antes que nada** al abrir: que falta, que llevo, cuanto queda.
+   Si hay que buscarlo, el patron de mesa de cierre no esta funcionando y esto es un dashboard mas.
+2. Que los seis registros rechazados se entiendan **sin abrir nada**: el motivo por registro tiene
+   que leerse en la propia fila. Si obliga a un clic para saber por que, la analista no sabe si le
+   queda una correccion o cien.
+3. Que la separacion preparar / autorizar se vea **en la pantalla**, no solo en la documentacion:
+   quien prepara tiene que ver el control de autorizar apagado y el motivo debajo, sin pasar el raton.
+   Es el control que sostiene RF-012.
+4. Que el vencimiento se distinga de un dato mas. Un cierre regulatorio con fecha limite y una fecha
+   pintada como cualquier otra columna es una fecha que nadie mira hasta que se pasa.
+
 ## Pendiente antes de construir
 
 - [ ] Recorrido con un analista regulatorio real, sin guía.

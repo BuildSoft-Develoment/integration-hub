@@ -129,6 +129,17 @@ public class GcsSourceProvider implements SourceProvider {
         return normalized.contains("/") ? normalized.substring(normalized.lastIndexOf('/') + 1) : normalized;
     }
 
+    /**
+     * Cliente {@link Storage} para una definicion de conexion, cacheado por hash de config.
+     *
+     * <p>Publico porque lo usa tambien {@code GcsSink}: una sola definicion {@code /sources} sirve de
+     * entrada y de salida, asi que la cadena de credenciales ({@code adc} / {@code service-account-json})
+     * debe ser una sola. Ver {@code S3SourceProvider#clientFor} para el mismo razonamiento.</p>
+     */
+    public Storage storageFor(Map<String, Object> configuration) {
+        return resolveStorage(configuration);
+    }
+
     private Storage resolveStorage(Map<String, Object> configuration) {
         String authMode = SourceConfigurationSupport.optionalString(configuration, "authMode", "adc");
         String projectId = SourceConfigurationSupport.optionalString(configuration, "projectId", "");

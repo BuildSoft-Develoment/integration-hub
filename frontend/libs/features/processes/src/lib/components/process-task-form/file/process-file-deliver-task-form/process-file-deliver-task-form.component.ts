@@ -51,8 +51,8 @@ export class ProcessFileDeliverTaskFormComponent {
 
   // El destino (sinkRef) debe ser una fuente activa con direction OUTPUT/BOTH (un sink) Y de un tipo al que
   // el motor sepa entregar. `direction` solo dice que la fuente QUIERE ser destino; que se pueda escribir en
-  // ella lo dice el catalogo de sinks. Sin ese segundo filtro se podia elegir una fuente FTP, guardar, activar
-  // y descubrirlo en la primera ejecucion con "Unsupported output sink: FTP". El backend tambien lo rechaza
+  // ella lo dice el catalogo de sinks. Sin ese segundo filtro se podia elegir un tipo sin salida, guardar, activar
+  // y descubrirlo en la primera ejecucion con "Unsupported output sink: <tipo>". El backend tambien lo rechaza
   // ahora al publicar; aqui directamente no se ofrece.
   readonly sinkOptions = computed(() =>
     this.sources().filter(

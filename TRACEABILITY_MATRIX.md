@@ -106,6 +106,20 @@
 | 008-mensajeria-pagos | RF-022 | funcional 12 (cuarentena y correccion) | Mensajeria de pagos | POST /api/query/mt101-quarantine/rebuild-runs/execute | mt101_build_fragment | Mt101BuildFromTableTaskProvider | Mt101BuildFromTableTaskProviderTest | Implementado | specs/008-mensajeria-pagos/tdd-evidence.md | mt101-bulk-correction-wizard | mt101-build-from-table-task.provider.spec.ts |
 | 008-mensajeria-pagos | RF-023 | funcional 11 (money-path) | Mensajeria de pagos | POST /api/payment-validation-rules | payment_validation_rule | PaymentValidationRuleResource | PaymentValidationRuleResourceIT | Implementado | specs/008-mensajeria-pagos/tdd-evidence.md | - | - |
 | 008-mensajeria-pagos | RF-024 | funcional 12 (cuarentena y correccion) | Mensajeria de pagos | POST /api/query/mt101-quarantine/rebuild-runs/request | mt101_rebuild_run | Mt101CorrectiveLifecycleService | Mt101CorrectiveLifecycleServiceTest | Implementado | specs/008-mensajeria-pagos/tdd-evidence.md | mt101-quarantine | mt101-quarantine.component.spec.ts |
+| 009-sbs-sucave | RF-001 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-002 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-003 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-004 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-005 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-006 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-007 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-008 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-009 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-010 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-011 | - | - | GET /api/output-sinks | - | OutputSinkRegistry | FileDeliverSinkValidatorTest | Implementado | specs/009-sbs-sucave/tdd-evidence.md | output-sink-catalog.service.ts | output-sink-catalog.service.spec.ts |
+| 009-sbs-sucave | RF-012 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-013 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
+| 009-sbs-sucave | RF-014 | - | - | - | - | - | - | Planificado | specs/009-sbs-sucave/spec-tareas.md | - | - |
 
 <!-- auto:end -->
 

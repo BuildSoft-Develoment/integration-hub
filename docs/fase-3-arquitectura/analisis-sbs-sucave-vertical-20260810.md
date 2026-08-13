@@ -1,5 +1,11 @@
 # Vertical SBS–SUCAVE: análisis contra el código real
 
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [Guia de autor de plugins](guia-autor-plugins.md)
+- Siguiente: [ADR](adr/README.md)
+<!-- nav-guided:end -->
+
 **Fecha:** 2026-08-10 · **Rama:** `experiment/quarkus-lts-native`
 **Encargo:** dar de alta un vertical `vertical-sbs-sucave` (back) + `features/sbs-sucave` (front) que ofrezca,
 en `#/processes`, grupos SBS → SUCAVE → subgrupos por formato, reutilizando la capa de escritura de

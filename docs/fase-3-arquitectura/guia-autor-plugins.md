@@ -3,7 +3,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [Checklist de arquitectura](03.04-checklist-arquitectura.md)
-- Siguiente: [ADR](adr/README.md)
+- Siguiente: [Vertical SBS-SUCAVE: analisis contra el codigo real](analisis-sbs-sucave-vertical-20260810.md)
 <!-- nav-guided:end -->
 
 Guía práctica para construir, firmar y publicar un plugin instalable desde fuera. Cubre

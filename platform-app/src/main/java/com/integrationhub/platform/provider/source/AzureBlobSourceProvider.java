@@ -126,6 +126,18 @@ public class AzureBlobSourceProvider implements SourceProvider {
         return normalized.contains("/") ? normalized.substring(normalized.lastIndexOf('/') + 1) : normalized;
     }
 
+    /**
+     * Cliente de contenedor para una definicion de conexion, cacheado por hash de config.
+     *
+     * <p>Publico porque lo usa tambien {@code AzureBlobSink}: una sola definicion {@code /sources} sirve de
+     * entrada y de salida, asi que los tres modos de credencial ({@code account-key} / {@code sas-token} /
+     * {@code connection-string}) —y el rechazo explicito de {@code managed-identity}— se deciden en un unico
+     * sitio. Ver {@code S3SourceProvider#clientFor} para el mismo razonamiento.</p>
+     */
+    public BlobContainerClient containerClientFor(Map<String, Object> configuration) {
+        return resolveContainerClient(configuration);
+    }
+
     private BlobContainerClient resolveContainerClient(Map<String, Object> configuration) {
         String accountName = SourceConfigurationSupport.optionalString(configuration, "accountName", "");
         String container = SourceConfigurationSupport.requireString(configuration, "container");

@@ -6,7 +6,7 @@ info:
     Este archivo es generado automaticamente desde los api-contract.md
     de cada specs/<feature>/. NO editar a mano — perdera los cambios al
     proximo `npm run generate:openapi`.
-    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria, 005-catalogo-conexiones, 006-programacion-procesos, 007-tema-del-sistema, 008-mensajeria-pagos
+    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria, 005-catalogo-conexiones, 006-programacion-procesos, 007-tema-del-sistema, 008-mensajeria-pagos, 009-sbs-sucave
 servers:
   - url: /
 paths:
@@ -1150,6 +1150,14 @@ paths:
         '200':
           description: OK
       x-source-feature: "008-mensajeria-pagos"
+  /api/output-sinks:
+    get:
+      summary: Tipos a los que el motor sabe ENTREGAR (espejo de salida de /api/source-types). El editor lo cruza con el sourceType de cada fuente para no ofrecer como destino algo que no se puede escribir
+      operationId: listOutputSinkTypes
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "009-sbs-sucave"
 
 components:
   schemas:

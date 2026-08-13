@@ -26,6 +26,7 @@ import java.util.Properties;
 public class SftpSink implements OutputSink {
 
     private static final String DEFAULT_TMP_EXTENSION = ".part";
+    private static final String LABEL = "SFTP";
 
     @Override
     public String type() {
@@ -34,16 +35,16 @@ public class SftpSink implements OutputSink {
 
     @Override
     public void deliver(String dropPath, StreamSource source, Map<String, Object> configuration) throws IOException {
-        var host = requireString(configuration, "host");
-        var port = optionalInt(configuration, "port", 22);
-        var username = requireString(configuration, "username");
-        var password = optionalString(configuration, "password");
-        var privateKeyPath = optionalString(configuration, "privateKeyPath");
-        var passphrase = optionalString(configuration, "passphrase");
-        var timeoutMillis = optionalInt(configuration, "timeoutMillis", 15000);
-        var strictHostKeyChecking = optionalBoolean(configuration, "strictHostKeyChecking", true);
-        var knownHostsPath = optionalString(configuration, "knownHostsPath");
-        var tmpExtension = optionalString(configuration, "tmpExtension");
+        var host = SinkConfigurationSupport.requireString(configuration, "host", LABEL);
+        var port = SinkConfigurationSupport.optionalInt(configuration, "port", 22);
+        var username = SinkConfigurationSupport.requireString(configuration, "username", LABEL);
+        var password = SinkConfigurationSupport.optionalString(configuration, "password");
+        var privateKeyPath = SinkConfigurationSupport.optionalString(configuration, "privateKeyPath");
+        var passphrase = SinkConfigurationSupport.optionalString(configuration, "passphrase");
+        var timeoutMillis = SinkConfigurationSupport.optionalInt(configuration, "timeoutMillis", 15000);
+        var strictHostKeyChecking = SinkConfigurationSupport.optionalBoolean(configuration, "strictHostKeyChecking", true);
+        var knownHostsPath = SinkConfigurationSupport.optionalString(configuration, "knownHostsPath");
+        var tmpExtension = SinkConfigurationSupport.optionalString(configuration, "tmpExtension");
         var tmpPath = dropPath + (tmpExtension == null ? DEFAULT_TMP_EXTENSION : tmpExtension);
 
         Session session = null;
@@ -75,9 +76,7 @@ public class SftpSink implements OutputSink {
             try (var in = source.open()) {
                 channel.put(in, tmpPath, ChannelSftp.OVERWRITE);
             }
-            // rename SSH_FXP_RENAME suele fallar si el destino existe -> se elimina primero (best-effort).
-            removeIfExists(channel, dropPath);
-            channel.rename(tmpPath, dropPath);
+            renameOverwriting(channel, tmpPath, dropPath);
         } catch (JSchException | SftpException error) {
             throw new IOException("SFTP sink could not deliver to " + dropPath + " on " + host, error);
         } finally {
@@ -90,38 +89,43 @@ public class SftpSink implements OutputSink {
         }
     }
 
-    private static void removeIfExists(ChannelSftp channel, String path) {
+    /**
+     * Pone el temporal en su nombre final, pisando el destino solo si estorba.
+     *
+     * <p>Se intenta el {@code rename} PRIMERO. Antes se hacia al reves —borrar el destino y luego
+     * renombrar—, que es lo intuitivo y es peor: si el rename falla despues del borrado, se ha
+     * destruido la entrega anterior sin llegar a poner la nueva, y el directorio del banco se queda sin
+     * ninguna de las dos. Hacen falta dos casualidades a la vez (que el nombre ya exista Y que el
+     * rename falle), asi que el riesgo real es bajo; el arreglo es barato, asi que no hay motivo para
+     * convivir con el.</p>
+     *
+     * <p>El borrado sigue estando porque {@code SSH_FXP_RENAME} suele fallar con el destino ocupado:
+     * es la re-entrega del mismo archivo —un reintento tras un fallo de red, o el reproceso de un
+     * envio— la que tiene que poder pisar lo anterior.</p>
+     */
+    // Visible para el test: el ORDEN de estas tres operaciones es lo que hay que fijar, y no se puede
+    // ejercer desde deliver() sin un servidor porque la sesion se abre ahi dentro.
+    static void renameOverwriting(ChannelSftp channel, String tmpPath, String dropPath) throws SftpException {
         try {
-            channel.rm(path);
+            channel.rename(tmpPath, dropPath);
+        } catch (SftpException maybeInTheWay) {
+            if (!exists(channel, dropPath)) {
+                // El rename no fallo por colision (permisos, ruta inexistente...). Borrar aqui seria
+                // volver a abrir el agujero por otra puerta: se propaga el fallo sin tocar nada.
+                throw maybeInTheWay;
+            }
+            channel.rm(dropPath);
+            channel.rename(tmpPath, dropPath);
+        }
+    }
+
+    private static boolean exists(ChannelSftp channel, String path) {
+        try {
+            channel.stat(path);
+            return true;
         } catch (SftpException notThere) {
-            // no existia: nada que borrar
+            return false;
         }
     }
 
-    private static String requireString(Map<String, Object> configuration, String key) {
-        var value = optionalString(configuration, key);
-        if (value == null) {
-            throw new IllegalArgumentException("SFTP sink requires '" + key + "'");
-        }
-        return value;
-    }
-
-    private static String optionalString(Map<String, Object> configuration, String key) {
-        var raw = configuration.get(key);
-        if (raw == null) {
-            return null;
-        }
-        var value = String.valueOf(raw).trim();
-        return value.isEmpty() ? null : value;
-    }
-
-    private static int optionalInt(Map<String, Object> configuration, String key, int defaultValue) {
-        var value = optionalString(configuration, key);
-        return value == null ? defaultValue : Integer.parseInt(value);
-    }
-
-    private static boolean optionalBoolean(Map<String, Object> configuration, String key, boolean defaultValue) {
-        var value = optionalString(configuration, key);
-        return value == null ? defaultValue : Boolean.parseBoolean(value);
-    }
 }

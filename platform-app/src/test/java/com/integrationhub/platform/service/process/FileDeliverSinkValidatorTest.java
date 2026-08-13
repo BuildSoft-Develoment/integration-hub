@@ -28,7 +28,15 @@ class FileDeliverSinkValidatorTest {
         };
     }
 
-    /** Registry con los dos sinks que existen hoy. */
+    /**
+     * Registry propio, no el de produccion: lo que se prueba es el MECANISMO —rechazar un tipo sin
+     * sink—, no cuantos sinks hay hoy. Con el de produccion, cada sink nuevo cambiaria el resultado de
+     * estos tests sin que nadie hubiera tocado el validador.
+     *
+     * <p>El tipo "sin sink" de los ejemplos es {@code REST}, que de verdad no tiene salida (espera al
+     * ADR-027). Antes era {@code FTP}, y dejarlo ahi despues de escribir {@code FtpSink} habria dejado
+     * un test verde ensenando lo contrario de lo que hace el producto.</p>
+     */
     private static final OutputSinkRegistry SINKS =
             new OutputSinkRegistry(List.of(sink("FILESYSTEM"), sink("SFTP")));
 
@@ -49,20 +57,20 @@ class FileDeliverSinkValidatorTest {
 
     @Test
     void rechazaAlPublicarUnDestinoSinSink() {
-        var ftp = new SinkDefinitionResolver.SinkDefinition(7L, "FTP del proveedor", "FTP", "{}", "OUTPUT");
+        var rest = new SinkDefinitionResolver.SinkDefinition(7L, "API del proveedor", "REST", "{}", "OUTPUT");
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> validador(catalogo(ftp)).validate(List.of(entrega(3, 7L))));
+                () -> validador(catalogo(rest)).validate(List.of(entrega(3, 7L))));
 
         // El motivo tiene que ser accionable: qué tipo falla y qué sí se puede elegir.
-        assertTrue(error.getMessage().contains("FTP"), error.getMessage());
+        assertTrue(error.getMessage().contains("REST"), error.getMessage());
         assertTrue(error.getMessage().contains("FILESYSTEM"), () -> "debe listar los tipos entregables: " + error.getMessage());
         assertTrue(error.getMessage().contains("SFTP"), error.getMessage());
         assertTrue(error.getMessage().contains("task order 3"), () -> "debe ubicar la tarea: " + error.getMessage());
     }
 
     @Test
-    void aceptaLosDosTiposQueSiSeSabenEntregar() {
+    void aceptaLosTiposQueElRegistrySiSabeEntregar() {
         var disco = new SinkDefinitionResolver.SinkDefinition(1L, "Carpeta regulatoria", "FILESYSTEM", "{}", "OUTPUT");
         var sftp = new SinkDefinitionResolver.SinkDefinition(2L, "SFTP del banco", "SFTP", "{}", "BOTH");
         var validador = validador(catalogo(disco, sftp));
@@ -117,8 +125,8 @@ class FileDeliverSinkValidatorTest {
     void elSinkRefViajaComoNumeroOComoTextoYAmbosSeComprueban() {
         // El front lo transporta de las dos formas segun el camino; si solo se entendiera una, la
         // comprobacion se saltaria en silencio justo en la mitad de los casos.
-        var ftp = new SinkDefinitionResolver.SinkDefinition(7L, "FTP", "FTP", "{}", "OUTPUT");
-        var validador = validador(catalogo(ftp));
+        var rest = new SinkDefinitionResolver.SinkDefinition(7L, "API del proveedor", "REST", "{}", "OUTPUT");
+        var validador = validador(catalogo(rest));
 
         assertThrows(IllegalArgumentException.class,
                 () -> validador.validate(List.of(new ProcessTaskView("FILE_DELIVER", 1, "{\"sinkRef\":7}"))));

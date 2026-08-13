@@ -40,7 +40,7 @@ public class OutputSinkRegistry {
      * excepción: sirve para poder decirlo ANTES, al guardar el proceso.
      *
      * <p>Existía la asimetría de que el catálogo de {@code /sources} admite tipos que la salida no
-     * sabe entregar —hay 8 de entrada y 2 de salida—, y el único momento en que eso se notaba era la
+     * sabe entregar, y el único momento en que eso se notaba era la
      * ejecución, con el proceso ya publicado y alguien esperando el archivo.</p>
      */
     public boolean supports(String type) {

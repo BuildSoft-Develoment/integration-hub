@@ -28,8 +28,8 @@ public class FilesystemSink implements OutputSink {
 
     @Override
     public void deliver(String dropPath, StreamSource source, Map<String, Object> configuration) throws IOException {
-        var basePath = stringValue(configuration.get("path"), "");
-        var tmpExtension = stringValue(configuration.get("tmpExtension"), DEFAULT_TMP_EXTENSION);
+        var basePath = SinkConfigurationSupport.optionalString(configuration, "path", "");
+        var tmpExtension = SinkConfigurationSupport.optionalString(configuration, "tmpExtension", DEFAULT_TMP_EXTENSION);
         var target = resolveTarget(basePath, dropPath);
         var parent = target.getParent();
         if (parent != null) {
@@ -58,13 +58,5 @@ public class FilesystemSink implements OutputSink {
             // Fallback no-atomico (p. ej. cross-filesystem o Windows con destino existente).
             Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
         }
-    }
-
-    private static String stringValue(Object raw, String defaultValue) {
-        if (raw == null) {
-            return defaultValue;
-        }
-        var value = String.valueOf(raw).trim();
-        return value.isEmpty() ? defaultValue : value;
     }
 }

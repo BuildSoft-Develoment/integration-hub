@@ -1,3 +1,7 @@
+---
+origin: nuevo
+---
+
 # Spec funcional — 009 SBS SUCAVE
 
 ## Problema

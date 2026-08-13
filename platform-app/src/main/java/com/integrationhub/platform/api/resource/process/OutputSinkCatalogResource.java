@@ -15,7 +15,7 @@ import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_AD
 /**
  * Tipos de fuente a los que se sabe ENTREGAR de verdad.
  *
- * <p>El catalogo de {@code /sources} admite 8 tipos de entrada y la salida solo entrega a 2, asi que
+ * <p>El catalogo de {@code /sources} admite mas tipos de ENTRADA de los que la salida sabe escribir, asi que
  * el selector de destino de {@code FILE_DELIVER} necesita saber cuales para no ofrecer un destino que
  * fallaria al ejecutar. Sin este dato el front no puede distinguirlos: {@code direction} dice si la
  * fuente <em>quiere</em> ser destino, no si el motor <em>puede</em> escribir en ella.</p>
