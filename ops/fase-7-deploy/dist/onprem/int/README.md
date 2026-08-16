@@ -26,11 +26,23 @@ token es la URL publica y es consistente entre browser y app (nginx tiene el ali
   eso el aviso de reflexion nativa de mas abajo continua vigente.
 - **minio** (+init de buckets) — S3 (staging de plugins + fuentes).
 - **sftp-source** / **ftp-source** — `SftpSourceProvider` / `FtpSourceProvider`.
-- **sftp-bank** — inbox del "banco" para el money-path **PAY** (FIN MT101 upload-with-rename) + STATUS.
+- **SFTP del banco** — YA NO es un contenedor: es una cuenta **SFTP en la nube** (sftpcloud). Sigue
+  siendo el inbox del "banco" para el money-path **PAY** (FIN MT101 upload-with-rename) + STATUS.
+  Host y usuario en `int/.env`; la clave **solo** como `${secret:tasks/sftp/bank/password}`.
 - **plugin-java / node / python** — 3 backends gRPC; comparten el netns de la app
   (`network_mode: service:platform-app`) => la app los ve en `127.0.0.1:5006x` (localhost),
   unica forma que la trust-policy acepta sobre HTTP plano.
 - **frontend-widget** — widget del plugin, servido por nginx en `/pluginwidget/`.
+
+> **Por que el SFTP del banco dejo de ser un contenedor.** Un servidor SFTP es exactamente el tipo
+> de pieza que tiene equivalente gratuito gestionado, asi que operarlo aqui solo anadia algo que
+> mantener — y de cara a mover esto a la nube, algo que migrar sin necesidad. Lo que **no** se puede
+> contratar es el cerebro del banco: `bank-sim` sigue existiendo, pero ya no comparte volumen con
+> nadie; habla SFTP por red contra esa misma cuenta. Ver [bank-sim/README.md](bank-sim/README.md).
+>
+> Consecuencia a tener presente: la cuenta gratuita **caduca cada pocas horas** y con ella cambian
+> usuario y clave. Si el money-path deja de entregar de golpe sin haber tocado nada, mirar eso antes
+> que el codigo.
 
 ## 1. Build de las imagenes NATIVAS (build-time)
 
@@ -101,7 +113,7 @@ Navegar `http://app.buildsoft.com.pe/appih` -> login por `/iam` -> app.
 | SFTP source | Dejar archivo en `sftp_source_data` (host `sftp-source`, user `ihsource`) -> fuente SFTP -> leer. |
 | FTP source  | Igual con `ftp-source` (user `ihftp`). |
 | S3 source   | MinIO (`minio:9000`, bucket `ih-source-inbox`). |
-| PAY money-path | Proceso MT101 PAY -> entrega el FIN al `sftp-bank` (`inbox/`), STATUS lo relee. |
+| PAY money-path | Proceso MT101 PAY -> entrega el FIN al SFTP del banco en la nube (`inbox/`), STATUS lo relee. |
 | Auditoria   | `audit-consumer` (nativo) consume de Kafka -> **postgres** (`audit_record_event`). El esquema ClickHouse existe en el repo pero su servicio no se levanta aqui. |
 
 ### Smoke rapido de INFRA en `/` (sin la imagen /appih)
@@ -121,7 +133,7 @@ invertir en el build `/appih`:
 ```bash
 cd ops/fase-7-deploy/dist/onprem
 docker compose -f docker-compose.int.yml --env-file int/smoke/.env up -d \
-  postgres keycloak kafka minio minio-init sftp-source ftp-source sftp-bank \
+  postgres keycloak kafka minio minio-init sftp-source ftp-source \
   platform-app plugin-java plugin-node plugin-python frontend-widget nginx
 # app: http://localhost:8080/  (o app.buildsoft.com.pe:8080 con hosts entry)
 ```

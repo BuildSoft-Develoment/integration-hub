@@ -30,7 +30,6 @@ volumes:
   pg_data:
   minio_data:
   sftp_source_data:
-  sftp_bank_data:
   ftp_source_data:
 
 services:
@@ -199,17 +198,17 @@ services:
     networks: [ihnet]
 
   # ---------------------------------------------------------------------------------
-  # SFTP BANCO (PAY) â€” inbox del "banco" (FIN MT101 upload-with-rename) + STATUS.
+  # SFTP BANCO (PAY/STATUS) — YA NO ES UN CONTENEDOR.
+  #
+  # El destino del money-path es ahora una cuenta SFTP en la nube (sftpcloud), configurada en la
+  # definicion de conexion de la app: host/usuario en int/.env y la clave SOLO como referencia
+  # ${secret:tasks/sftp/bank/password} (QA-006: nunca en claro, ni aqui ni en .env.example).
+  #
+  # Un servidor SFTP es justo lo que si tiene equivalente gratuito gestionado, asi que mantenerlo
+  # como contenedor solo anadia una pieza que operar. Lo que NO se puede contratar es el cerebro del
+  # banco: bank-sim sigue existiendo, pero ya no comparte volumen — habla SFTP contra esa cuenta.
+  # Ver int/bank-sim/README.md.
   # ---------------------------------------------------------------------------------
-  sftp-bank:
-    image: atmoz/sftp:alpine
-    container_name: ih-int-sftp-bank
-    restart: always
-    command: ${SFTP_BANK_USER:-bank}:${SFTP_BANK_PASS:-bank}:1002:1002:inbox,outbox
-    volumes:
-      - sftp_bank_data:/home/${SFTP_BANK_USER:-bank}
-    networks: [ihnet]
-
   # ---------------------------------------------------------------------------------
   # Consumidor de auditoria â€” NATIVO. Kafka -> cold-store POSTGRES (default; ClickHouse
   # deferido). Requiere el runner nativo (mvn -pl audit-consumer -am package -Pnative ...)
