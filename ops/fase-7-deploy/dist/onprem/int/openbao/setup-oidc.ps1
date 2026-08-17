@@ -1,7 +1,8 @@
 # =====================================================================================
-# Lanzador de setup-oidc.sh desde Windows.
+# Lanzador de los scripts de SSO de OpenBao desde Windows.
 #
-#   powershell -ExecutionPolicy Bypass -File int\openbao\setup-oidc.ps1
+#   powershell -ExecutionPolicy Bypass -File int\openbao\setup-oidc.ps1            # cablea el SSO
+#   powershell -ExecutionPolicy Bypass -File int\openbao\setup-oidc.ps1 -Accion verify   # comprueba
 #
 # Existe por dos motivos concretos, los dos aprendidos a golpes en este entorno:
 #
@@ -15,6 +16,11 @@
 #    de un marcador de posicion se interpretan como redireccion. PowerShell no sufre ninguna de las
 #    dos, y ademas puede leer int/.env para no tener que copiar el secreto a mano.
 # =====================================================================================
+param(
+    [ValidateSet('setup', 'verify')]
+    [string]$Accion = 'setup'
+)
+
 $ErrorActionPreference = 'Stop'
 
 $raiz = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # .../dist/onprem
@@ -32,14 +38,22 @@ function Get-EnvValor([string]$clave) {
 }
 
 $publicBaseUrl = Get-EnvValor 'PUBLIC_BASE_URL'
-$clientSecret  = Get-EnvValor 'OPENBAO_OIDC_CLIENT_SECRET'
-
 if ([string]::IsNullOrWhiteSpace($publicBaseUrl)) { throw "Falta PUBLIC_BASE_URL en int\.env." }
-if ([string]::IsNullOrWhiteSpace($clientSecret)) {
-    throw "Falta OPENBAO_OIDC_CLIENT_SECRET en int\.env. Es el MISMO valor que recibio Keycloak; generar uno con: openssl rand -hex 32"
+
+# El secreto del cliente solo hace falta para CABLEAR. La comprobacion mira el estado del servidor
+# y no necesita hablar con Keycloak, asi que exigirlo ahi seria un obstaculo sin motivo.
+$clientSecret = $null
+if ($Accion -eq 'setup') {
+    $clientSecret = Get-EnvValor 'OPENBAO_OIDC_CLIENT_SECRET'
+    if ([string]::IsNullOrWhiteSpace($clientSecret)) {
+        throw "Falta OPENBAO_OIDC_CLIENT_SECRET en int\.env. Es el MISMO valor que recibio Keycloak; generar uno con: openssl rand -hex 32"
+    }
+    $script = '/openbao/setup/setup-oidc.sh'
+} else {
+    $script = '/openbao/setup/verify-oidc.sh'
 }
 
-Write-Host "OpenBao SSO -> $publicBaseUrl" -ForegroundColor Cyan
+Write-Host "OpenBao SSO [$Accion] -> $publicBaseUrl" -ForegroundColor Cyan
 Write-Host "El token raiz es el de 'bao operator init'. No se muestra al teclear ni queda en el historial."
 
 $tokenSeguro = Read-Host -Prompt 'Token raiz de OpenBao' -AsSecureString
@@ -54,10 +68,10 @@ if ([string]::IsNullOrWhiteSpace($token)) { throw "Token vacio." }
 # `-e VAR` sin `=valor` toma el valor del entorno de ESTE proceso: no viaja en la linea de comandos.
 $env:BAO_TOKEN = $token
 $env:PUBLIC_BASE_URL = $publicBaseUrl
-$env:OPENBAO_OIDC_CLIENT_SECRET = $clientSecret
+if ($null -ne $clientSecret) { $env:OPENBAO_OIDC_CLIENT_SECRET = $clientSecret }
 try {
     docker exec -e BAO_TOKEN -e PUBLIC_BASE_URL -e OPENBAO_OIDC_CLIENT_SECRET `
-        ih-int-openbao sh /openbao/setup/setup-oidc.sh
+        ih-int-openbao sh $script
     $codigo = $LASTEXITCODE
 } finally {
     # Que no sobrevivan a la sesion ni acaben en un volcado de entorno.
@@ -67,5 +81,5 @@ try {
 }
 
 if ($codigo -ne 0) {
-    throw "setup-oidc.sh fallo con codigo $codigo. El mensaje de arriba dice la causa."
+    throw "$script fallo con codigo $codigo. El mensaje de arriba dice la causa."
 }
