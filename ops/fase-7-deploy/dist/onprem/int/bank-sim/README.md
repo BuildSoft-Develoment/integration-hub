@@ -3,19 +3,23 @@
 Simula el lado banco del canal SWIFT/FIN por **SFTP** para poder ejercer el money-path
 banco-a-banco (PAY/STATUS/CORR) sin el banco real.
 
-## Qué hace
+## Qué hace, y por qué sigue existiendo
 
-El `ih-int-sftp-bank` es un SFTP **pasivo** (solo guarda archivos: `inbox`/`outbox`). El bank-sim
-es un **sidecar** que comparte su volumen (`sftp_bank_data` en `/home/bank`), vigila el `inbox`
-—donde `MT101_PAY` (transport SFTP) deja el FIN con **upload-with-rename**— y escribe el
-**ACK/NACK** en el `outbox`, que es lo que `MT101_STATUS` (SFTP) lee para reconciliar.
+El **servidor** SFTP del banco ya no es un contenedor: es una cuenta gestionada en la nube, porque
+un servidor SFTP es justo lo que sí tiene equivalente contratable. Lo que no se contrata es el
+**criterio** del banco —decidir si una orden se acepta, se rechaza o queda pendiente— y eso es lo
+único que hace bank-sim. Por eso se retiró `ih-int-sftp-bank` y este se quedó.
+
+Vigila el `inbox` de esa cuenta —donde `MT101_PAY` (transport SFTP) deja el FIN con
+**upload-with-rename**— y publica el **ACK/NAK** en el `outbox`, que es lo que `MT101_STATUS` lee
+para reconciliar. Habla SFTP **por red**: no comparte volumen con nadie.
 
 ```
-MT101_PAY --SFTP put (.part -> rename)--> sftp-bank:/home/bank/inbox/<:20:>.fin
+MT101_PAY --SFTP put (.part -> rename)--> <cuenta>:/inbox/<:20:>.fin
                                                  |
-                                          bank-sim (watcher)
+                                   bank-sim (watcher, por SFTP)
                                                  v
-sftp-bank:/home/bank/outbox/<:20:>.ack  <--ACK/NACK JSON {"status":...}
+<cuenta>:/outbox/<:20:>.ack   <--- token pelado: ACK | NAK
                                                  ^
 MT101_STATUS --SFTP get (responseFileTemplate)---+
 ```
