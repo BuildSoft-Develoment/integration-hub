@@ -53,16 +53,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <h2>Como se corre (cuesta acertar, y el error es silencioso)</h2>
  * <pre>
- * mvn -o -pl platform-app -DskipITs=false -Dit.test=OutputSinkObjectStorageMinioIT \
+ * mvn -o -pl platform-app -Dit.test=OutputSinkObjectStorageMinioIT \
  *     -Dtest=NingunUnitario -Dsurefire.failIfNoSpecifiedTests=false \
  *     -Dquarkus.quinoa.enabled=false verify
  * </pre>
  *
  * <p>Cada pieza esta por un motivo, aprendido fallando:</p>
  * <ul>
- *   <li>{@code -DskipITs=false}: los ITs estan <b>apagados por defecto</b> (solo el perfil
- *       {@code native} los enciende). Sin esto, {@code verify} termina en BUILD SUCCESS sin haber
- *       ejecutado nada — un verde que no significa lo que parece.</li>
+ *   <li><b>La meta es {@code verify}, no {@code test}.</b> Failsafe corre en {@code integration-test},
+ *       posterior a {@code test}: con la meta {@code test} el IT no se ejecuta y el build termina en
+ *       BUILD SUCCESS sin haber probado nada — un verde que no significa lo que parece. No hace falta
+ *       {@code -DskipITs=false}: {@code skipITs} solo aparece en el perfil {@code native}, y el valor
+ *       por defecto de failsafe ya es {@code false}. Comprobado ejecutando sin el flag.</li>
  *   <li><b>No usar {@code -DskipTests=true}</b> para saltarse los unitarios: failsafe tambien lo
  *       obedece y responde "Tests are skipped", otra vez con BUILD SUCCESS.</li>
  *   <li>{@code -Dtest=<algo que no existe>} + {@code -DfailIfNoTests=false}: esa es la forma de callar

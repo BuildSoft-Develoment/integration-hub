@@ -44,16 +44,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <h2>Como se corre (cuesta acertar, y el error es silencioso)</h2>
  * <pre>
- * mvn -o -pl platform-app -DskipITs=false -Dit.test=SecretResolutionOpenBaoIT \
+ * mvn -o -pl platform-app -Dit.test=SecretResolutionOpenBaoIT \
  *     -Dtest=NingunUnitario -Dsurefire.failIfNoSpecifiedTests=false \
  *     -Dquarkus.quinoa.enabled=false verify
  * </pre>
  *
- * <p>Los ITs estan <b>apagados por defecto</b> (solo el perfil {@code native} los enciende), asi que un
- * {@code verify} a secas termina en BUILD SUCCESS sin ejecutar nada. Y <b>no</b> vale
- * {@code -DskipTests=true} para saltarse los unitarios: failsafe tambien lo obedece y responde "Tests
- * are skipped", otra vez en verde. Ver {@link OutputSinkObjectStorageMinioIT} para el detalle de cada
- * flag.</p>
+ * <p><b>La meta tiene que ser {@code verify}</b>: failsafe corre en {@code integration-test}, posterior
+ * a {@code test}, asi que con la meta {@code test} el IT no se ejecuta y el build termina en BUILD
+ * SUCCESS sin haber probado nada. Y <b>no</b> vale {@code -DskipTests=true} para saltarse los
+ * unitarios: failsafe tambien lo obedece y responde "Tests are skipped", otra vez en verde. Ver
+ * {@link OutputSinkObjectStorageMinioIT} para el detalle de cada flag.</p>
+ *
+ * <p>Este IT <b>corre en CI</b> ({@code mvn -Pfast-tests verify}), asi que el runner necesita Docker.</p>
  */
 class SecretResolutionOpenBaoIT {
 
