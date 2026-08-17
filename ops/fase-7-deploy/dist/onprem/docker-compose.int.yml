@@ -107,6 +107,14 @@ services:
       # silencio y el sintoma llegaria mucho despues, disfrazado de cliente mal creado— pero conviene
       # saberlo antes de tropezar en medio de una incidencia. Para diagnosticar sin la variable,
       # `docker ps --filter name=ih-int` no pasa por el compose y sigue funcionando.
+      #
+      # ⚠️ AL EDITAR EL REALM JSON: Keycloak sustituye los marcadores de llaves en CUALQUIER campo,
+      # no solo en `secret`. Un marcador escrito en `description` —aunque sea para explicar de donde
+      # sale el valor— PUBLICA el secreto en esa descripcion, visible en la consola de administracion
+      # y en cualquier export del realm. Ya paso una vez. Nombrar la variable SIN llaves.
+      #
+      # Y ese campo es VARCHAR(255): una descripcion mas larga no se trunca, hace fallar el import
+      # entero y Keycloak arranca en bucle. Tambien paso.
       OPENBAO_OIDC_CLIENT_SECRET: "${OPENBAO_OIDC_CLIENT_SECRET:?falta OPENBAO_OIDC_CLIENT_SECRET en int/.env}"
     volumes:
       - ${KC_REALM:-./int/keycloak/integration-hub-realm.json}:/opt/keycloak/data/import/integration-hub-realm.json:ro

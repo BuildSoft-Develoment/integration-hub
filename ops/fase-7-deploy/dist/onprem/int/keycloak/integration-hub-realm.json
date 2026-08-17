@@ -113,7 +113,7 @@
                     {
                         "clientId":  "openbao",
                         "name":  "OpenBao",
-                        "description":  "SSO para la consola de OpenBao. El secreto NO va aqui: Keycloak sustituye ${OPENBAO_OIDC_CLIENT_SECRET} desde el entorno al importar el realm.",
+                        "description":  "SSO de la consola de OpenBao. El secreto sale de la variable de entorno OPENBAO_OIDC_CLIENT_SECRET al importar el realm, no de este fichero. Ver el aviso en docker-compose.int.yml antes de editar.",
                         "enabled":  true,
                         "protocol":  "openid-connect",
                         "publicClient":  false,
