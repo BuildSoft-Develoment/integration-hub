@@ -31,6 +31,7 @@ volumes:
   minio_data:
   sftp_source_data:
   ftp_source_data:
+  openbao_data:
 
 services:
   # ---------------------------------------------------------------------------------
@@ -210,6 +211,38 @@ services:
   # Ver int/bank-sim/README.md.
   # ---------------------------------------------------------------------------------
   # ---------------------------------------------------------------------------------
+  # OpenBao — gestor de secretos (infra, fuentes externas, conexiones a BD).
+  #
+  # NO es el contenedor de desarrollo. Aquel arranca en modo dev: desellado, en MEMORIA y con
+  # token raiz fijo, y pierde todo al reiniciar. Este usa almacenamiento persistente y arranca
+  # SELLADO. Tras cada reinicio hay que desellarlo a mano; esa friccion es la propiedad, no un
+  # defecto de configuracion.
+  #
+  # No publica puerto al host: solo se llega por nginx (/ui/ y /v1/). Ver int/nginx/https.conf.
+  openbao:
+    image: openbao/openbao:2.6.1
+    container_name: ih-int-openbao
+    restart: always
+    command: ["server", "-config=/openbao/config/config.hcl"]
+    environment:
+      # Direccion PUBLICA que OpenBao anuncia en sus redirecciones. Sale del MISMO knob que usan
+      # Keycloak y la app, para que entrar por IP local no mande al usuario al dominio.
+      BAO_API_ADDR: "${PUBLIC_BASE_URL:-https://app.buildsoft.com.pe}"
+    volumes:
+      - ./int/openbao/config.hcl:/openbao/config/config.hcl:ro
+      - openbao_data:/openbao/file
+    # Deja al proceso bloquear memoria para que los secretos no acaben en swap.
+    cap_add:
+      - IPC_LOCK
+    networks: [ihnet]
+    healthcheck:
+      # 501 = inicializado pero SELLADO; 503 = sin inicializar. Los dos son "el proceso vive",
+      # asi que se aceptan: un contenedor sellado esta sano, solo esperando su llave.
+      test: ["CMD", "sh", "-c", "bao status -address=http://127.0.0.1:8200 2>&1 | grep -q Sealed"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  # ---------------------------------------------------------------------------------
   # Consumidor de auditoria â€” NATIVO. Kafka -> cold-store POSTGRES (default; ClickHouse
   # deferido). Requiere el runner nativo (mvn -pl audit-consumer -am package -Pnative ...)
   # antes del docker build. Ver int/README.md.
@@ -285,6 +318,24 @@ services:
       QUARKUS_OIDC_DISCOVERY_ENABLED: "false"
       QUARKUS_OIDC_JWKS_PATH: "protocol/openid-connect/certs"
       QUARKUS_OIDC_TOKEN_ISSUER: "${PUBLIC_BASE_URL:-https://app.buildsoft.com.pe}/iam/realms/integration-hub"
+      # --- Secretos en OpenBao (fuente `vaultkv`) ---
+      #
+      # La app llega por la red INTERNA del compose, no por nginx: no necesita el certificado
+      # publico ni depende de que el proxy este arriba. Es el mismo criterio que arriba con
+      # QUARKUS_OIDC_AUTH_SERVER_URL apuntando a keycloak:8180.
+      #
+      # El TOKEN no se escribe aqui NI en .env.example: sale de OPENBAO_TOKEN, que cada entorno
+      # pone en su propio int/.env (ignorado por git). Y no deberia ser el token raiz: lo suyo es
+      # uno acotado por politica a leer secret/connections/* y secret/tasks/*. Ver
+      # int/openbao/policy-integration-hub.hcl.
+      #
+      # Sin OPENBAO_TOKEN la variable queda vacia y el cliente devuelve vacio en toda resolucion:
+      # el error que se vera es "Missing vaultkv value: <ruta>", el MISMO que si el secreto no
+      # existe o si OpenBao esta caido. Si aparece, comprobar el token antes que nada.
+      INTEGRATIONHUB_SECRETS_VAULT_ENABLED: "true"
+      INTEGRATIONHUB_SECRETS_VAULT_ADDRESS: "http://openbao:8200"
+      INTEGRATIONHUB_SECRETS_VAULT_KV_MOUNT: "secret"
+      INTEGRATIONHUB_SECRETS_VAULT_TOKEN: "${OPENBAO_TOKEN:-}"
       INTEGRATIONHUB_PLUGIN_REMOTE_STAGING_ENDPOINT: "http://minio:9000"
     networks: [ihnet]
     # NO publicamos los puertos gRPC de los plugins (50061-63) al host: la app los alcanza en
