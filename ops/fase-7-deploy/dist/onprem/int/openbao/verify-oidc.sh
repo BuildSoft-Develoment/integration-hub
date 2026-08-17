@@ -30,7 +30,11 @@ POLITICAS="$(bao read -field=policies identity/group/name/platform-admin 2>/dev/
 echo "   politicas: $POLITICAS"
 
 MIEMBROS="$(bao read -field=member_entity_ids identity/group/name/platform-admin 2>/dev/null || echo '')"
-LIMPIO="$(printf '%s' "$MIEMBROS" | tr -d '[]" ' | tr ',' '\n' | grep -v '^$' || true)"
+# OJO con el separador: `bao read -field` sobre una lista imprime el formato Go `[a b]` —separado por
+# ESPACIOS—, no JSON. Borrar los espacios junto con los corchetes fusionaba dos ids en uno inventado,
+# y con un solo miembro NO se notaba: el fallo habria aparecido al entrar la segunda persona, que es
+# cuando ya nadie sospecha del script. Espacios y comas se convierten en saltos, no se borran.
+LIMPIO="$(printf '%s' "$MIEMBROS" | tr -d '[]"' | tr ', ' '\n\n' | grep -v '^$' || true)"
 
 if [ -z "$LIMPIO" ]; then
   echo "   miembros: NINGUNO"

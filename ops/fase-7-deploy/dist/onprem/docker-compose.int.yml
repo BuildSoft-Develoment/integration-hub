@@ -101,6 +101,12 @@ services:
       # Si falta, Keycloak importa el literal "${OPENBAO_OIDC_CLIENT_SECRET}" como secreto y el
       # login falla en el canje del codigo con "invalid_client" — un error que apunta al cliente,
       # no a la variable que falta.
+      #
+      # El `:?` la hace OBLIGATORIA para TODO el compose, no solo para keycloak: sin ella fallan
+      # incluso `config` y `docker compose ps`. Es deliberado —un secreto vacio se importaria en
+      # silencio y el sintoma llegaria mucho despues, disfrazado de cliente mal creado— pero conviene
+      # saberlo antes de tropezar en medio de una incidencia. Para diagnosticar sin la variable,
+      # `docker ps --filter name=ih-int` no pasa por el compose y sigue funcionando.
       OPENBAO_OIDC_CLIENT_SECRET: "${OPENBAO_OIDC_CLIENT_SECRET:?falta OPENBAO_OIDC_CLIENT_SECRET en int/.env}"
     volumes:
       - ${KC_REALM:-./int/keycloak/integration-hub-realm.json}:/opt/keycloak/data/import/integration-hub-realm.json:ro
