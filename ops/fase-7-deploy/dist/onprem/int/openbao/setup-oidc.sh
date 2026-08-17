@@ -141,13 +141,21 @@ GROUP_ID="$(bao read -field=id identity/group/name/platform-admin)"
 # es estable, asi que el patron no depende del formateo.
 ACCESSOR="$(bao auth list -format=json | grep -o '"accessor": *"auth_oidc_[^"]*"' | sed 's/.*"\(auth_oidc_[^"]*\)".*/\1/' | head -1)"
 [ -n "$ACCESSOR" ] || fallo "no se pudo determinar el accessor del montaje oidc."
-
-# Crear el alias dos veces es un error; que YA exista es exactamente lo que queremos. Se tolera
-# ese caso concreto y solo ese: cualquier otro fallo sube.
+# Crear el alias dos veces es un error; que YA exista es exactamente el estado que se busca.
+#
+# NO se interpreta el MENSAJE del error para distinguirlo. Se intento y fallo: yo di por hecho que
+# diria "already exists" y OpenBao dice "combination of mount and group alias name is already in
+# use". El script aborto anunciando un problema donde el estado ya era el correcto: una falsa alarma
+# justo en el ultimo paso, que es cuando mas parece que algo se rompio de verdad.
+# justo en el paso final, que es cuando mas parece que algo se rompio de verdad.
+#
+# Ahora se comprueba el ESTADO, no el texto: si el grupo ya tiene un alias colgado de ESTE montaje
+# oidc, el objetivo esta cumplido y da igual como lo dijera el error. Cualquier otro caso sube.
 if ! ERR="$(bao write identity/group-alias name="platform-admin" mount_accessor="$ACCESSOR" canonical_id="$GROUP_ID" 2>&1 >/dev/null)"; then
-  case "$ERR" in
-    *"already exists"*) echo "    el alias ya existia" ;;
-    *) fallo "$ERR" ;;
+  ESTADO="$(bao read identity/group/name/platform-admin 2>/dev/null || echo '')"
+  case "$ESTADO" in
+    *"$ACCESSOR"*) echo "    el alias ya estaba puesto (verificado en el grupo, no supuesto)" ;;
+    *) fallo "no se pudo crear el alias y el grupo tampoco lo tiene. Error original: $ERR" ;;
   esac
 fi
 
