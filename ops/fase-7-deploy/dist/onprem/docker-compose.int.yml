@@ -94,6 +94,14 @@ services:
       KC_HOSTNAME: "${PUBLIC_BASE_URL:-https://app.buildsoft.com.pe}/iam"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
+      # Secreto del cliente `openbao` del realm. Keycloak sustituye los ${...} del JSON de import
+      # desde SU entorno, asi que el valor no vive en el repo: sale de int/.env (ignorado por git).
+      # El MISMO valor lo necesita OpenBao al configurar el metodo oidc; por eso hay un unico knob.
+      #
+      # Si falta, Keycloak importa el literal "${OPENBAO_OIDC_CLIENT_SECRET}" como secreto y el
+      # login falla en el canje del codigo con "invalid_client" — un error que apunta al cliente,
+      # no a la variable que falta.
+      OPENBAO_OIDC_CLIENT_SECRET: "${OPENBAO_OIDC_CLIENT_SECRET:?falta OPENBAO_OIDC_CLIENT_SECRET en int/.env}"
     volumes:
       - ${KC_REALM:-./int/keycloak/integration-hub-realm.json}:/opt/keycloak/data/import/integration-hub-realm.json:ro
       # Override-able como KC_REALM: el default apunta a la raiz del REPO (4 niveles arriba desde
@@ -231,6 +239,13 @@ services:
     volumes:
       - ./int/openbao/config.hcl:/openbao/config/config.hcl:ro
       - openbao_data:/openbao/file
+      # El script de SSO y la politica, para poder ejecutarlos con `docker exec` sin copiar nada.
+      - ./int/openbao:/openbao/setup:ro
+      # El certificado de nginx. Para el SSO, OpenBao llama a Keycloak POR LA URL PUBLICA (ver
+      # config.hcl), que va por HTTPS con un certificado AUTOFIRMADO —lo es: emisor y sujeto
+      # coinciden—. Sin este fichero, el descubrimiento muere con un error de verificacion TLS.
+      # Al ser autofirmado, el propio certificado hace de CA.
+      - ./int/nginx/certs/server.crt:/openbao/tls/nginx-ca.crt:ro
     # Deja al proceso bloquear memoria para que los secretos no acaben en swap.
     cap_add:
       - IPC_LOCK
