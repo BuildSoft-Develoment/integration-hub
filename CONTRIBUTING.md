@@ -7,6 +7,7 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 ## Contenido
 
 - [Principios](#principios)
+- [Modelo de ramas](#modelo-de-ramas)
 - [Antes de editar](#antes-de-editar)
 - [Convenciones de escritura](#convenciones-de-escritura)
 - [Breadcrumbs y nav-guided](#breadcrumbs-y-nav-guided)
@@ -27,6 +28,45 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 - No mover codigo ejecutable solo para armonizar la forma documental.
 - Toda salida de IA debe terminar en una ruta canonica.
 - Si un entregable final sigue sonando a instructivo o borrador, todavia no esta terminado.
+
+<a id="modelo-de-ramas"></a>
+## Modelo de ramas
+
+| Rama | Que es | Quien escribe en ella |
+|---|---|---|
+| `main` | Lo desplegable. Cada commit debe poder salir a produccion | Solo merges desde `develop` o `hotfix/*` |
+| `develop` | Integracion del equipo | Solo merges desde ramas de trabajo |
+| `<tipo>/<asunto>` | Trabajo individual | Quien la abre |
+| `hotfix/<asunto>` | Arreglo urgente sobre lo desplegado. Sale de `main` y vuelve a `main` **y** a `develop` | Quien la abre |
+
+Los prefijos son los mismos tipos que ya usan los mensajes de commit, para que la rama y su historia
+digan lo mismo: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`, `test/`, `perf/`.
+
+Un prefijo por tipo, y no por herramienta ni por autor: quien escribio el codigo —persona o asistente—
+no es una categoria de rama. Antes convivian `feat/` con `feature/`, `frontend/` y `codex/`, y eso hace
+imposible saber de un vistazo si una rama arregla algo o anade algo.
+
+### Que dispara cada cosa
+
+```
+pull request a develop   ->  CI (gobernanza, backend, frontend, compatibilidad de BD)
+merge a develop          ->  + despliegue al entorno de integracion
+pull request a main      ->  CI completo
+tag v* sobre main        ->  build y despliegue a la nube
+```
+
+### La regla que no es opcional
+
+**Las ramas nombradas en los disparadores de `.github/workflows/` tienen que existir.** Este
+repositorio ya pago esa leccion: los workflows apuntaban a `main` y `develop` cuando esas ramas no
+existian, asi que no se ejecutaron NUNCA y 23 dias de cambios estructurales pasaron sin una sola
+alarma. El fallo es silencioso —no hay error, solo ausencia de ejecuciones, que se parece mucho a que
+todo va bien—. Al renombrar o crear ramas, comprobar `git branch -r` ANTES de tocar los disparadores.
+
+### Ramas fusionadas
+
+Se borran al integrar. Una rama vieja que nadie recuerda es de donde sale, meses despues, un merge
+que revive codigo ya retirado.
 
 <a id="antes-de-editar"></a>
 ## Antes de editar
