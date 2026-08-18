@@ -1,14 +1,20 @@
-# Todo lo que cuelga de dist/ se ejecuta DENTRO de contenedores Linux, en cualquiera de los
-# paquetes de despliegue. El repositorio tiene core.autocrlf=true, asi que en un clon en Windows
-# estos ficheros saldrian con CRLF y el `\r` final viajaria al contenedor: un script de shell muere
-# entonces con "\r: not found" o "bad interpreter", errores que apuntan al interprete y no al
-# fichero.
+# Todo lo que cuelga de dist/ termina DENTRO de un contenedor Linux, en cualquiera de los paquetes
+# de despliegue. El repositorio tiene core.autocrlf=true, asi que en un clon en Windows estos
+# ficheros saldrian con CRLF y el `\r` final viajaria al contenedor.
 #
-# No se ve al desarrollar —el working tree actual ya esta en LF— sino en el SIGUIENTE clon, que es
+# No se ve al desarrollar —el working tree actual ya esta bien— sino en el SIGUIENTE clon, que es
 # justo cuando alguien intenta desplegar por primera vez.
 #
-# Vive en dist/ y no dentro de un paquete concreto porque el fallo no es de onprem ni de oracle: es
-# de cualquier .sh que acabe dentro de un contenedor. Tenerlo en uno solo deja a los demas
-# expuestos, que es exactamente lo que acaba de pasar con el paquete de nube.
-*.sh  text eol=lf
-*.hcl text eol=lf
+# LA REGLA ES PARA TODO EL ARBOL, NO SOLO PARA LOS SCRIPTS
+# Empezo cubriendo *.sh y *.hcl, y esa lista dejaba fuera lo que mas duele: .env, que es el fichero
+# que LLEVA VALORES. Un `\r` al final de una linea no rompe nada visiblemente — se cuela dentro del
+# valor. Una contrasena con retorno de carro no falla al arrancar: falla al autenticar, y el error
+# dice "credenciales invalidas", que manda a revisar la contrasena, que es justo la que se ve bien.
+#
+# La lista blanca por extension siempre se queda corta un fichero por detras. Se invierte: todo es
+# LF salvo lo que se declare binario.
+* text=auto eol=lf
+
+# Excepciones: contenido binario que git no debe tocar. `text=auto` ya lo detectaria solo, pero
+# declararlo evita depender de la heuristica en un fichero de datos de prueba.
+*.xlsx binary

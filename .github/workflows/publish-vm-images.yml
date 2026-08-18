@@ -1,0 +1,141 @@
+# =====================================================================================
+# Construye las DOS imagenes nativas x86-64 del despliegue en VM y las publica en ghcr.io.
+#
+# POR QUE AQUI Y NO EN LA VM
+# El build de GraalVM pica ~9,3 GB de RAM. La VM tiene 8: no es que fuera lento, es que no
+# cabe. Un runner de GitHub tiene 16 GB, asi que compila aqui y la VM solo descarga. Efecto
+# secundario bueno: actualizar deja de exigir parar la stack, y con ella el desellado manual
+# de OpenBao.
+#
+# NO SE DISPARA SOLO EN CADA MERGE. Son ~40 min de runner por publicacion; encadenarlo a
+# develop gastaria eso en cada commit para imagenes que casi nunca se despliegan. Se publica
+# al taggear una version, o a mano.
+#
+# NO PUBLICA `latest`, A PROPOSITO. Con un tag movil nadie puede responder que version corre
+# en la maquina, y el rollback deja de existir porque el nombre al que volver ya apunta a otra
+# cosa. Los dos tags que emite son inmutables: el de la release, o el SHA corto.
+#
+# Su pareja es ops/fase-7-deploy/dist/vm/. Este workflow NO despliega: deja las imagenes en el
+# registro y el runbook dice como bajarlas. Es deliberado — que un push a un tag toque una
+# maquina con dinero en transito no debe pasar sin que alguien lo pida.
+# =====================================================================================
+name: Publicar imagenes de la VM
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+# Impide que dos publicaciones de la misma referencia se pisen empujando el mismo tag.
+concurrency:
+  group: publicar-imagenes-vm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRO: ghcr.io
+
+jobs:
+  imagenes:
+    name: ${{ matrix.nombre }} (nativa x86-64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # platform-app lleva -Pappih: hornea el root-path /appih de Quarkus y el base-href del
+          # SPA. El nginx del paquete sirve la app ahi, asi que una imagen sin el perfil responde
+          # 404 en todas las rutas y parece que el proxy esta mal.
+          - nombre: platform-app
+            modulo: platform-app
+            perfiles: native,appih
+            dockerfile: ops/fase-7-deploy/dist/common/Dockerfile.native
+            contexto: .
+            necesita_node: true
+          - nombre: audit-consumer
+            modulo: audit-consumer
+            perfiles: native
+            dockerfile: audit-consumer/src/main/docker/Dockerfile.native
+            contexto: audit-consumer
+            necesita_node: false
+    steps:
+      - uses: actions/checkout@v4
+
+      # Solo platform-app: Quinoa compila el frontend Angular durante el package de Maven.
+      # audit-consumer no tiene UI y arrastrar Node ahi seria un minuto tirado por build.
+      - name: Node 22 (Quinoa)
+        if: matrix.necesita_node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+
+      # El tag sale de la referencia y es INMUTABLE en los dos caminos: el nombre del tag git
+      # cuando se publica una version, y el SHA corto cuando se lanza a mano. Nunca el nombre de
+      # una rama, que apunta a un commit distinto cada semana.
+      - name: Resolver el tag
+        id: tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VALOR="$GITHUB_REF_NAME"
+          else
+            VALOR="${GITHUB_SHA::7}"
+          fi
+          echo "valor=$VALOR" >> "$GITHUB_OUTPUT"
+          echo "Publicando como :$VALOR"
+
+      # -Dmaven.test.skip=true y no -DskipTests: el perfil `native` pone skipITs=false, asi que
+      # sin esto el package arrancaria los tests de integracion nativos, que necesitan la stack
+      # entera levantada. Aqui no la hay. Las pruebas son cosa de ci.yml, sobre el mismo commit.
+      - name: Build nativo
+        run: >
+          mvn -B -pl ${{ matrix.modulo }} -am clean package
+          -Dmaven.test.skip=true -P${{ matrix.perfiles }}
+
+      - name: Login en ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRO }} -u ${{ github.actor }} --password-stdin
+
+      - name: Construir y publicar la imagen
+        run: |
+          set -euo pipefail
+          IMAGEN="${{ env.REGISTRO }}/${{ github.repository }}/${{ matrix.nombre }}"
+          IMAGEN="$(echo "$IMAGEN" | tr '[:upper:]' '[:lower:]')"
+          TAG="${{ steps.tag.outputs.valor }}"
+
+          # El nombre del runner lleva la version del pom, asi que se resuelve en vez de
+          # escribirse. `ls` de un patron sin coincidencias falla con set -e, que es lo que
+          # queremos: mejor parar aqui que construir una imagen sin binario dentro.
+          RUNNER="$(ls ${{ matrix.modulo }}/target/*-runner)"
+          echo "runner: $RUNNER"
+
+          # El contexto de audit-consumer es su propio modulo, asi que la ruta del runner tiene
+          # que ser relativa a ese contexto y no a la raiz.
+          if [ "${{ matrix.contexto }}" != "." ]; then
+            RUNNER="${RUNNER#${{ matrix.modulo }}/}"
+          fi
+
+          docker build -f "${{ matrix.dockerfile }}" \
+            --build-arg RUNNER="$RUNNER" \
+            -t "$IMAGEN:$TAG" "${{ matrix.contexto }}"
+          docker push "$IMAGEN:$TAG"
+
+          {
+            echo "### ${{ matrix.nombre }}"
+            echo ""
+            echo '```'
+            echo "$IMAGEN:$TAG"
+            echo '```'
+            echo ""
+            echo "En la VM, en \`ops/fase-7-deploy/dist/vm/.env\`: \`IMAGE_TAG=$TAG\`"
+          } >> "$GITHUB_STEP_SUMMARY"

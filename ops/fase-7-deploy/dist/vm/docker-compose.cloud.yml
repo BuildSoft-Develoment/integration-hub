@@ -1,5 +1,7 @@
 # =====================================================================================
-# Integration Hub en UNA VM de Oracle Cloud (Always Free, Ampere A1) — ARM64.
+# Integration Hub en UNA VM (x86-64). Probado sobre Google Compute Engine, pero aqui
+# dentro no hay nada de un proveedor concreto: es Docker Compose sobre una Ubuntu con
+# una IP publica. Cambiar de nube cambia el runbook, no este fichero.
 #
 # Seis componentes y un proxy. NO es el compose de integracion recortado: hay tres
 # diferencias que no son cosmeticas, y estan explicadas donde ocurren.
@@ -13,19 +15,14 @@
 # widget, el echo y el mock del banco: son andamiaje para ejercitar el motor en local. Un
 # servidor expuesto a internet no debe cargar con ellos.
 #
-# ARQUITECTURA: todas las imagenes de terceros de aqui tienen arm64 —verificado con
-# `docker manifest inspect`—. Las DOS propias hay que compilarlas para aarch64: un binario
-# nativo de GraalVM NO es portable entre arquitecturas. Se compilan en esta misma VM con
-# build-native-arm64.sh; el builder de Mandrel tiene arm64.
+# LAS IMAGENES PROPIAS NO SE COMPILAN AQUI. Se descargan ya construidas del registro
+# (ghcr.io), y las construye CI. No es una preferencia: el build nativo de GraalVM pica
+# ~9,3 GB de RAM y la VM tiene 8. No es que fuera lento — es que no cabe. Ademas, un
+# binario nativo NO es portable entre arquitecturas, asi que CI compila para x86-64 y la
+# VM tiene que serlo tambien: una imagen aarch64 aqui muere con "exec format error".
 #
-# OJO CON LA MEMORIA. La documentacion de Oracle da el Always Free de Ampere A1 en horas:
-# 1.500 OCPU-hora y 9.000 GB-hora al mes, que dan para ~2 OCPU y ~12 GB funcionando en
-# continuo — no los 4 OCPU / 24 GB que se citan por todas partes. Confirmar el limite real en
-# la consola del propio tenancy antes de dimensionar.
-#
-# Importa porque el build nativo pica ~9,3 GB. Con 12 GB entra, pero NO a la vez que la stack:
-# hay que pararla antes de compilar. Es el mismo problema que ya tumbo el entorno de
-# integracion, donde el build OOM-killeaba servicios aunque `free` mostrase memoria de sobra.
+# Efecto secundario bueno: desplegar es `pull` + `up -d`. Sin parar la stack para compilar,
+# que era lo que obligaba a cortar el servicio en el plan anterior.
 # =====================================================================================
 name: integration-hub-cloud
 
@@ -222,14 +219,28 @@ services:
   # pasarle el certificado HOJA de una cadena real haria FALLAR la verificacion, no relajarla.
   # ---------------------------------------------------------------------------------
   openbao:
+    # ⚠️ NO SUBIR ESTA ETIQUETA A LA LIGERA si se activo el desellado automatico. En 2.6.1 los
+    # sellos de proveedor (gcpckms y companyia) vienen dentro del binario; desde la 2.7.0 pasan a
+    # ser plugins. El fallo no saldria al desplegar sino en el siguiente reinicio, que es cuando ya
+    # nadie lo relaciona con haber cambiado la version. Ver openbao/seal-gcpckms.hcl.example.
     image: openbao/openbao:2.6.1
     container_name: ih-openbao
     restart: always
-    command: ["server", "-config=/openbao/config/config.hcl"]
+    # `-config` apunta a un DIRECTORIO, no a un fichero: OpenBao carga todos los .hcl de dentro.
+    # Es lo que permite activar el desellado automatico copiando un fichero, sin tocar el compose
+    # ni dejar un sello comentado en la configuracion base.
+    #
+    # LA RUTA ES /openbao/config.d Y NO /openbao/config, QUE ES LA OBVIA. La imagen ya carga
+    # /openbao/config por su cuenta; montar ahi Y pasarlo en -config lo lee DOS VECES, y el
+    # segundo listener choca con el primero. OpenBao entonces no arranca, y lo que dice es
+    # "bind: address already in use" — que manda a buscar quien ocupa el 8200, no una
+    # configuracion duplicada. Comprobado con la imagen 2.6.1: misma config en /openbao/config
+    # falla, en otra ruta arranca.
+    command: ["server", "-config=/openbao/config.d"]
     environment:
       BAO_API_ADDR: "https://${PUBLIC_HOST:?falta PUBLIC_HOST}"
     volumes:
-      - ./openbao/config.hcl:/openbao/config/config.hcl:ro
+      - ./openbao/config:/openbao/config.d:ro
       - ./openbao:/openbao/setup:ro
       - openbao_data:/openbao/file
     cap_add:
@@ -244,10 +255,13 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------------------
-  # Consumidor de auditoria (NATIVO aarch64). Kafka -> cold-store en Postgres.
+  # Consumidor de auditoria (NATIVO x86-64). Kafka -> cold-store en Postgres.
   # ---------------------------------------------------------------------------------
   audit-consumer:
-    image: ${CONSUMER_IMAGE:-integration-hub-audit-consumer:native-arm64}
+    # Comparte IMAGE_TAG con platform-app A PROPOSITO: los dos salen del mismo commit y
+    # comparten esquema de BD y contrato de Kafka. Un tag por servicio dejaria desplegar
+    # versiones descoordinadas sin que nada avise.
+    image: ${CONSUMER_IMAGE:-ghcr.io/ndavilal88/integration-hub/audit-consumer}:${IMAGE_TAG:?falta IMAGE_TAG en .env — la version a desplegar (p.ej. v1.4.0 o el SHA corto). Sin tag explicito no se sabe que esta corriendo.}
     container_name: ih-audit-consumer
     restart: always
     environment:
@@ -263,10 +277,10 @@ services:
         condition: service_started
 
   # ---------------------------------------------------------------------------------
-  # Plataforma (imagen NATIVA aarch64 con /appih horneado).
+  # Plataforma (imagen NATIVA x86-64 con /appih horneado).
   # ---------------------------------------------------------------------------------
   platform-app:
-    image: ${APP_IMAGE:-integration-hub:native-appih-arm64}
+    image: ${APP_IMAGE:-ghcr.io/ndavilal88/integration-hub/platform-app}:${IMAGE_TAG:?falta IMAGE_TAG en .env — la version a desplegar (p.ej. v1.4.0 o el SHA corto). Sin tag explicito no se sabe que esta corriendo.}
     container_name: ih-app
     restart: always
     volumes:

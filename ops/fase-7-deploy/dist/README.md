@@ -34,14 +34,15 @@ variables de entorno o CSI driver, apoyándose en el `SecretResolver` ya existen
 | Ruta | Qué es |
 |------|--------|
 | `common/Dockerfile.native` | Runtime: micro-image + `COPY` del runner ya construido (lo usa CI). |
-| `common/Dockerfile.native-build` | Build multistage reproducible (Mandrel + Node/Quinoa) 100% en Docker. |
 | `common/helm/integration-hub/` | **Un** chart Helm; se parametriza con `values-<nube>.yaml`. |
 | `config/application-*.properties` | Perfiles Quarkus base + por nube. |
 | `<nube>/values-<nube>.yaml` | Values Helm (registry, ingress, identidad de carga). |
 | `<nube>/.env.example` | Variables no-secretas + qué secretos setear. |
 | `<nube>/terraform/` | Solo el **registry** (ECR/ACR/GAR/OCIR) + retención. No provisiona clusters. |
 | `onprem/docker-compose.prod.yml` | Alternativa Compose para on-prem. |
-| `.github/workflows/release-deploy.yml` | CI: build nativo → imagen → push al registry elegido. |
+| `vm/` | Despliegue completo en **una sola VM** con Compose (no Kubernetes): app, consumidor, Keycloak, OpenBao, Postgres, Kafka y nginx bajo un unico dominio. Runbook propio. |
+| `.github/workflows/release-deploy.yml` | CI: build nativo → imagen → push al registry elegido (camino Helm). |
+| `.github/workflows/publish-vm-images.yml` | CI: las **dos** imagenes nativas x86-64 del paquete `vm/` → ghcr.io, con tag inmutable. |
 
 ## Flujo por nube (ejemplo AWS)
 
