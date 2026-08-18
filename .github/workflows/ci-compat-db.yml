@@ -13,7 +13,7 @@ name: CI compat-db (multi-motor)
 # Si hace falta lanzarlo sobre un cambio que no encaje en los paths, esta workflow_dispatch.
 on:
   push:
-    branches: [master, 'experiment/**']
+    branches: [main, develop]
     paths:
       - '**/src/main/resources/db/migration/**'
       - '**/src/main/resources/db/migration-mt101/**'
@@ -29,7 +29,7 @@ on:
       - '**/pom.xml'
       - '.github/workflows/ci-compat-db.yml'
   pull_request:
-    branches: [master]
+    branches: [main, develop]
     paths:
       - '**/src/main/resources/db/migration/**'
       - '**/src/main/resources/db/migration-mt101/**'

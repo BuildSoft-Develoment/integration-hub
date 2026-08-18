@@ -1,15 +1,21 @@
 name: CI
 
-# Las ramas reales de este repositorio son `master` y las de trabajo (experiment/**, feat/**, fix/**,
-# chore/**, codex/**). El disparador apuntaba a `main` y `develop`, que NO EXISTEN: `git branch -a` no
-# las lista. Consecuencia: este workflow no se habia ejecutado NUNCA, y los gates que la documentacion
-# de las fases 4, 5, 6 y 7 cita como control no estaban controlando nada. Es la razon de fondo por la
-# que 23 dias de cambios estructurales derivaron sin que saltara una sola alarma.
+# DISPARADORES: las ramas nombradas aqui TIENEN QUE EXISTIR. No es una obviedad, es la leccion mas
+# cara de este fichero: apuntaba a `main` y `develop` cuando no existian, asi que el workflow no se
+# ejecuto NUNCA y los gates que la documentacion de las fases 4, 5, 6 y 7 cita como control no
+# controlaban nada. 23 dias de cambios estructurales derivaron sin que saltara una alarma. El fallo
+# es SILENCIOSO: no hay error, solo ausencia de ejecuciones, que se parece mucho a "todo va bien".
+#
+# 2026-08-17: ahora si existen. `main` y `develop` se crearon ANTES de tocar esta linea, en ese
+# orden y a proposito. Al modificar este bloque, comprobar con `git branch -r` primero.
+#
+# Las ramas de trabajo ya no se listan: entran por pull_request contra main o develop, que es donde
+# el gate decide algo. Lanzar CI en cada push de cada rama personal gasta minutos sin decidir nada.
 on:
   push:
-    branches: [master, 'experiment/**']
+    branches: [main, develop]
   pull_request:
-    branches: [master]
+    branches: [main, develop]
   # Permite lanzarlo a mano sobre cualquier rama sin esperar a un push.
   workflow_dispatch:
 
