@@ -31,6 +31,50 @@ jobs:
       - name: Verificaciones del framework y del proyecto
         run: npm run check:all
 
+  # ---------------------------------------------------------------------------------
+  # Detecta commits que llegaron a main o develop SIN pasar por un pull request.
+  #
+  # POR QUE ESTO EXISTE, EN LUGAR DE UNA PROTECCION DE RAMA
+  # GitHub NO aplica rulesets ni protecciones clasicas en repositorios privados de este
+  # plan. Comprobado empujando a main a proposito: el push directo paso, y el force push
+  # tambien. O sea que hoy nada IMPIDE saltarse el modelo de ramas.
+  #
+  # Este job no lo impide tampoco —no puede— pero lo hace RUIDOSO: el commit queda con
+  # una equis roja y el motivo escrito. La diferencia entre un descuido que nadie ve y
+  # un acto deliberado que queda registrado.
+  #
+  # Se retira el dia que las protecciones se apliquen de verdad: entonces sobra, porque
+  # el push ni siquiera llegaria a ocurrir.
+  # ---------------------------------------------------------------------------------
+  guard-pull-request:
+    name: Integracion por pull request
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Comprobar que el commit llego por pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # La API dice que pull requests contienen este commit. Un merge de PR devuelve
+          # al menos uno; un push directo devuelve cero.
+          asociados=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq 'length')
+          if [ "$asociados" -gt 0 ]; then
+            echo "OK. El commit llego por pull request."
+            exit 0
+          fi
+          echo "::error::Este commit se empujo DIRECTO a ${{ github.ref_name }}, sin pull request."
+          echo ""
+          echo "Los cuatro gates de CI corren igual, pero nadie los reviso antes de integrar:"
+          echo "esa es justo la diferencia que un pull request aporta."
+          echo ""
+          echo "Si fue un descuido, el arreglo NO es rehacer la historia: es abrir el"
+          echo "siguiente cambio como pull request. Si fue deliberado, queda constancia."
+          exit 1
+
   backend-fast:
     name: Backend Quarkus fast (build + test + IT)
     runs-on: ubuntu-latest
