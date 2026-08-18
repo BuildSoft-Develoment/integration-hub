@@ -60,6 +60,18 @@ paso 3 se hace con la stack parada, y el script se niega a compilar si la encuen
   falla al principio**: pasa las ocho fases de compilacion y muere en el ENLACE, con un error de
   `ld` que no menciona el espacio. Ya paso.
 - **Clave SSH:** guardarla al crear la instancia. Oracle no la vuelve a mostrar.
+- **IP publica RESERVADA, no efimera.** Es la opcion que mas tarde duele: una IP efimera cambia al
+  parar y arrancar la instancia, y con ella se rompe el registro A. El sintoma es doble y confuso —
+  la aplicacion deja de responder Y el certificado deja de renovarse— y no se relaciona con haber
+  apagado la maquina la semana anterior. En la consola: al crear, en la seccion de red, elegir
+  reservar la direccion.
+- **Subred publica.** Si la instancia acaba en una subred privada no tiene IP publica, y la
+  validacion del certificado —que es una peticion desde internet— no puede llegar nunca.
+
+### Si Oracle dice "Out of host capacity"
+
+Es lo normal, no un error tuyo: la capacidad Ampere del Always Free se agota a menudo por region.
+Reintentar en otro dominio de disponibilidad, o mas tarde. No cambia nada del despliegue.
 
 ---
 
