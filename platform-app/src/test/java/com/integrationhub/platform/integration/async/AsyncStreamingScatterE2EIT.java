@@ -3,6 +3,7 @@ package com.integrationhub.platform.integration.async;
 import com.integrationhub.platform.integration.IntegrationTestProfile;
 import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
+import com.integrationhub.platform.service.execution.SuspensionContinuation;
 import com.integrationhub.platform.service.execution.async.AsyncPageWorkItem;
 import com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.ScatterDispatch;
 import com.integrationhub.platform.service.execution.async.AsyncTaskConsumer;
@@ -17,6 +18,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,6 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestProfile(IntegrationTestProfile.class)
 @QuarkusTestResource(PostgresTestResource.class)
 class AsyncStreamingScatterE2EIT {
+
+    @Inject
+    SuspensionContinuation suspensionContinuation;
 
     @Inject
     DataSource dataSource;
@@ -249,7 +254,14 @@ class AsyncStreamingScatterE2EIT {
                 Map.of(), taskOutputs, Map.of(), Map.of());
         var scatter = ScatterDispatch.streaming(ids[0], ids[1], RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", seed);
         // Token único por tarea (ux_process_task_execution_resume_token) para permitir múltiples scatters.
-        stateService.suspendTask(ids[0], "seed-tok", ids[2], "{\"scatter\":true}", "tok-streaming-" + ids[2], null, null,
+        // PLAN CONGELADO: sin el, el resume degrada a COMPLETED_NEEDS_REDRIVE y el proceso se queda
+        // en RUNNING para siempre. No es un detalle del test: desde M-2.1 el motor NO relee la
+        // definicion viva para saber que falta —una edicion durante la suspension podia cerrar como
+        // COMPLETED un proceso con tareas pendientes—, asi que exige el plan capturado al suspender.
+        // Lista VACIA = la tarea suspendida era la ultima, que es el caso de estos procesos de una
+        // sola tarea. Sembrar null es simular una suspension que el motor real ya no produce.
+        var planCongelado = suspensionContinuation.marshal(Map.of(), Map.of(), "TEST", List.of());
+        stateService.suspendTask(ids[0], "seed-tok", ids[2], "{\"scatter\":true}", "tok-streaming-" + ids[2], null, planCongelado,
                 "scatter", Map.of(), scatter);
     }
 

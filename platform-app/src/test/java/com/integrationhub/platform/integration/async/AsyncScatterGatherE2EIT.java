@@ -3,6 +3,7 @@ package com.integrationhub.platform.integration.async;
 import com.integrationhub.platform.integration.IntegrationTestProfile;
 import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
+import com.integrationhub.platform.service.execution.SuspensionContinuation;
 import com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.ScatterDispatch;
 import com.integrationhub.platform.service.execution.async.AsyncTaskConsumer;
 import com.integrationhub.platform.spi.reader.ReadRecord;
@@ -33,6 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 @TestProfile(IntegrationTestProfile.class)
 @QuarkusTestResource(PostgresTestResource.class)
 class AsyncScatterGatherE2EIT {
+
+    @Inject
+    SuspensionContinuation suspensionContinuation;
 
     @Inject
     DataSource dataSource;
@@ -68,7 +72,14 @@ class AsyncScatterGatherE2EIT {
                 Map.of(), slices, Map.of("task-1.ref", "R-1"), Map.of("processName", "P"), Map.of("env", "prod"));
 
         // El motor abre el tracker(3) + encola 3 work-items + suspende, atómico (B2b).
-        stateService.suspendTask(peId, "seed-tok", teId, "{\"scatter\":true}", "tok-scatter", null, null,
+        // PLAN CONGELADO: sin el, el resume degrada a COMPLETED_NEEDS_REDRIVE y el proceso se queda
+        // en RUNNING para siempre. No es un detalle del test: desde M-2.1 el motor NO relee la
+        // definicion viva para saber que falta —una edicion durante la suspension podia cerrar como
+        // COMPLETED un proceso con tareas pendientes—, asi que exige el plan capturado al suspender.
+        // Lista VACIA = la tarea suspendida era la ultima, que es el caso de estos procesos de una
+        // sola tarea. Sembrar null es simular una suspension que el motor real ya no produce.
+        var planCongelado = suspensionContinuation.marshal(Map.of(), Map.of(), "TEST", List.of());
+        stateService.suspendTask(peId, "seed-tok", teId, "{\"scatter\":true}", "tok-scatter", null, planCongelado,
                 "scatter", Map.of(), scatter);
         assertEquals("SUSPENDED", readString("select status from process_task_execution where id = " + teId));
 
