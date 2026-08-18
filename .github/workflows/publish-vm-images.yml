@@ -41,7 +41,15 @@ env:
 jobs:
   imagenes:
     name: ${{ matrix.nombre }} (nativa x86-64)
-    runs-on: ubuntu-latest
+    # platform-app NO CABE en un runner estandar. El requisito esta documentado en
+    # ops/fase-7-deploy/dist/NATIVE-STATUS.md: el analisis de GraalVM pica a 9,7 GB y pide un
+    # builder de >=12 GB. Un runner estandar de repo privado da 2 nucleos y ~8 GB, de los que
+    # native-image ve 6,29: el build muere por OOM tras casi una hora. Comprobado el 2026-08-18.
+    #
+    # El nombre del runner grande NO se escribe aqui: se pone en la variable RUNNER_NATIVO de la
+    # organizacion, porque lo elige quien lo crea en los ajustes. Si falta, el job cae al runner
+    # estandar y el paso de abajo lo para en segundos en vez de gastar 55 minutos para nada.
+    runs-on: ${{ (matrix.nombre == 'platform-app' && vars.RUNNER_NATIVO) || 'ubuntu-latest' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -63,6 +71,19 @@ jobs:
             contexto: audit-consumer
             necesita_node: false
     steps:
+      # Falla en SEGUNDOS si la maquina no da la talla, en vez de descubrirlo en la fase [5/8]
+      # del analisis tras 55 minutos. El error nativo —"GC overhead limit exceeded"— no menciona
+      # el tamano de la maquina, asi que sin esto el diagnostico cuesta una tarde.
+      - name: Comprobar que la maquina da la talla
+        if: matrix.nombre == 'platform-app'
+        run: |
+          GB=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1073741824 ))
+          echo "RAM: ${GB} GB | nucleos: $(nproc)"
+          if [ "$GB" -lt 12 ]; then
+            echo "::error::Este runner tiene ${GB} GB y el build nativo de platform-app necesita >=12 (analisis a 9,7 GB, ver ops/fase-7-deploy/dist/NATIVE-STATUS.md). Definir la variable de organizacion RUNNER_NATIVO con el nombre de un runner grande."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       # Solo platform-app: Quinoa compila el frontend Angular durante el package de Maven.
