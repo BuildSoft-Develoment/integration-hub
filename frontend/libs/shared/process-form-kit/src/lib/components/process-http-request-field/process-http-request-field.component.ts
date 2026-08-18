@@ -4,7 +4,7 @@ import { createHttpRequestDraft, HttpRequestDraft } from '@integration-hub/core/
 import { I18nService } from '@integration-hub/core/services';
 import { SchemaFieldDescriptor } from '@integration-hub/shared/ui';
 
-import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '../../services/process-schema-field-context.service';
 import { ProcessHttpRequestComponent } from '../process-http-request/process-http-request.component';
 
 /**

@@ -7,7 +7,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { I18nService } from '@integration-hub/core/services';
 import { SchemaFieldDescriptor } from '@integration-hub/shared/ui';
 
-import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '../../services/process-schema-field-context.service';
 
 /**
  * Renderer de campo custom `token-text` para `ih-schema-form`: un textarea con **inserción de

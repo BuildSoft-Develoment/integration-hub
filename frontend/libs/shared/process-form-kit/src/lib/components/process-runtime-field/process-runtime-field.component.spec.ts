@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { TestBed } from '@angular/core/testing';
 
-import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '../../services/process-schema-field-context.service';
 import { ProcessRuntimeFieldComponent } from './process-runtime-field.component';
 
 // Contexto sin tarea: el @if no renderiza el panel pesado -> se testea la lógica del wrapper.

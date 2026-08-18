@@ -4,7 +4,7 @@ import { ProcessTaskRuntimeDraft } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
 import { SchemaFieldDescriptor } from '@integration-hub/shared/ui';
 
-import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '../../services/process-schema-field-context.service';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 /**
