@@ -1,0 +1,4 @@
+# El motor escribe aqui los ficheros generados (FILE_WRITE, entregas, archivado).
+# Se versiona vacio para que el bind mount del compose encuentre el directorio ya creado: si no
+# existe, Docker lo crea como root y la aplicacion —que corre como uid 1001— no puede escribir, y
+# el fallo aparece a mitad de un proceso, no al arrancar.

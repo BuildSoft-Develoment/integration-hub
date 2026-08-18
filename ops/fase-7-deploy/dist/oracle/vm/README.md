@@ -131,6 +131,17 @@ de build. Al terminar verifica las dos imagenes **por arquitectura**, no por que
 que fue bien — una imagen amd64 construida aqui por error pasa todos los pasos y solo falla al
 arrancar.
 
+### El directorio de datos
+
+El motor escribe los ficheros generados en `data-filesystem/`, montado desde el paquete. Va
+versionado vacio para que exista antes del primer arranque: si Docker tiene que crearlo, lo hace
+como **root**, y la aplicacion corre como uid 1001. El fallo no aparece al arrancar sino a mitad de
+un proceso, al intentar escribir.
+
+```sh
+sudo chown -R 1001 data-filesystem
+```
+
 ---
 
 ## 5. Configuracion y certificado

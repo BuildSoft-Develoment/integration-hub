@@ -20,15 +20,15 @@ server {
 
     # Redirecciones RELATIVAS. nginx pega el puerto en el que ESCUCHA a las URLs absolutas que
     # construye; aqui coinciden, pero en el entorno de integracion no —escuchaba en 8443 tras un
-    # mapeo 443— y anunciaba un puerto que el router no publicaba: redireccion a la nada, con un
-    # timeout por sintoma. Se fija igual en los dos sitios para que no dependa del mapeo.
+    # mapeo desde el 443— y anunciaba un puerto que el router no publicaba: redireccion a la nada,
+    # con un timeout por sintoma. Se fija igual en los dos sitios para que no dependa del mapeo.
     absolute_redirect off;
 
     location = / {
         return 302 /appih/;
     }
 
-    # ---- App ----
+    # ---- App Integration Hub (root-path /appih). Inyecta __ihConfig en el index. ----
     location /appih/ {
         proxy_pass http://platform-app:8080;
         proxy_http_version 1.1;
@@ -40,6 +40,45 @@ server {
         proxy_set_header X-Forwarded-Port  $server_port;
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout 300s;
+
+        # LA INYECCION NO ES OPCIONAL. El frontend necesita saber DONDE esta Keycloak, y sin este
+        # script cae a su valor de desarrollo (localhost:8180): el login se rompe con un fallo de
+        # red desde el navegador que no menciona a Keycloak por ningun lado.
+        #
+        # sub_filter necesita el cuerpo sin comprimir, de ahi el Accept-Encoding vacio.
+        proxy_set_header Accept-Encoding "";
+        # text/html es el tipo por defecto de sub_filter_types: declararlo produce un aviso de
+        # "duplicate MIME type" en CADA arranque, que ensucia el registro sin aportar nada.
+        sub_filter_once on;
+        # La URL se deriva del origen que uso el navegador, no se escribe a mano: escrita a mano
+        # queda apuntando a un sitio muerto en cuanto cambia el entorno. Y SIN puerto, para que
+        # coincida exactamente con el issuer que emite Keycloak (KC_HOSTNAME, sin puerto porque el
+        # 443 es el de por defecto). Si no coincidieran, el navegador pediria tokens a un origen y
+        # el app validaria contra otro.
+        sub_filter '</head>' '<script>window.__ihConfig={keycloak:{url:"https://$host/iam",realm:"integration-hub",clientId:"integration-hub-ui"}};</script></head>';
+    }
+
+    # ---- Rutas ABSOLUTAS del frontend -> la app, que vive bajo /appih ----
+    # El SPA pide algunas cosas con ruta absoluta, no relativa al root-path. Sin estas dos, esas
+    # llamadas dan 404 con la aplicacion perfectamente viva, que es un fallo dificil de leer.
+    location /api/ {
+        proxy_pass http://platform-app:8080/appih/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  $server_port;
+        proxy_read_timeout 300s;
+    }
+    location /q/ {
+        proxy_pass http://platform-app:8080/appih/q/;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
     }
 
     # ---- Keycloak ----
@@ -59,14 +98,14 @@ server {
     # POR QUE SE LLEVA DOS PREFIJOS DE LA RAIZ EN VEZ DE IR BAJO /openbao/ COMO KEYCLOAK EN /iam/
     #
     # Keycloak sabe servirse bajo un prefijo (KC_HTTP_RELATIVE_PATH) y regenera sus URLs. OpenBao
-    # no tiene equivalente: su interfaz es una SPA compilada que pide sus activos con ruta
-    # ABSOLUTA (/ui/assets/...) y llama a su API en /v1/. Va dentro del HTML que sirve el binario,
-    # asi que ninguna opcion de configuracion lo reescribe. Montarlo en /openbao/ dejaria la
-    # interfaz cargando y sin poder hablar con su API.
+    # no tiene equivalente: su interfaz es una SPA compilada que pide sus activos con ruta ABSOLUTA
+    # (/ui/assets/...) y llama a su API en /v1/. Va dentro del HTML que sirve el binario, asi que
+    # ninguna opcion de configuracion lo reescribe. Montarlo en /openbao/ dejaria la interfaz
+    # cargando y sin poder hablar con su API.
     #
-    # ESTOS DOS PREFIJOS QUEDAN RESERVADOS. La app no los usa —verificado: sus rutas absolutas
-    # son /appih/—. Si algun dia los necesita, chocaran, y el sintoma sera dificil de leer:
-    # peticiones que se van al inquilino equivocado.
+    # ESTOS DOS PREFIJOS QUEDAN RESERVADOS: ganan al catch-all de abajo porque nginx elige el
+    # prefijo mas largo. Si algun dia la app necesita /ui/ o /v1/, chocaran, y el sintoma sera
+    # dificil de leer: peticiones que se van al inquilino equivocado.
     location /ui/ {
         proxy_pass http://openbao:8200/ui/;
         proxy_http_version 1.1;
@@ -89,4 +128,18 @@ server {
     }
     # Atajo memorizable: /openbao lleva a la interfaz real.
     location = /openbao { return 302 /ui/; }
+
+    # ---- Todo lo demas -> la app ----
+    # Recoge las rutas absolutas que no tienen bloque propio. Va el ULTIMO y es el prefijo mas
+    # corto, asi que nunca le roba nada a los de arriba.
+    location / {
+        proxy_pass http://platform-app:8080/appih/;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  $server_port;
+    }
 }
