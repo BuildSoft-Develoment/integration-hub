@@ -77,10 +77,17 @@ jobs:
       - name: Comprobar que la maquina da la talla
         if: matrix.nombre == 'platform-app'
         run: |
-          GB=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1073741824 ))
-          echo "RAM: ${GB} GB | nucleos: $(nproc)"
-          if [ "$GB" -lt 12 ]; then
-            echo "::error::Este runner tiene ${GB} GB y el build nativo de platform-app necesita >=12 (analisis a 9,7 GB, ver ops/fase-7-deploy/dist/NATIVE-STATUS.md). Definir la variable de organizacion RUNNER_NATIVO con el nombre de un runner grande."
+          # Se mide en MiB, no en GB redondeados: el kernel nunca ve toda la RAM asignada
+          # —reserva parte al arrancar—, asi que una maquina de 12 GB reporta ~11. Comprobado:
+          # el WSL2 del equipo, configurado con los 12 GB que exige NATIVE-STATUS.md, da 11.
+          # Con el umbral en 12 GB enteros, esa maquina VALIDA seria rechazada.
+          #
+          # El umbral queda en 11 GiB: acepta un builder de 12 GB y sigue rechazando el runner
+          # estandar, que reporta ~7. Entre ambos hay margen de sobra, no hace falta afinar mas.
+          MIB=$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) / 1048576 ))
+          echo "RAM: ${MIB} MiB | nucleos: $(nproc)"
+          if [ "$MIB" -lt 11264 ]; then
+            echo "::error::Este runner tiene ${MIB} MiB y el build nativo de platform-app necesita >=11264 (analisis a 9,7 GB, ver ops/fase-7-deploy/dist/NATIVE-STATUS.md). Definir la variable de organizacion RUNNER_NATIVO con el nombre de un runner grande."
             exit 1
           fi
 
