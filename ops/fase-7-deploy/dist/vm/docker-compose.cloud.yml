@@ -219,14 +219,28 @@ services:
   # pasarle el certificado HOJA de una cadena real haria FALLAR la verificacion, no relajarla.
   # ---------------------------------------------------------------------------------
   openbao:
+    # ⚠️ NO SUBIR ESTA ETIQUETA A LA LIGERA si se activo el desellado automatico. En 2.6.1 los
+    # sellos de proveedor (gcpckms y companyia) vienen dentro del binario; desde la 2.7.0 pasan a
+    # ser plugins. El fallo no saldria al desplegar sino en el siguiente reinicio, que es cuando ya
+    # nadie lo relaciona con haber cambiado la version. Ver openbao/seal-gcpckms.hcl.example.
     image: openbao/openbao:2.6.1
     container_name: ih-openbao
     restart: always
-    command: ["server", "-config=/openbao/config/config.hcl"]
+    # `-config` apunta a un DIRECTORIO, no a un fichero: OpenBao carga todos los .hcl de dentro.
+    # Es lo que permite activar el desellado automatico copiando un fichero, sin tocar el compose
+    # ni dejar un sello comentado en la configuracion base.
+    #
+    # LA RUTA ES /openbao/config.d Y NO /openbao/config, QUE ES LA OBVIA. La imagen ya carga
+    # /openbao/config por su cuenta; montar ahi Y pasarlo en -config lo lee DOS VECES, y el
+    # segundo listener choca con el primero. OpenBao entonces no arranca, y lo que dice es
+    # "bind: address already in use" — que manda a buscar quien ocupa el 8200, no una
+    # configuracion duplicada. Comprobado con la imagen 2.6.1: misma config en /openbao/config
+    # falla, en otra ruta arranca.
+    command: ["server", "-config=/openbao/config.d"]
     environment:
       BAO_API_ADDR: "https://${PUBLIC_HOST:?falta PUBLIC_HOST}"
     volumes:
-      - ./openbao/config.hcl:/openbao/config/config.hcl:ro
+      - ./openbao/config:/openbao/config.d:ro
       - ./openbao:/openbao/setup:ro
       - openbao_data:/openbao/file
     cap_add:

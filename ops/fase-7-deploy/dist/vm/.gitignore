@@ -1,0 +1,7 @@
+# La configuracion del sello se COPIA aqui para activarla (ver openbao/seal-*.hcl.example) y lleva
+# nombres de proyecto y de clave propios de cada instalacion. Mismo criterio que .env: la plantilla
+# se versiona, el fichero relleno no.
+openbao/config/seal-*.hcl
+
+# Relleno a partir de .env.example, con contrasenas dentro.
+.env

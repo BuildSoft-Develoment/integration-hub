@@ -224,16 +224,80 @@ queremos que proteste.
 
 ## 6. Inicializar y desellar OpenBao
 
+### Primero: decidir si la boveda se abre sola
+
+**Esta decision se toma AHORA o cuesta mucho mas.** Cambiar el sello de una boveda ya inicializada
+no es editar un fichero: es un procedimiento de migracion de sello con las claves actuales en la
+mano. Antes de inicializar es copiar un fichero.
+
+Por defecto OpenBao arranca **sellado** y una persona teclea las claves. Eso no es friccion
+gratuita: es la propiedad que hace que un gestor de secretos sirva de algo. Pero en esta maquina
+tiene un coste concreto — Google reinicia la VM por mantenimiento, y hasta que alguien desella, la
+app arranca sin poder leer credenciales y el registro se llena de `Missing vaultkv value`.
+
+La alternativa es el **desellado automatico contra Cloud KMS**: OpenBao le pide a KMS que descifre
+su clave maestra y se abre solo al arrancar. Lo que cambia es quien manda:
+
+| | Sellado a mano | Con KMS |
+|---|---|---|
+| Tras un reinicio | alguien teclea las claves | arranca solo |
+| Quien puede abrirla | quien tenga las claves | quien pueda actuar como la cuenta de servicio de la VM |
+| `init` entrega | claves de desellado | **claves de recuperacion** (se guardan igual de lejos) |
+
+**Lo que NO hay que hacer** es el atajo obvio: dejar las claves en un fichero de la propia VM y
+desellar con un script al arrancar. Eso pone la llave al lado del cofre y convierte el cifrado en
+decoracion.
+
+#### Activarlo
+
+Crear la clave y darle acceso **solo a ella** a la cuenta de servicio de la VM:
+
+```sh
+# La cuenta de servicio de esta VM, preguntada al servidor de metadatos (no hay que buscarla).
+SA=$(curl -s -H 'Metadata-Flavor: Google' \
+  http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email)
+echo "$SA"
+
+gcloud services enable cloudkms.googleapis.com
+gcloud kms keyrings create ih --location southamerica-west1
+gcloud kms keys create openbao-unseal --location southamerica-west1 \
+  --keyring ih --purpose encryption
+
+gcloud kms keys add-iam-policy-binding openbao-unseal \
+  --location southamerica-west1 --keyring ih \
+  --member "serviceAccount:$SA" \
+  --role roles/cloudkms.cryptoKeyEncrypterDecrypter
+```
+
+El rol va **sobre la clave**, no sobre el proyecto: esa cuenta puede cifrar y descifrar con esa
+clave y nada mas. No se descarga ningun fichero de credenciales — el SDK de Google usa las de la
+instancia, que llegan por el servidor de metadatos.
+
+Si la VM se creo sin permiso de acceso a todas las APIs de Cloud, hay que **apagarla** y cambiarlo
+en *Editar → Identidad y acceso a las API*; los permisos de acceso no se pueden tocar en caliente.
+
+Luego copiar la plantilla dentro del directorio de configuracion, rellenarla y reiniciar:
+
+```sh
+cp openbao/seal-gcpckms.hcl.example openbao/config/seal-gcpckms.hcl
+nano openbao/config/seal-gcpckms.hcl
+docker compose -f docker-compose.cloud.yml --env-file .env restart openbao
+docker compose -f docker-compose.cloud.yml --env-file .env logs --tail=30 openbao
+```
+
+En el arranque el registro tiene que mencionar el sello `gcpckms`. Si en su lugar aparece un error
+de permisos de KMS, **parar aqui**: inicializar con el sello a medias deja una boveda que no se abre
+por ninguno de los dos caminos.
+
+Coste: una clave de KMS son unos **0,06 USD al mes**. La decision no es economica.
+
+### El asistente
+
 Entrar en `https://<tu-dominio>/openbao` y seguir el asistente.
 
-**Las claves de desellado y el token raiz se muestran UNA vez.** Guardarlos en un gestor de
-contrasenas antes de continuar. No hay forma de recuperarlos: sin las claves, los secretos guardados
-son irrecuperables.
-
-Tras cada reinicio de la maquina, OpenBao arranca **sellado** y hay que desellarlo a mano. No es
-friccion a eliminar: es la propiedad que hace que un gestor de secretos sirva de algo. Mientras
-este sellado, la app no puede leer credenciales y el registro se llena de
-`Missing vaultkv value: <ruta>`.
+**Las claves y el token raiz se muestran UNA vez.** Guardarlos en un gestor de contrasenas antes de
+continuar. No hay forma de recuperarlos: sin ellas, los secretos guardados son irrecuperables — y
+eso vale igual para las claves de recuperacion del camino con KMS.
 
 ---
 
@@ -327,8 +391,19 @@ Keycloak**, que es donde se gestionan personas.
 
 ### Tras cada reinicio de la maquina
 
-**Desellar OpenBao.** Es lo unico que no se recupera solo. Mientras siga sellado, la app arranca
-pero no puede leer credenciales, y el registro se llena de `Missing vaultkv value`.
+**Si NO se activo el desellado automatico del paso 6: desellar OpenBao.** Es lo unico que no se
+recupera solo. Mientras siga sellado, la app arranca pero no puede leer credenciales, y el registro
+se llena de `Missing vaultkv value`.
+
+Con KMS no hay nada que hacer, pero conviene comprobarlo la primera vez que la maquina se reinicie
+de verdad — no darlo por hecho:
+
+```sh
+docker compose -f docker-compose.cloud.yml --env-file .env exec openbao \
+  bao status -address=http://127.0.0.1:8200
+```
+
+`Sealed  false` y `Seal Type  gcpckms`.
 
 ### El certificado
 

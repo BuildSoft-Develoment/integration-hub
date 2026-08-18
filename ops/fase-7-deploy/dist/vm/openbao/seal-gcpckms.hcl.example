@@ -1,0 +1,46 @@
+// =====================================================================================
+// DESELLADO AUTOMATICO contra Google Cloud KMS. Opcional, y APAGADO por defecto.
+//
+// COMO SE ACTIVA
+//   cp openbao/seal-gcpckms.hcl.example openbao/config/seal-gcpckms.hcl
+//   (rellenar los cuatro valores y reiniciar el contenedor de openbao)
+//
+// OpenBao arranca con `-config=/openbao/config.d`, un DIRECTORIO: carga todos los .hcl que
+// encuentre dentro. Por eso este fichero vive FUERA de ese directorio — mientras siga aqui no
+// hace nada. Copiarlo dentro es el interruptor, y no hay config comentada esperando a que
+// alguien la descubra.
+//
+// (Y no, la ruta no es /openbao/config: ver el porque en el compose. Montar ahi hace que la
+// configuracion se lea dos veces y OpenBao no arranque.)
+//
+// QUE CAMBIA, Y NO ES POCO
+// Sin esto, la boveda arranca SELLADA y una persona teclea las claves. Con esto, OpenBao le pide
+// a KMS que descifre su clave maestra y se abre solo. El control deja de ser "quien tenga las
+// claves" y pasa a ser "quien pueda actuar como la cuenta de servicio de la VM". Es el compromiso
+// correcto para una maquina que se reinicia sola tras un mantenimiento de Google —la alternativa
+// es que el money-path este parado hasta que alguien se despierte— pero es un compromiso, no una
+// mejora gratis.
+//
+// HAY QUE PONERLO ANTES DE `bao operator init`. Cambiar el sello de una boveda ya inicializada no
+// es editar este fichero: es un procedimiento de migracion de sello, con las claves actuales en la
+// mano. Antes de inicializar sale gratis.
+//
+// Y `init` pasa a entregar CLAVES DE RECUPERACION en vez de claves de desellado. Se guardan igual
+// de lejos: son las que autorizan generar un token raiz nuevo y migrar el sello.
+//
+// ⚠️ ATADO A LA VERSION DE LA IMAGEN. En openbao 2.6.1 este sello viene dentro del binario. Desde
+// la 2.7.0 los sellos de proveedor pasan a ser plugins y dejan de estar en el binario suelto. Si
+// se sube la etiqueta de la imagen sin comprobarlo, el fallo no aparece al desplegar: aparece en
+// el siguiente reinicio, que es cuando nadie lo relaciona con haber cambiado la version.
+//
+// PERMISOS: la cuenta de servicio de la VM necesita `roles/cloudkms.cryptoKeyEncrypterDecrypter`
+// SOBRE ESA CLAVE, no sobre el proyecto. No se pasa ningun fichero de credenciales: el SDK de
+// Google usa las credenciales por defecto de la instancia, que llegan por el servidor de metadatos.
+// Una credencial en disco seria una cosa mas que rotar y que puede filtrarse.
+// =====================================================================================
+seal "gcpckms" {
+  project    = "<id-del-proyecto-gcp>"
+  region     = "<region-del-llavero>"     // la misma de la VM, p.ej. southamerica-west1
+  key_ring   = "<nombre-del-llavero>"
+  crypto_key = "<nombre-de-la-clave>"
+}
