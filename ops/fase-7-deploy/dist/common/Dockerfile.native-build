@@ -20,13 +20,23 @@ USER root
 # `mvn ... -Dquarkus.native.container-build=true` en el host + Dockerfile.native.
 RUN microdnf install -y --nodocs maven nodejs npm && microdnf clean all
 
+# Que modulo y con que perfiles. Los valores por defecto reproducen el comportamiento anterior,
+# asi que quien ya usaba este fichero no nota nada.
+#
+#   platform-app para la nube:  --build-arg MAVEN_PROFILES=native,appih
+#     (el perfil `appih` hornea el root-path /appih en el binario; sin el, la app se sirve en la
+#      raiz y nginx la enruta a un sitio donde no esta)
+#   consumidor de auditoria:    --build-arg MODULE=audit-consumer
+ARG MODULE=platform-app
+ARG MAVEN_PROFILES=native
+
 WORKDIR /project
 COPY --chown=quarkus:quarkus . /project
 USER quarkus
 
 # container-build=false porque YA estamos dentro del builder image nativo.
-RUN mvn -B -pl platform-app -am clean package -DskipTests \
-      -Pnative -Dquarkus.native.container-build=false
+RUN mvn -B -pl ${MODULE} -am clean package -DskipTests \
+      -P${MAVEN_PROFILES} -Dquarkus.native.container-build=false
 
 # ---- Etapa 2: runtime ----
 # UBI9 (glibc 2.34): DEBE emparejar con el builder Mandrel jdk-25 (ubi9) de la etapa 1.
@@ -35,7 +45,9 @@ RUN mvn -B -pl platform-app -am clean package -DskipTests \
 FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0
 WORKDIR /work/
 RUN chown 1001 /work && chmod g+rwX /work && chown 1001:root /work
-COPY --from=build --chown=1001:root --chmod=0755 /project/platform-app/target/*-runner /work/application
+# ARG se re-declara: en un build multietapa NO cruza de una etapa a otra.
+ARG MODULE
+COPY --from=build --chown=1001:root --chmod=0755 /project/${MODULE}/target/*-runner /work/application
 
 ENV QUARKUS_CONFIG_LOCATIONS=/work/config/
 EXPOSE 8080

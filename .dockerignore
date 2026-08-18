@@ -1,0 +1,11 @@
+# Contexto de build. Solo se excluye lo que NO debe viajar; `target/` se queda a proposito,
+# porque Dockerfile.native (el que empaqueta un binario YA compilado) lo lee del contexto.
+
+# Historia completa del repositorio. No la usa ningun build y pesa mas que las fuentes.
+.git
+
+# Dependencias del frontend. Excluirlas no es solo por velocidad: son binarios compilados para
+# la plataforma del HOST. Colar un node_modules hecho en Windows/amd64 dentro de un contenedor
+# Linux/arm64 rompe la compilacion de la UI de una forma que no apunta a su causa. El build
+# instala las suyas dentro, para su arquitectura.
+**/node_modules

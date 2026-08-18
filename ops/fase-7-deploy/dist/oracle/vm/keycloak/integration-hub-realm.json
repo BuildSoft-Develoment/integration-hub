@@ -1,0 +1,169 @@
+{
+  "realm": "integration-hub",
+  "enabled": true,
+  "displayName": "Integration Hub",
+  "loginTheme": "integration-hub",
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "es",
+    "en"
+  ],
+  "defaultLocale": "es",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": true,
+  "ssoSessionIdleTimeoutRememberMe": 604800,
+  "ssoSessionMaxLifespanRememberMe": 604800,
+  "roles": {
+    "realm": [
+      {
+        "name": "platform-admin"
+      },
+      {
+        "name": "integration-admin"
+      },
+      {
+        "name": "operator"
+      },
+      {
+        "name": "auditor"
+      },
+      {
+        "name": "payments-operator",
+        "description": "Ejecuta procesos de mensajeria de pagos (spec 008); sin permisos de edicion de catalogos del motor (RF-019, ADR-009)."
+      },
+      {
+        "name": "pay-conflict-maker",
+        "description": "Maker-checker (tanda-9 B): SOLICITA reconocer un PAY_CONFLICT. Rol distinto al checker (segregacion de funciones)."
+      },
+      {
+        "name": "pay-conflict-checker",
+        "description": "Maker-checker (tanda-9 B): APRUEBA la solicitud de reconocimiento. Rol distinto al maker (four-eyes)."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "integration-hub-api",
+      "name": "Integration Hub API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${INTEGRATION_HUB_API_SECRET}",
+      "redirectUris": [],
+      "webOrigins": []
+    },
+    {
+      "clientId": "integration-hub-ui",
+      "name": "Integration Hub UI",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://${PUBLIC_HOST}/appih",
+      "baseUrl": "https://${PUBLIC_HOST}/appih/",
+      "redirectUris": [
+        "https://${PUBLIC_HOST}/appih/*"
+      ],
+      "webOrigins": [
+        "https://${PUBLIC_HOST}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://${PUBLIC_HOST}##https://${PUBLIC_HOST}/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-integration-hub-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "integration-hub-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "openbao",
+      "name": "OpenBao",
+      "description": "SSO de la consola de OpenBao. El secreto sale de la variable de entorno OPENBAO_OIDC_CLIENT_SECRET al importar el realm, no de este fichero. Ver el aviso en docker-compose.int.yml antes de editar.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${OPENBAO_OIDC_CLIENT_SECRET}",
+      "rootUrl": "https://${PUBLIC_HOST}",
+      "baseUrl": "https://${PUBLIC_HOST}/ui/",
+      "redirectUris": [
+        "https://${PUBLIC_HOST}/ui/vault/auth/oidc/oidc/callback",
+        "https://${PUBLIC_HOST}/v1/auth/oidc/*",
+        "http://localhost:8250/oidc/callback"
+      ],
+      "webOrigins": [
+        "https://${PUBLIC_HOST}"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "https://${PUBLIC_HOST}/ui/##https://${PUBLIC_HOST}/ui/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "openbao-realm-roles-as-groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Integration",
+      "lastName": "Admin",
+      "email": "admin@integration-hub.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_SEED_ADMIN_PASSWORD}",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "platform-admin",
+        "integration-admin",
+        "operator",
+        "auditor"
+      ]
+    }
+  ]
+}

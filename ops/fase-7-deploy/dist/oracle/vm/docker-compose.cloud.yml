@@ -152,6 +152,15 @@ services:
       # administracion y en cualquier export. Ya paso una vez. Nombrar la variable sin llaves.
       # Y ese campo es VARCHAR(255): pasarse no trunca, rompe el import entero.
       OPENBAO_OIDC_CLIENT_SECRET: ${OPENBAO_OIDC_CLIENT_SECRET:?falta OPENBAO_OIDC_CLIENT_SECRET en .env}
+      # El realm de este paquete NO trae contrasenas ni URLs escritas: las tres las sustituye
+      # Keycloak desde aqui al importarlo. El de integracion si las traia —seis usuarios con
+      # contrasena literal y un secreto "change-me"—, que en local es comodo y en una maquina
+      # publica es regalar el acceso.
+      PUBLIC_HOST: ${PUBLIC_HOST:?falta PUBLIC_HOST en .env}
+      INTEGRATION_HUB_API_SECRET: ${INTEGRATION_HUB_API_SECRET:?falta INTEGRATION_HUB_API_SECRET en .env}
+      # Del unico usuario sembrado. Va marcada como TEMPORAL: Keycloak obliga a cambiarla en el
+      # primer inicio de sesion, asi que este valor no sobrevive al primer dia.
+      KC_SEED_ADMIN_PASSWORD: ${KC_SEED_ADMIN_PASSWORD:?falta KC_SEED_ADMIN_PASSWORD en .env}
     volumes:
       - ./keycloak/integration-hub-realm.json:/opt/keycloak/data/import/integration-hub-realm.json:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
