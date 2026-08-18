@@ -22,6 +22,20 @@ on:
 jobs:
   governance:
     name: Gobernanza AI-first (check:all)
+    # NO SE REPITE EN EL PUSH A DEVELOP. Ese arbol es el que el pull request acaba de validar,
+    # asi que volver a correrlo gasta ~20 min de runner por fusion sin decir nada nuevo. Con dos
+    # ejecuciones por merge, los minutos de Actions se agotan al doble de velocidad.
+    #
+    # EN EL PUSH A MAIN SI SE REPITE, a proposito. Un pull request valida la mezcla contra la base
+    # que habia AL ABRIRLO; si la base se movio entre medias, el commit que aterriza no lo ha
+    # probado nadie —dos PR que pasan por separado pueden romperse al juntarse—. En main eso
+    # importa, porque es lo que se taggea y se despliega, y ademas alli las fusiones son pocas.
+    # En develop no compensa pagarlo en cada merge.
+    #
+    # El job de abajo, `guard-pull-request`, corre SOLO en push y no lleva esta condicion: es el
+    # que detecta que alguien empujo directo saltandose el PR. Si tambien se saltara, empujar a
+    # develop dejaria de disparar absolutamente nada.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,17 +86,43 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          # La API dice que pull requests contienen este commit. Un merge de PR devuelve
-          # al menos uno; un push directo devuelve cero.
-          asociados=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq 'length')
-          if [ "$asociados" -gt 0 ]; then
-            echo "OK. El commit llego por pull request."
-            exit 0
-          fi
+          # La API dice que pull requests contienen este commit. Un merge de pull request
+          # devuelve al menos uno; un push directo devuelve cero.
+          #
+          # SE REINTENTA, y no por costumbre. Esa asociacion se indexa de forma asincrona y este
+          # job arranca segundos despues del merge: el 2026-08-18 la fusion del PR #78 —un merge
+          # commit legitimo de GitHub, con sus dos padres y su mensaje— fue declarada push
+          # directo porque la API todavia devolvia una lista vacia. Un guardia que acusa en falso
+          # se desactiva a la semana, asi que la espera es parte de hacer bien la comprobacion.
+          #
+          # Y se separa el FALLO DE LA API del veredicto. Antes eran indistinguibles: si la
+          # llamada moria por permisos, `set -e` cortaba el paso con el error crudo de gh, que no
+          # dice nada de pull requests. Ahora cada causa tiene su mensaje y su arreglo.
+          for intento in 1 2 3 4 5; do
+            if ! respuesta=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq 'length' 2>&1); then
+              echo "::error::No se pudo consultar la API de pull requests: ${respuesta}"
+              echo ""
+              echo "Si dice 'Resource not accessible by integration', al token del workflow le falta"
+              echo "'pull-requests: read'. En una organizacion eso se limita ademas desde"
+              echo "Settings -> Actions -> General -> Workflow permissions, y el bloque permissions"
+              echo "del workflow no puede conceder mas de lo que la organizacion permite."
+              exit 1
+            fi
+            if [ "$respuesta" -gt 0 ]; then
+              echo "OK. El commit llego por pull request (intento ${intento})."
+              exit 0
+            fi
+            if [ "$intento" -lt 5 ]; then
+              echo "Sin asociacion todavia (intento ${intento}/5); la API aun no la indexa. Esperando 10s..."
+              sleep 10
+            fi
+          done
           echo "::error::Este commit se empujo DIRECTO a ${{ github.ref_name }}, sin pull request."
           echo ""
           echo "Los cuatro gates de CI corren igual, pero nadie los reviso antes de integrar:"
           echo "esa es justo la diferencia que un pull request aporta."
+          echo ""
+          echo "Comprobado durante 50 segundos, asi que no es un retraso de indexacion."
           echo ""
           echo "Si fue un descuido, el arreglo NO es rehacer la historia: es abrir el"
           echo "siguiente cambio como pull request. Si fue deliberado, queda constancia."
@@ -90,6 +130,8 @@ jobs:
 
   backend-fast:
     name: Backend Quarkus fast (build + test + IT)
+    # Mismo motivo que en `governance`: el PR ya valido este arbol.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +156,8 @@ jobs:
 
   frontend:
     name: Frontend Angular (lint + test + build)
+    # Mismo motivo que en `governance`: el PR ya valido este arbol.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
