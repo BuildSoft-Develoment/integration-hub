@@ -60,6 +60,25 @@ fuera mientras la presentación sea manual. Si algún día se automatiza el env�
 
 > RF-011 no es de SUCAVE: es del motor. Vive aquí porque es donde se detectó la asimetría.
 
+## Reglas de negocio
+
+Los requisitos dicen qué debe hacer el sistema. Estas son las reglas del dominio que gobiernan ese
+comportamiento y que **no** dependen de la implementación: si alguna se rompe, el envío puede ser
+estructuralmente válido y estar equivocado ante el regulador.
+
+| id | Regla | De dónde sale |
+|---|---|---|
+| RN-01 | **La definición regulatoria vigente para el periodo determina qué viaja junto**, no el operador ni el formato. La unidad de envío es el grupo de remisión | RF-013 |
+| RN-02 | **Un grupo se entrega completo o no se entrega.** No existe la entrega parcial: un envío incompleto parece presentado y no lo está | RF-013 |
+| RN-03 | **Cada ejecución queda atada a la versión del diseño de registro con la que generó.** Un diseño derogado sigue siendo el correcto para los periodos que regía | RF-009 |
+| RN-04 | **Un anexo es un archivo.** El diseño de registro se identifica por la terna (formato, anexo, versión), no por el formato solo | Nomenclatura `NNAAMMDD.FFF` de la SBS |
+| RN-05 | **La naturaleza del anexo decide si corresponde presentarlo**: `RECURRENTE` cada periodo, `EXTRAORDINARIO` una sola vez para periodos concretos, `RECTIFICACION` para corregir una presentación anterior. Un booleano activo/inactivo no representa esto | Caso real del 0228 anexo 11 |
+| RN-06 | **Ningún dato se altera para que quepa.** Un valor que desborda su columna o un carácter que no existe en la codificación detienen la generación; no se recorta, rellena ni transcribe en silencio | RF-005 |
+| RN-07 | **El artefacto se entrega tal cual lo importa SUCAVE**: sin comprimir y fuera de las carpetas internas del aplicativo | RF-007, RF-008 |
+| RN-08 | **Quien prepara no autoriza.** La segregación es del dominio, no una preferencia de configuración | RF-012 |
+| RN-09 | **Depositar no es presentar, y validar aquí no es conformidad.** El desenlace ante la SBS ocurre fuera del sistema | Sección *Qué NO hace* |
+| RN-10 | **El catálogo rechaza al guardar lo que el sistema no sabe honrar.** Aceptar una definición y procesar solo la parte soportada produce envíos válidos en estructura y equivocados ante el regulador | Sección *El catálogo no puede aceptar lo que el sistema no sabe honrar* |
+
 ## Actores
 
 | Actor | Qué hace | Qué NO puede |
@@ -89,6 +108,27 @@ desde entonces.
 **CU-05 — Depositar donde SUCAVE lo tome.** El archivo va a disco local o a un recurso compartido que
 la estación con SUCAVE pueda abrir. El almacenamiento de objetos vale como copia histórica, no como
 carpeta de importación: el aplicativo elige el archivo con un explorador.
+
+## Criterios de aceptación
+
+Cada criterio corresponde a un caso de uso o a un requisito, y se escribe de forma que se pueda
+comprobar: si no se puede ejecutar y observar el resultado, no es un criterio.
+
+| id | Dado / cuando | Entonces |
+|---|---|---|
+| CA-01 | Un origen válido para el formato 0228 anexo 01, periodo 2026-09 (CU-01) | Se produce `01260930.228` en la carpeta configurada, **sin comprimir**, con el encoding y el fin de línea que declara el formato |
+| CA-02 | Un valor que **desborda** el ancho de su columna (RF-005) | La ejecución falla nombrando registro y columna. **No queda ningún archivo en el destino**, ni completo ni parcial |
+| CA-03 | Un carácter que **no existe** en la codificación del formato (RF-005) | Mismo trato que el desbordamiento. No se sustituye ni se translitera en silencio |
+| CA-04 | Se regenera un periodo ya presentado (CU-04, RF-009) | El archivo sale **idéntico** al que se presentó, aunque la SBS haya publicado versiones posteriores del diseño — incluso si esa versión figura como derogada |
+| CA-05 | Un grupo de remisión al que le falta un anexo obligatorio (RF-013) | **No se entrega ningún archivo del grupo**, y el motivo nombra los anexos que faltan. Una entrega parcial es peor que ninguna: parece presentada |
+| CA-06 | El analista que preparó el envío intenta autorizarlo (RF-012) | El control aparece bloqueado y explica por qué. La autorización queda a nombre de otra persona |
+| CA-07 | Se guarda en el catálogo una definición con remisión grupal antes de que exista el paquete conjunto | El catálogo **rechaza al guardar** diciendo qué falta, en vez de aceptarla y generar envíos sueltos que la SBS no espera |
+| CA-08 | Se ejecuta el flujo en modo *solo validar* (CU-03) | Se obtiene el informe de rechazos por registro y **no se produce archivo** |
+| CA-09 | Se da de alta un formato nuevo importando su diseño de registro (RF-014) | Aparece en la paleta **sin desplegar** nada |
+| CA-10 | El operador cambia el formato o el anexo tras haber configurado la correspondencia origen → campo | La correspondencia se invalida y se avisa: los campos de destino son otros |
+
+> Lo que **no** es criterio de aceptación aquí: que la SBS acepte el archivo. Eso ocurre fuera del
+> sistema y depende de la validación de SUCAVE. Nuestros criterios cubren *listo para presentar*.
 
 ## Fuera de alcance
 

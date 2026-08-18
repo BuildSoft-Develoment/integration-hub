@@ -255,6 +255,47 @@ sale el reparto:
 | Las reglas de publicación | **Código** | *Cada archivo un contexto*, *nada se entrega sin revisar* no dependen del formato |
 | **Las plantillas de la paleta** | **CÓDIGO hoy** ⚠️ | Ver abajo |
 
+### Modelo de datos
+
+Todo lo de la columna *Dato* de la tabla anterior vive en el catálogo, versionado por periodo. La
+forma importa porque de ella depende poder regenerar un periodo pasado.
+
+| Entidad | Qué identifica | Notas |
+|---|---|---|
+| `FORMATO` | Código SBS (`0228`, `0301`…) y sistema al que pertenece (Financiero, Asegurador, SPP) | Agrupa anexos; **no** es la unidad de archivo |
+| `ANEXO` | `(formato, código de anexo)` | **Es** la unidad de archivo: la nomenclatura `NNAAMMDD.FFF` lleva el anexo dentro |
+| `DISEÑO DE REGISTRO` | `(formato, anexo, versión)` | El layout posicional: columnas, anchos, tipos, obligatoriedad. Dos anexos del mismo formato tienen estructuras distintas |
+| `VERSIÓN` | Vigencia `[desde, hasta)` sobre periodos | Lo que hace posible RN-03. Una versión puede figurar **derogada** y seguir siendo la correcta para su rango |
+| `NATURALEZA DEL ANEXO` | `RECURRENTE` · `EXTRAORDINARIO` · `RECTIFICACION` | Valor, no booleano. Decide si corresponde presentar el anexo en un periodo dado |
+| `GRUPO DE REMISIÓN` | `(formato, periodo)` → lista ordenada de anexos, con cuáles son obligatorios | **La unidad de envío.** Un grupo de un solo anexo es el envío individual; no es un caso aparte |
+| `CATÁLOGO` | Tablas de valores admitidos por columna | Los actualiza la SBS con frecuencia; versionan con el diseño |
+| `REGLA DE VALIDACIÓN` | Ligada a `(formato, anexo, versión)` | Alimenta la comprobación previa. No sustituye la de SUCAVE |
+| `EJECUCIÓN` | Proceso ejecutado | **Congela la terna `(formato, anexo, versión)`** con la que generó. Sin ese congelado, RF-009 y CA-04 son imposibles |
+
+### Cómo se relacionan
+
+```
+FORMATO ──1:N──▶ ANEXO ──1:N──▶ DISEÑO DE REGISTRO (por VERSIÓN)
+                                       │
+                                       ├──▶ CATÁLOGO
+                                       └──▶ REGLA DE VALIDACIÓN
+
+FORMATO + PERIODO ──▶ GRUPO DE REMISIÓN ──N:M──▶ ANEXO  (ordenado, con obligatoriedad)
+
+EJECUCIÓN ──▶ congela (FORMATO, ANEXO, VERSIÓN) + PERIODO
+```
+
+**Los cinco conceptos que no hay que fusionar.** `FORMATO`, `ANEXO`, `GRUPO DE REMISIÓN`, `PAQUETE
+REGULATORIO` —qué debe viajar junto— y `EMPAQUETADO DE TRANSPORTE` —cómo se comprime—. Los dos últimos
+se confunden porque hoy ambos serían "el ZIP", pero responden a preguntas distintas: la primera la
+contesta la SBS, la segunda el tamaño del envío. En F1 se declara la separación y **no se modela el
+empaquetado**: el transporte lo resuelve el aplicativo de la SBS, y abstraer un transporte antes de
+tener un segundo canal sería especular.
+
+**Lo que este modelo hace imposible.** Que dos anexos compartan diseño por pertenecer al mismo
+formato; que una ejecución quede sin saber con qué versión generó; y que un grupo de remisión se
+resuelva mirando el formato en vez del periodo.
+
 #### Hueco 1 — las plantillas son código compiladas
 
 `PROCESS_TEMPLATE_REGISTRY` registra con `useValue` un array de constantes de TypeScript, y **nada las
