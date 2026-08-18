@@ -28,6 +28,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # La memoria viva es una BD SQLite gitignorada: no viaja en el repositorio, se CONSTRUYE
+      # indexando la documentacion. Diez de los 52 gates la leen —trazabilidad, evidencias,
+      # coherencia de estados, tablas y endpoints documentados— y sin ella no fallan por lo que
+      # miden: fallan porque no encuentran la BD.
+      #
+      # Silenciarlos habria sido lo facil y lo peor: este mismo fichero documenta lo que cuesta
+      # tener gates que no gatean. Construida, los diez pasan con sustancia — 255 enlaces de
+      # trazabilidad, 417 evidencias, 419 estados coherentes— o sea que estaban midiendo algo.
+      #
+      # Variante `:quick` a proposito: la completa ademas calcula embeddings, que en CI no aporta
+      # a ningun gate y cuesta tiempo.
+      - name: Construir la memoria viva (la leen 10 de los gates)
+        run: npm run memory:bootstrap:quick
       - name: Verificaciones del framework y del proyecto
         run: npm run check:all
 
