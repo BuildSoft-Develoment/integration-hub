@@ -68,6 +68,33 @@ todo va bien—. Al renombrar o crear ramas, comprobar `git branch -r` ANTES de 
 Se borran al integrar. Una rama vieja que nadie recuerda es de donde sale, meses despues, un merge
 que revive codigo ya retirado.
 
+### Instalar los hooks — hace falta en cada clon
+
+```bash
+npm run hooks:install
+```
+
+Los hooks viven en `.git/hooks/`, que **no viaja con el clon**. Por eso el fichero esta versionado en
+[`.githooks/`](.githooks/) y ese comando lo copia. Al clonar el repositorio en una maquina nueva, o al
+cambiar de equipo, hay que volver a ejecutarlo.
+
+`pre-push` rechaza empujar directo a `main` o `develop` y explica como seguir. Si en algun momento
+hace falta saltarselo:
+
+```bash
+PERMITIR_EMPUJE_DIRECTO=1 git push origin main
+```
+
+Esa salida existe a proposito: un hook que no se puede saltar se acaba desinstalando entero, y eso
+deja la maquina sin ninguna proteccion en vez de sin una. Usarla queda registrado igual — el job
+`guard-pull-request` de CI ve el commit sin pull request asociado y lo deja en rojo.
+
+**Por que hay un hook Y un job.** GitHub **no aplica** rulesets ni protecciones clasicas en
+repositorios privados de este plan: se comprobo empujando a `main` a proposito, y tanto el push
+directo como el force push pasaron. El hook previene, pero solo donde esta instalado; el job no
+previene, pero delata lo que llegue desde una maquina sin hook. Ninguno de los dos basta solo, y los
+dos sobran el dia que las protecciones se apliquen de verdad.
+
 <a id="antes-de-editar"></a>
 ## Antes de editar
 
