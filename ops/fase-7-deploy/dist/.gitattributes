@@ -1,0 +1,14 @@
+# Todo lo que cuelga de dist/ se ejecuta DENTRO de contenedores Linux, en cualquiera de los
+# paquetes de despliegue. El repositorio tiene core.autocrlf=true, asi que en un clon en Windows
+# estos ficheros saldrian con CRLF y el `\r` final viajaria al contenedor: un script de shell muere
+# entonces con "\r: not found" o "bad interpreter", errores que apuntan al interprete y no al
+# fichero.
+#
+# No se ve al desarrollar —el working tree actual ya esta en LF— sino en el SIGUIENTE clon, que es
+# justo cuando alguien intenta desplegar por primera vez.
+#
+# Vive en dist/ y no dentro de un paquete concreto porque el fallo no es de onprem ni de oracle: es
+# de cualquier .sh que acabe dentro de un contenedor. Tenerlo en uno solo deja a los demas
+# expuestos, que es exactamente lo que acaba de pasar con el paquete de nube.
+*.sh  text eol=lf
+*.hcl text eol=lf
