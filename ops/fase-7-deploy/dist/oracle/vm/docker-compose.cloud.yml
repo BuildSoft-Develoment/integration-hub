@@ -16,7 +16,16 @@
 # ARQUITECTURA: todas las imagenes de terceros de aqui tienen arm64 —verificado con
 # `docker manifest inspect`—. Las DOS propias hay que compilarlas para aarch64: un binario
 # nativo de GraalVM NO es portable entre arquitecturas. Se compilan en esta misma VM con
-# build-native-arm64.sh; el builder de Mandrel tiene arm64 y 24 GB dan de sobra.
+# build-native-arm64.sh; el builder de Mandrel tiene arm64.
+#
+# OJO CON LA MEMORIA. La documentacion de Oracle da el Always Free de Ampere A1 en horas:
+# 1.500 OCPU-hora y 9.000 GB-hora al mes, que dan para ~2 OCPU y ~12 GB funcionando en
+# continuo — no los 4 OCPU / 24 GB que se citan por todas partes. Confirmar el limite real en
+# la consola del propio tenancy antes de dimensionar.
+#
+# Importa porque el build nativo pica ~9,3 GB. Con 12 GB entra, pero NO a la vez que la stack:
+# hay que pararla antes de compilar. Es el mismo problema que ya tumbo el entorno de
+# integracion, donde el build OOM-killeaba servicios aunque `free` mostrase memoria de sobra.
 # =====================================================================================
 name: integration-hub-cloud
 
