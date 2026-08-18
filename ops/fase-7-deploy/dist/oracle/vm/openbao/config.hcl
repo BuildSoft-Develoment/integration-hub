@@ -33,7 +33,7 @@ listener "tcp" {
 // (QUARKUS_OIDC_TOKEN_ISSUER)—.
 //
 // Cablear el dominio en este fichero romperia el acceso por IP local: al entrar por
-// https://192.168.100.25:8443 las redirecciones apuntarian a app.buildsoft.com.pe, que desde esa red
+// https://192.168.100.25:8443 las redirecciones apuntarian a ih.buildsoft.com.pe, que desde esa red
 // puede no resolver. El mismo problema que ya dio el issuer de Keycloak al cambiar de red.
 //
 // Comprobado ejecutando el binario con BAO_API_ADDR: el arranque imprime "Api Address:" con ese valor.

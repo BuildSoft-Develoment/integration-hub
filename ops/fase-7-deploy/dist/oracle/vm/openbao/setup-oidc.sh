@@ -6,7 +6,7 @@
 #
 #   docker exec -i \
 #     -e BAO_TOKEN \
-#     -e PUBLIC_BASE_URL="https://app.buildsoft.com.pe" \
+#     -e PUBLIC_BASE_URL="https://ih.buildsoft.com.pe" \
 #     -e OPENBAO_OIDC_CLIENT_SECRET \
 #     ih-int-openbao sh /openbao/setup/setup-oidc.sh
 #
@@ -23,7 +23,7 @@ set -eu
 fallo() { echo "ERROR: $*" >&2; exit 1; }
 
 [ -n "${BAO_TOKEN:-}" ] || fallo "falta BAO_TOKEN (el token raiz de 'bao operator init')."
-[ -n "${PUBLIC_BASE_URL:-}" ] || fallo "falta PUBLIC_BASE_URL (p.ej. https://app.buildsoft.com.pe)."
+[ -n "${PUBLIC_BASE_URL:-}" ] || fallo "falta PUBLIC_BASE_URL (p.ej. https://ih.buildsoft.com.pe)."
 [ -n "${OPENBAO_OIDC_CLIENT_SECRET:-}" ] || fallo "falta OPENBAO_OIDC_CLIENT_SECRET (el mismo valor de int/.env que recibio Keycloak)."
 
 BAO_ADDR="${BAO_ADDR:-http://127.0.0.1:8200}"

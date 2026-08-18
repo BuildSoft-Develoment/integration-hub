@@ -64,7 +64,7 @@ services:
           # El nombre publico, resoluble DENTRO de la red. Sin esto OpenBao no alcanza a
           # Keycloak por la URL publica y el SSO no se deja ni configurar: exige que la URL
           # que usa sea identica al issuer anunciado.
-          - ${PUBLIC_HOST:?falta PUBLIC_HOST en .env (p.ej. app.buildsoft.com.pe)}
+          - ${PUBLIC_HOST:?falta PUBLIC_HOST en .env (p.ej. ih.buildsoft.com.pe)}
     depends_on:
       - platform-app
       - keycloak
