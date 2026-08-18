@@ -22,6 +22,20 @@ on:
 jobs:
   governance:
     name: Gobernanza AI-first (check:all)
+    # NO SE REPITE EN EL PUSH A DEVELOP. Ese arbol es el que el pull request acaba de validar,
+    # asi que volver a correrlo gasta ~20 min de runner por fusion sin decir nada nuevo. Con dos
+    # ejecuciones por merge, los minutos de Actions se agotan al doble de velocidad.
+    #
+    # EN EL PUSH A MAIN SI SE REPITE, a proposito. Un pull request valida la mezcla contra la base
+    # que habia AL ABRIRLO; si la base se movio entre medias, el commit que aterriza no lo ha
+    # probado nadie —dos PR que pasan por separado pueden romperse al juntarse—. En main eso
+    # importa, porque es lo que se taggea y se despliega, y ademas alli las fusiones son pocas.
+    # En develop no compensa pagarlo en cada merge.
+    #
+    # El job de abajo, `guard-pull-request`, corre SOLO en push y no lleva esta condicion: es el
+    # que detecta que alguien empujo directo saltandose el PR. Si tambien se saltara, empujar a
+    # develop dejaria de disparar absolutamente nada.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,6 +104,8 @@ jobs:
 
   backend-fast:
     name: Backend Quarkus fast (build + test + IT)
+    # Mismo motivo que en `governance`: el PR ya valido este arbol.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +130,8 @@ jobs:
 
   frontend:
     name: Frontend Angular (lint + test + build)
+    # Mismo motivo que en `governance`: el PR ya valido este arbol.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
