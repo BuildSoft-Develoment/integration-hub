@@ -55,6 +55,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>No es una regresion de ADR-021: con el literal {@code "MT101_PAY"} anterior ese hueco era
  * identico. Cerrarlo pide evaluar la capacidad sobre la tarea configurada (p.ej. marcar el sink como
  * critico de dinero y propagarlo), que es un cambio de diseño mas grande que este trinquete.</p>
+ *
+ * <p><b>INTERMITENTE EN CI — leer antes de investigar.</b> El 2026-08-18 este test fallo una vez en
+ * el runner con {@code RuntimeException: Failed to start quarkus}, y <b>solo uno</b> de sus tres
+ * metodos ({@code tiposDePagoDeclaranQueMuevenDinero}). Relanzando el mismo commit <b>sin tocar
+ * nada</b> paso en verde. En local pasa siempre (3/3).</p>
+ *
+ * <p>Que un solo metodo caiga descarta que Quarkus no arrancara: si no arrancara, caerian los tres.
+ * Lo que falla es un <b>reinicio</b> de Quarkus entre grupos de tests. Y hay dos planificadores que
+ * siguen disparando incluso durante el apagado —visible en local como
+ * {@code [Error Occurred After Shutdown]}—: {@code OutboxRelay#drain} cada segundo y
+ * {@code BackgroundProcessExecutionDispatcher#pumpPendingExecutions} cada dos. Una de esas tareas en
+ * vuelo justo cuando el arranque se rehace es el mecanismo mas plausible en una maquina lenta.</p>
+ *
+ * <p><b>Si vuelve a pasar:</b> relanzar PRIMERO, sin cambiar nada. Si pasa, es esto y no hay que
+ * tocar el test. Si falla de forma reproducible, entonces si hay algo nuevo y el
+ * {@code Caused by} del log dira que.</p>
+ *
+ * <p><b>Lo que NO hay que hacer:</b> bajar {@code test.jvm.args}. Se considero —el fallo aparecio en
+ * la misma tanda en que se subio a 3g para resolver un OOM de la instrumentacion de cobertura— y es
+ * una pista falsa: en local, con memoria de sobra, el reinicio se comporta igual. Cambiar ese numero
+ * habria hecho desaparecer el sintoma por casualidad y habria dejado la causa sin entender, que es
+ * como un intermitente se vuelve permanente.</p>
  */
 // @covers ADR-021
 @QuarkusTest

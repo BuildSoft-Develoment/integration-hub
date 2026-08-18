@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { TestBed } from '@angular/core/testing';
 
-import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '../../services/process-schema-field-context.service';
 import { ProcessHttpRequestFieldComponent } from './process-http-request-field.component';
 
 // Contexto sin tarea: el @if del template no renderiza el ih-process-http-request pesado,

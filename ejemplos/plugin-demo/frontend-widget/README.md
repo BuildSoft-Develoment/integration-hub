@@ -31,8 +31,9 @@ npm install
 npm run build          # ng build -> dist/browser/remoteEntry.json
 ```
 
-Salida relevante: `dist/browser/remoteEntry.json` con `exposes: ["./Widget"]` y el kit en
-`shared`.
+Salida relevante: el `remoteEntry.json` que el build deja bajo dist/browser/ — carpeta **generada y
+no versionada**, por eso la ruta no va en backticks: no es un fichero de este repositorio. Lleva
+`exposes: ["./Widget"]` y el kit en `shared`.
 
 ## Firma (ADR-013)
 

@@ -3,7 +3,7 @@ import { FormControl } from '@angular/forms';
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 
-import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '../../services/process-schema-field-context.service';
 import { ProcessTokenFieldComponent } from './process-token-field.component';
 
 class FakeContext {

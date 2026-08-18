@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import { I18nService, resolveVocabulary } from '@integration-hub/core/i18n';
-import { provideSwiftMt101I18n } from '@integration-hub/features/swift-mt101/vocabulary';
 
 /**
  * Entrada en frio: la etiqueta no puede depender de por donde haya navegado antes el usuario.
@@ -49,7 +48,14 @@ describe('vocabulario del vertical en una ruta en frio', () => {
     expect(etiqueta).toContain('MT101_PAY');
   });
 
-  it('con el proveedor instalado, resuelve a la etiqueta del vertical', () => {
+  it('con el proveedor instalado, resuelve a la etiqueta del vertical', async () => {
+    // Import DINAMICO a proposito. La regla de fronteras de Nx prohibe importar de forma
+    // estatica una libreria que se carga en diferido, y con razon: un solo import estatico la
+    // mete en el bundle inicial y anula la carga perezosa para todos.
+    //
+    // Aqui ademas seria contradictorio: este fichero es el que comprueba que el vocabulario
+    // entra en frio. Cargarlo en caliente para probarlo invalidaria lo que mide.
+    const { provideSwiftMt101I18n } = await import('@integration-hub/features/swift-mt101/vocabulary');
     TestBed.configureTestingModule({ providers: [...provideSwiftMt101I18n()] });
     // ENVIRONMENT_INITIALIZER corre al crear el injector; inyectar el servicio lo materializa.
     const i18n = TestBed.inject(I18nService);

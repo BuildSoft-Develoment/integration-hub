@@ -46,12 +46,17 @@ describe('ADR-021 · i18n del vertical SWIFT MT101', () => {
   // superaba los 10 s de timeout de hook en una maquina cargada y tumbaba el PRIMER test del
   // archivo — los otros dos pasaban porque reusaban el modulo ya cacheado. Importar una sola vez
   // quita el trabajo repetido y, con el, la fragilidad.
+  // Timeout explicito: los 10 s por defecto de vitest no dan para lo que hace este hook —
+  // transformar e importar un chunk lazy grande— en una maquina cargada. El comentario de abajo ya
+  // documenta que mordio una vez; volvio a morder al aparecer un SEGUNDO fichero que importa ese
+  // mismo chunk, porque compiten por CPU. No se relaja ninguna comprobacion: solo se deja de medir
+  // el tiempo de compilacion como si fuera parte de lo que este test verifica.
   beforeAll(async () => {
     // Dinamico: importar la lib lazy de forma estatica la traeria al bundle inicial.
     const { SWIFT_MT101_MESSAGES } = await import('@integration-hub/features/swift-mt101');
     declared = SWIFT_MT101_MESSAGES;
     baseEs = readFileSync(join(WORKSPACE_ROOT, 'libs/core/i18n/src/lib/dictionaries/es.ts'), 'utf8');
-  });
+  }, 60_000);
 
   it('declara las mismas claves en ambos idiomas', () => {
     const es = Object.keys(declared.es).sort();
