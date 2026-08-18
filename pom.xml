@@ -32,6 +32,17 @@
         <test.excluded.groups>perf</test.excluded.groups>
         <test.fork.count>1</test.fork.count>
         <test.reuse.forks>true</test.reuse.forks>
+        <!-- Memoria del fork de pruebas. Sin esto la JVM usa su maximo por defecto (un cuarto de
+             la RAM), que en una maquina de desarrollo sobra y en un runner de CI no: alli el paso
+             de instrumentacion de cobertura de Quarkus agota el heap y el fork muere. Surefire lo
+             reporta como "error in the forked process" y como que el motor archunit no pudo
+             descubrir tests — dos sintomas que no mencionan la memoria por ningun lado. -->
+        <test.jvm.args>-Xmx3g</test.jvm.args>
+        <!-- Default VACIO a proposito: jacoco:prepare-agent sobreescribe esta propiedad en tiempo
+             de ejecucion, y surefire la sustituye tarde con @{argLine}. Sin un valor por defecto,
+             los modulos que NO ejecutan prepare-agent recibirian el literal sin resolver y su JVM
+             no arrancaria. -->
+        <argLine></argLine>
     </properties>
 
     <dependencyManagement>
@@ -71,6 +82,7 @@
                     <configuration>
                         <excludedGroups>${test.excluded.groups}</excludedGroups>
                         <forkCount>${test.fork.count}</forkCount>
+                        <argLine>@{argLine} ${test.jvm.args}</argLine>
                         <reuseForks>${test.reuse.forks}</reuseForks>
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
@@ -84,6 +96,7 @@
                     <configuration>
                         <excludedGroups>${test.excluded.groups}</excludedGroups>
                         <forkCount>${test.fork.count}</forkCount>
+                        <argLine>@{argLine} ${test.jvm.args}</argLine>
                         <reuseForks>${test.reuse.forks}</reuseForks>
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
