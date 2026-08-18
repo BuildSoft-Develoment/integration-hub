@@ -41,67 +41,66 @@ paso 5 — a partir de ahi queda horneado en el certificado y en el realm ya imp
 
 ### El tamano de la maquina
 
-La documentacion de Oracle da el Always Free de Ampere A1 en horas: **1.500 OCPU-hora y 9.000
-GB-hora al mes**, que dan para ~2 OCPU y ~12 GB funcionando en continuo. La cifra de 4 OCPU / 24 GB
-se cita por todas partes pero no es lo que dice la ficha oficial. **Confirmar el limite real en la
-consola del propio tenancy** antes de dimensionar: descubrir que hay la mitad de memoria de la
-prevista, con el despliegue a medias, es caro.
+**2 vCPU y 8 GB llegan** — `e2-standard-2` o equivalente. Ese numero sale de que **aqui no se
+compila**: las imagenes nativas las construye CI y esta maquina solo las descarga. El build de
+GraalVM pica ~9,3 GB, mas de lo que hay; si alguna vez se intenta en la propia VM, el nucleo
+empieza a matar contenedores y el sintoma no apunta al build sino a los servicios que mueren.
 
-Con ~12 GB entra todo, pero el build nativo pica ~9,3 GB y **no cabe a la vez que la stack**. El
-paso 3 se hace con la stack parada, y el script se niega a compilar si la encuentra viva.
+Bajar a 4 GB no se recomienda: Keycloak, Kafka y Postgres juntos ya rondan los 2,5 GB en reposo, y
+el margen que queda desaparece con el primer proceso grande.
+
+**Disco: 50 GB.** Con las imagenes ya construidas no hace falta mas, pero por debajo de 20 GB los
+volumenes de Postgres y Kafka se comen el espacio en semanas.
 
 ---
 
 ## 1. Crear la instancia
 
-- **Forma:** `VM.Standard.A1.Flex` (Ampere, ARM). Es la que entra en el Always Free.
-- **Imagen:** Ubuntu 22.04 o superior, o Oracle Linux. Cualquiera vale; el runbook usa `apt`.
-- **Disco de arranque:** generoso. El build nativo escribe mucho y, cuando el disco se agota, **no
-  falla al principio**: pasa las ocho fases de compilacion y muere en el ENLACE, con un error de
-  `ld` que no menciona el espacio. Ya paso.
-- **Clave SSH:** guardarla al crear la instancia. Oracle no la vuelve a mostrar.
-- **IP publica RESERVADA, no efimera.** Es la opcion que mas tarde duele: una IP efimera cambia al
-  parar y arrancar la instancia, y con ella se rompe el registro A. El sintoma es doble y confuso —
-  la aplicacion deja de responder Y el certificado deja de renovarse— y no se relaciona con haber
-  apagado la maquina la semana anterior. En la consola: al crear, en la seccion de red, elegir
-  reservar la direccion.
-- **Subred publica.** Si la instancia acaba en una subred privada no tiene IP publica, y la
-  validacion del certificado —que es una peticion desde internet— no puede llegar nunca.
+En **Compute Engine → Instancias de VM → Crear instancia**. Antes hay que habilitar la
+**Compute Engine API**, que la consola ofrece la primera vez que se entra.
 
-### Si Oracle dice "Out of host capacity"
+- **Region:** `southamerica-west1` (Santiago) es la mas cercana a Peru. La region fija la latencia
+  y no se puede cambiar despues sin recrear la maquina.
+- **Tipo de maquina:** `e2-standard-2` (2 vCPU, 8 GB). Ver el apartado anterior.
+- **Disco de arranque:** Ubuntu **24.04 LTS**, 50 GB, tipo balanceado. El runbook usa `apt`.
+- **Cortafuegos:** marcar **las dos** casillas, `Permitir trafico HTTP` y `Permitir trafico HTTPS`.
+  Crean las reglas de entrada por 80 y 443. El 80 hace falta de verdad — ver el paso 2.
+- **IP publica ESTATICA, no efimera.** Es la que mas tarde duele. Una IP efimera cambia al parar y
+  arrancar la instancia, y con ella se rompe el registro A. El sintoma es doble y confuso —la
+  aplicacion deja de responder Y el certificado deja de renovarse— y nadie lo relaciona con haber
+  apagado la maquina la semana anterior.
 
-Es lo normal, no un error tuyo: la capacidad Ampere del Always Free se agota a menudo por region.
-Reintentar en otro dominio de disponibilidad, o mas tarde. No cambia nada del despliegue.
+  En el formulario: **Redes → Interfaces de red → Direccion IPv4 externa → Crear direccion IP
+  estatica**. Si ya se creo la VM con una efimera, se convierte despues en **Red de VPC →
+  Direcciones IP** sin recrear nada.
+
+**El acceso es por el boton SSH de la consola**, que gestiona las claves solo. No hay ninguna clave
+que guardar en el momento de crear la instancia.
 
 ---
 
-## 2. Abrir los puertos — SON DOS CAPAS
+## 2. Abrir los puertos
 
-Este es el paso que mas tiempo hace perder, porque **abrir la primera capa y olvidar la segunda
-produce exactamente el mismo sintoma que no abrir ninguna**: la conexion se queda colgada.
+Las dos casillas del paso anterior crean las reglas de entrada por 80 y 443 en la VPC. **La imagen
+de Ubuntu de GCE no trae cortafuegos de host activo**, asi que con eso basta — a diferencia de otras
+nubes, donde la imagen filtra por dentro y abrir solo la capa de red produce exactamente el mismo
+sintoma que no abrir nada: la conexion colgada.
 
-### Capa 1 — Security list de Oracle (en la consola web)
-
-Reglas de entrada para `0.0.0.0/0`, TCP, puertos **80** y **443**.
-
-### Capa 2 — El cortafuegos DENTRO de la maquina
-
-Ubuntu y Oracle Linux vienen con iptables filtrando de fabrica en las imagenes de OCI. Por SSH:
+Comprobarlo, en vez de darlo por hecho:
 
 ```sh
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo netfilter-persistent save
+sudo iptables -L INPUT -n | head -3     # dentro de la maquina: policy ACCEPT, sin reglas
 ```
 
-Comprobar desde FUERA de la maquina, no desde dentro:
+Y desde FUERA de la maquina, que es la comprobacion que vale:
 
 ```sh
 curl -sS -o /dev/null -w '%{http_code}\n' http://<ip-publica>/
 ```
 
-Cualquier respuesta HTTP —incluido un 404— significa que las dos capas estan abiertas. Un tiempo de
-espera agotado significa que falta una.
+Cualquier respuesta HTTP —incluido un 404— significa que el camino esta abierto. Un tiempo de espera
+agotado significa que algo sigue filtrando: repasar que las dos casillas quedaran marcadas en
+**VPC → Cortafuegos**, con destino a esta instancia.
 
 ### El 80 se queda abierto para siempre
 
@@ -122,26 +121,35 @@ Cerrar la sesion SSH y volver a entrar, o el grupo no aplica y todo pide `sudo`.
 
 ```sh
 git clone <url-del-repositorio> ~/integration-hub
-cd ~/integration-hub/ops/fase-7-deploy/dist/oracle/vm
+cd ~/integration-hub/ops/fase-7-deploy/dist/vm
 ```
 
 ---
 
-## 4. Compilar las imagenes para ARM
+## 4. Traer las imagenes
 
-**Las imagenes del entorno de integracion no sirven aqui.** Son binarios nativos de GraalVM
-compilados para amd64, y un binario nativo no es portable entre arquitecturas: el contenedor
-arranca y muere al instante con `exec format error`, un mensaje que no menciona la arquitectura y
-parece corrupcion de imagen.
+**Esta maquina no compila.** Las dos imagenes nativas las construye CI y aqui solo se descargan.
+Ver el apartado del tamano: el build no cabe en 8 GB.
+
+Las imagenes viven en `ghcr.io` y el repositorio es privado, asi que hace falta autenticarse una
+vez. Con un **token personal de GitHub con permiso `read:packages`** —no la contrasena de la cuenta,
+y no un token con permisos de escritura, que aqui no se necesitan:
 
 ```sh
-./build-native-arm64.sh ~/integration-hub
+read -rsp 'token: ' GHCR_TOKEN && echo
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <tu-usuario-de-github> --password-stdin
+unset GHCR_TOKEN
 ```
 
-Tarda decenas de minutos. Solo necesita Docker: Maven, Node y GraalVM viven dentro del contenedor
-de build. Al terminar verifica las dos imagenes **por arquitectura**, no por que el build dijera
-que fue bien — una imagen amd64 construida aqui por error pasa todos los pasos y solo falla al
-arrancar.
+`read -rsp` no muestra lo que se teclea y `--password-stdin` evita que el token quede en el
+historial del shell y en la lista de procesos.
+
+La descarga real ocurre en el paso 5, ya con `.env` relleno. Aqui no se puede adelantar: cualquier
+comando de compose necesita las variables, y todavia no existen.
+
+**Ojo con la arquitectura.** CI construye para x86-64 y un binario nativo de GraalVM no es portable:
+una imagen aarch64 en esta maquina arranca y muere al instante con `exec format error`, un mensaje
+que no menciona la arquitectura y parece corrupcion de imagen.
 
 ### El directorio de datos
 
@@ -163,7 +171,7 @@ cp .env.example .env
 nano .env
 ```
 
-Rellenar las doce variables. **Ninguna tiene valor por defecto**, a diferencia del compose de
+Rellenar las once variables. **Ninguna tiene valor por defecto**, a diferencia del compose de
 integracion, donde la contrasena de Postgres y la del administrador de Keycloak caian a `admin` si
 faltaban. En una maquina con IP publica un default silencioso es una puerta abierta que nadie
 recuerda haber dejado, porque el arranque no se queja. Aqui, si falta una, el compose no levanta y
@@ -181,7 +189,17 @@ openssl rand -hex 32      # OPENBAO_OIDC_CLIENT_SECRET, INTEGRATION_HUB_API_SECR
 
 `OPENBAO_TOKEN` se deja **vacio de momento**: no existe hasta el paso 7.
 
-Con el DNS ya apuntando aqui:
+Antes de emitir nada, comprobar que las imagenes bajan:
+
+```sh
+docker compose -f docker-compose.cloud.yml --env-file .env pull platform-app audit-consumer
+```
+
+Es lo que separa "falta el login de ghcr" o "IMAGE_TAG no existe" de un fallo del certificado. Si
+se descubre a mitad de `init-tls.sh`, lo que se ve es la emision a medias, y ahi no se parece en
+nada a un problema de imagenes.
+
+Con eso en verde y el DNS ya apuntando aqui:
 
 ```sh
 ./init-tls.sh
@@ -321,18 +339,22 @@ llega si la renovacion deja de funcionar; conviene que sea uno que alguien lea.
 ### Actualizar la aplicacion
 
 ```sh
-cd ~/integration-hub && git pull
-cd ops/fase-7-deploy/dist/oracle/vm
-docker compose -f docker-compose.cloud.yml --env-file .env down
-./build-native-arm64.sh ~/integration-hub
-docker compose -f docker-compose.cloud.yml --env-file .env up -d
+cd ~/integration-hub/ops/fase-7-deploy/dist/vm
+nano .env                                                        # IMAGE_TAG=<la version nueva>
+docker compose -f docker-compose.cloud.yml --env-file .env pull platform-app audit-consumer
+docker compose -f docker-compose.cloud.yml --env-file .env up -d platform-app audit-consumer
 ```
 
-La stack se para **antes** de compilar, y no por prudencia: el build pica ~9,3 GB y el nucleo mata
-procesos al azar, no al build. El script se niega si la encuentra viva.
+**No se para la stack.** `up -d` recrea solo los dos contenedores cuya imagen cambio; Postgres,
+Kafka, Keycloak y OpenBao siguen corriendo, asi que **OpenBao no hay que desellarlo otra vez** — que
+era el coste real de cada actualizacion en el plan anterior, cuando habia que tumbar todo para
+compilar.
 
-Keycloak conserva usuarios y grupos: corre en modo produccion sobre Postgres, no con la base
-efimera del entorno de integracion.
+El rollback es el mismo comando con el tag anterior. Por eso `IMAGE_TAG` no puede ser `latest`: con
+un tag movil no hay a donde volver.
+
+Keycloak conserva usuarios y grupos: corre en modo produccion sobre Postgres, no con la base efimera
+del entorno de integracion.
 
 ### Copias de seguridad
 
@@ -346,8 +368,8 @@ sin las cuales el volumen de secretos es un fichero cifrado sin llave.
 
 - **Nada de alta disponibilidad.** Una maquina, una instancia de cada cosa. Un reinicio es una
   interrupcion, y ademas exige desellar a mano.
-- **Ni MinIO ni fuentes SFTP/FTP de prueba.** Para almacenamiento de objetos, el de OCI habla el
-  protocolo S3 y la app lo usa por esa via.
+- **Ni MinIO ni fuentes SFTP/FTP de prueba.** Para almacenamiento de objetos la app tiene destino
+  propio de Google Cloud Storage, ademas de S3, Azure y OCI.
 - **Ni los plugins de demostracion ni el mock del banco.** Son andamiaje para ejercitar el motor en
   local.
 - **`strictHostKeyChecking` en false** para la entrega SFTP. Es una concesion acotada a pruebas:
