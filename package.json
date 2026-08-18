@@ -153,6 +153,7 @@
     "check:project-requirements": "node ci/scripts/check-project-requirements.mjs",
     "check:likec4": "node ci/scripts/check-likec4.mjs",
     "check:likec4-sources": "node ci/scripts/check-likec4-sources.mjs",
-    "check:source-credentials": "node ci/scripts/check-source-credentials.mjs"
+    "check:source-credentials": "node ci/scripts/check-source-credentials.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs"
   }
 }
