@@ -261,7 +261,7 @@ services:
     # Comparte IMAGE_TAG con platform-app A PROPOSITO: los dos salen del mismo commit y
     # comparten esquema de BD y contrato de Kafka. Un tag por servicio dejaria desplegar
     # versiones descoordinadas sin que nada avise.
-    image: ${CONSUMER_IMAGE:-ghcr.io/ndavilal88/integration-hub/audit-consumer}:${IMAGE_TAG:?falta IMAGE_TAG en .env — la version a desplegar (p.ej. v1.4.0 o el SHA corto). Sin tag explicito no se sabe que esta corriendo.}
+    image: ${CONSUMER_IMAGE:-ghcr.io/buildsoft-develoment/integration-hub/audit-consumer}:${IMAGE_TAG:?falta IMAGE_TAG en .env — la version a desplegar (p.ej. v1.4.0 o el SHA corto). Sin tag explicito no se sabe que esta corriendo.}
     container_name: ih-audit-consumer
     restart: always
     environment:
@@ -280,7 +280,7 @@ services:
   # Plataforma (imagen NATIVA x86-64 con /appih horneado).
   # ---------------------------------------------------------------------------------
   platform-app:
-    image: ${APP_IMAGE:-ghcr.io/ndavilal88/integration-hub/platform-app}:${IMAGE_TAG:?falta IMAGE_TAG en .env — la version a desplegar (p.ej. v1.4.0 o el SHA corto). Sin tag explicito no se sabe que esta corriendo.}
+    image: ${APP_IMAGE:-ghcr.io/buildsoft-develoment/integration-hub/platform-app}:${IMAGE_TAG:?falta IMAGE_TAG en .env — la version a desplegar (p.ej. v1.4.0 o el SHA corto). Sin tag explicito no se sabe que esta corriendo.}
     container_name: ih-app
     restart: always
     volumes:
