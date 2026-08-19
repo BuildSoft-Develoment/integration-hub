@@ -39,10 +39,20 @@ LIMPIO="$(printf '%s' "$MIEMBROS" | tr -d '[]"' | tr ', ' '\n\n' | grep -v '^$' 
 if [ -z "$LIMPIO" ]; then
   echo "   miembros: NINGUNO"
   echo
-  echo "VEREDICTO: entraste, pero tu sesion NO recibio ih-secrets-admin."
-  echo "  El grupo se puebla en el momento del login, con el claim 'groups' del ID token."
-  echo "  Estar vacio despues de haber entrado significa que ese claim no traia 'platform-admin':"
-  echo "  o el usuario no tiene el rol en Keycloak, o el mapper del cliente no lo esta emitiendo."
+  echo "VEREDICTO: el grupo existe y lleva la politica, pero no tiene a nadie dentro."
+  echo
+  echo "El grupo se puebla EN EL MOMENTO DEL LOGIN, con el claim 'groups' del ID token."
+  echo "Vacio significa una de tres cosas, y conviene descartarlas EN ESTE ORDEN:"
+  echo
+  echo "  1. NADIE HA ENTRADO TODAVIA por SSO desde que se inicializo la boveda."
+  echo "     Es lo normal tras reinicializar o migrar el sello: las entidades viven en el"
+  echo "     volumen y no sobreviven a que se borre. Entra una vez por OIDC en /ui/ y"
+  echo "     repite esta comprobacion. Diez segundos."
+  echo "  2. Quien entro NO TIENE el rol 'platform-admin' en Keycloak."
+  echo "  3. El MAPPER del cliente 'openbao' no esta emitiendo el claim 'groups'."
+  echo
+  echo "Las tres producen EXACTAMENTE el mismo sintoma, asi que el mensaje por si solo no"
+  echo "las distingue. Empieza por la 1, que es la mas probable y la mas barata de descartar."
   exit 1
 fi
 
