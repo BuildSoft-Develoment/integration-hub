@@ -298,7 +298,9 @@ rol de Editor en el proyecto, ese ambito la convierte en editora de todo.
 ```sh
 gcloud compute instances stop <instancia> --zone <zona>
 
-gcloud compute instances set-service-account <instancia> --zone <zona>   --service-account=<la-misma-cuenta-de-arriba>   --scopes=https://www.googleapis.com/auth/cloudkms,https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append
+gcloud compute instances set-service-account <instancia> --zone <zona> \
+  --service-account=<la-misma-cuenta-de-arriba> \
+  --scopes=https://www.googleapis.com/auth/cloudkms,https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append
 
 gcloud compute instances start <instancia> --zone <zona>
 ```
