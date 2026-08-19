@@ -230,6 +230,20 @@ queremos que proteste.
 no es editar un fichero: es un procedimiento de migracion de sello con las claves actuales en la
 mano. Antes de inicializar es copiar un fichero.
 
+> **Si ya inicializaste sin sello, mira primero si la boveda esta VACIA.** Mientras no guarde ningun
+> secreto, borrar su volumen y volver a empezar con el sello puesto cuesta diez minutos y no pierde
+> nada — mucho menos que una migracion de sello. En cuanto entre la primera credencial real, esa
+> puerta se cierra.
+>
+> ```sh
+> docker compose -f docker-compose.cloud.yml --env-file .env stop openbao
+> docker compose -f docker-compose.cloud.yml --env-file .env rm -f openbao
+> docker volume rm integration-hub-cloud_openbao_data
+> ```
+>
+> Se pierden el token raiz, las politicas, el motor KV y el cableado del SSO: hay que rehacer los
+> pasos 7 y 8. Son los mismos comandos, diez minutos.
+
 Por defecto OpenBao arranca **sellado** y una persona teclea las claves. Eso no es friccion
 gratuita: es la propiedad que hace que un gestor de secretos sirva de algo. Pero en esta maquina
 tiene un coste concreto — Google reinicia la VM por mantenimiento, y hasta que alguien desella, la
@@ -273,8 +287,33 @@ El rol va **sobre la clave**, no sobre el proyecto: esa cuenta puede cifrar y de
 clave y nada mas. No se descarga ningun fichero de credenciales — el SDK de Google usa las de la
 instancia, que llegan por el servidor de metadatos.
 
-Si la VM se creo sin permiso de acceso a todas las APIs de Cloud, hay que **apagarla** y cambiarlo
-en *Editar → Identidad y acceso a las API*; los permisos de acceso no se pueden tocar en caliente.
+**El ambito de acceso de la VM: por `gcloud`, no por la consola.** Hace falta que la instancia lleve
+el ambito `cloudkms`, y la lista de "permisos de acceso por API" de la consola **no tiene entrada para
+Cloud KMS** — comprobado. Por ahi la unica opcion seria *acceso total a todas las APIs*, que en una
+maquina que guarda la boveda es justo lo que no se quiere: si la cuenta de servicio por defecto tiene
+rol de Editor en el proyecto, ese ambito la convierte en editora de todo.
+
+`gcloud` si acepta ambitos concretos. Con la VM **apagada** —los ambitos no se tocan en caliente—:
+
+```sh
+gcloud compute instances stop <instancia> --zone <zona>
+
+gcloud compute instances set-service-account <instancia> --zone <zona> \
+  --service-account=<la-misma-cuenta-de-arriba> \
+  --scopes=https://www.googleapis.com/auth/cloudkms,https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append
+
+gcloud compute instances start <instancia> --zone <zona>
+```
+
+Eso **anade** `cloudkms` conservando los ambitos por defecto —los de registro y monitorizacion que
+necesita el agente de operaciones—. Comprobar despues, desde la propia VM, que llego:
+
+```sh
+curl -s -H 'Metadata-Flavor: Google'   http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/scopes
+```
+
+Si `cloudkms` no aparece ahi, el sello fallara al arrancar y el error hablara de permisos, no de
+ambitos.
 
 Luego copiar la plantilla dentro del directorio de configuracion, rellenarla y reiniciar:
 
@@ -290,6 +329,11 @@ de permisos de KMS, **parar aqui**: inicializar con el sello a medias deja una b
 por ninguno de los dos caminos.
 
 Coste: una clave de KMS son unos **0,06 USD al mes**. La decision no es economica.
+
+> ⚠️ **Nunca destruyas una version antigua de esa clave.** La rotacion automatica —90 dias por
+> defecto— es segura: KMS conserva las versiones anteriores y sigue descifrando con la que toque.
+> Destruir una vieja, en cambio, deja la boveda sin forma de abrirse, y el fallo no aparece al
+> destruirla sino en el siguiente arranque.
 
 ### El asistente
 
@@ -460,6 +504,10 @@ docker compose -f docker-compose.cloud.yml --env-file .env exec openbao \
 ```
 
 `Sealed  false` y `Seal Type  gcpckms`.
+
+**`openbao/config/seal-gcpckms.hcl` no esta versionado**, y es deliberado: nombra recursos concretos
+de un proyecto de GCP. Si algun dia se redespliega desde un clon limpio hay que volver a crearlo, o la
+boveda arrancara sellada y sin nadie que sepa por que.
 
 ### El certificado
 
