@@ -1,0 +1,128 @@
+# =====================================================================================
+# Despliega en el servidor de INTEGRACION on-premise, sobre un runner auto-hospedado.
+#
+# SOLO SE DISPARA A MANO, y esa es la decision de seguridad que hace viable todo lo demas.
+# Un runner auto-hospedado ejecuta lo que diga el workflow; si esto corriera en
+# `pull_request`, cualquiera con permiso de LECTURA podria abrir un PR y ejecutar codigo en
+# la maquina —lo dice la propia documentacion de GitHub—. Con `workflow_dispatch` hace falta
+# permiso de escritura, que ya implica poder cambiar el workflow: no hay escalada.
+#
+# NO TRANSPORTA SECRETOS. Trabaja sobre el clon que YA existe en el servidor, donde vive el
+# `int/.env` con el token de OpenBao y las contrasenas. El workflow solo dice QUE version
+# desplegar; las credenciales no entran nunca en el workspace del runner ni en los registros.
+#
+# NO CONSTRUYE NADA. Descarga del registro las imagenes que construyo CI, que es lo que
+# ADR-029 llama promocion de artefacto: la misma imagen que despues ira a la nube.
+# =====================================================================================
+name: Desplegar en integracion
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag de las imagenes a desplegar (p.ej. f9c273d o v1.4.0). NUNCA latest."
+        required: true
+        type: string
+      git_ref:
+        description: "Rama o tag del paquete de despliegue (compose y config)"
+        required: false
+        default: develop
+        type: string
+
+# Dos despliegues a la vez sobre la misma maquina se pisarian a mitad de `up -d`.
+concurrency:
+  group: despliegue-integracion
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    name: Desplegar ${{ inputs.image_tag }} en integracion
+    runs-on: [self-hosted, integracion-appih]
+    timeout-minutes: 20
+
+    env:
+      # Ruta del paquete en el servidor. Vive en una variable para que el workflow no tenga
+      # que saber como esta organizada esa maquina.
+      RUTA: ${{ vars.RUTA_INTEGRACION || '/home/buildsoft/Documentos/integration-hub/ops/fase-7-deploy/dist/onprem' }}
+      COMPOSE: docker-compose.int.yml
+      REGISTRO: ghcr.io/buildsoft-develoment/integration-hub
+
+    steps:
+      - name: Comprobar el terreno antes de tocar nada
+        run: |
+          set -eu
+          cd "$RUTA"
+          test -f "$COMPOSE" || { echo "::error::No encuentro $COMPOSE en $RUTA"; exit 1; }
+          test -f int/.env   || { echo "::error::No encuentro int/.env en $RUTA. El despliegue NO crea ese fichero: lleva credenciales y se rellena a mano una vez."; exit 1; }
+          echo "Version en marcha ahora mismo:"
+          grep -E '^(APP_IMAGE|CONSUMER_IMAGE)=' int/.env | sed 's/^/  /'
+
+      # La boveda sellada es el fallo mas enganoso de este entorno: el despliegue termina en
+      # verde, los contenedores arrancan, y la aplicacion no puede leer ni una credencial. Se
+      # comprueba ANTES para que el error diga lo que pasa en vez de aparecer horas despues
+      # como "Missing vaultkv value".
+      - name: Comprobar que OpenBao esta desellado
+        run: |
+          set -eu
+          SELLADO=$(docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 ih-int-openbao \
+            bao status -format=json 2>/dev/null | grep -o '"sealed": *[a-z]*' | grep -o '[a-z]*$' || echo "desconocido")
+          echo "sealed=$SELLADO"
+          if [ "$SELLADO" != "false" ]; then
+            echo "::error::OpenBao esta sellado (o no responde). Desellalo con 3 de las 5 claves antes de desplegar: docker exec -it -e BAO_ADDR=http://127.0.0.1:8200 ih-int-openbao bao operator unseal"
+            exit 1
+          fi
+
+      - name: Actualizar el paquete de despliegue
+        run: |
+          set -eu
+          cd "$RUTA"
+          git fetch -q --all --prune
+          git checkout -q "${{ inputs.git_ref }}"
+          git pull -q --ff-only
+          echo "Paquete en $(git rev-parse --short HEAD) ($(git rev-parse --abbrev-ref HEAD))"
+
+      - name: Fijar la version a desplegar
+        run: |
+          set -eu
+          cd "$RUTA"
+          TAG="${{ inputs.image_tag }}"
+          case "$TAG" in
+            latest|main|develop) echo "::error::'$TAG' es un tag movil. Con el nadie puede responder que version corre, y el rollback deja de existir porque el nombre al que volver ya apunta a otra cosa."; exit 1 ;;
+          esac
+          sed -i "s|^APP_IMAGE=.*|APP_IMAGE=${REGISTRO}/platform-app:${TAG}|"      int/.env
+          sed -i "s|^CONSUMER_IMAGE=.*|CONSUMER_IMAGE=${REGISTRO}/audit-consumer:${TAG}|" int/.env
+          grep -E '^(APP_IMAGE|CONSUMER_IMAGE)=' int/.env | sed 's/^/  /'
+
+      - name: Descargar y levantar
+        run: |
+          set -eu
+          cd "$RUTA"
+          docker compose -f "$COMPOSE" --env-file int/.env pull platform-app audit-consumer
+          docker compose -f "$COMPOSE" --env-file int/.env up -d platform-app audit-consumer
+
+      # Un despliegue no termina cuando el contenedor arranca. Se reintenta porque la
+      # aplicacion tarda un momento en estar lista, no porque el fallo sea aceptable.
+      - name: Comprobar que responde
+        run: |
+          set -eu
+          cd "$RUTA"
+          URL="https://app.buildsoft.com.pe/appih/q/health"
+          for i in $(seq 1 20); do
+            CODIGO=$(curl -sk -o /dev/null -w '%{http_code}' "$URL" || echo "000")
+            if [ "$CODIGO" = "200" ]; then
+              echo "Salud OK tras ${i} intento(s)."
+              echo "### Desplegado \`${{ inputs.image_tag }}\` en integracion" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "intento ${i}/20: HTTP ${CODIGO}"
+            sleep 5
+          done
+          echo "::error::La aplicacion no respondio 200 en /appih/q/health tras 100 segundos. Los contenedores pueden estar arriba y la app rota: mirar 'docker compose logs platform-app'."
+          exit 1
+
+      - name: Si algo fallo, dejar el rastro a mano
+        if: failure()
+        run: |
+          cd "$RUTA"
+          docker compose -f "$COMPOSE" --env-file int/.env ps || true
+          docker compose -f "$COMPOSE" --env-file int/.env logs --tail=60 platform-app || true
