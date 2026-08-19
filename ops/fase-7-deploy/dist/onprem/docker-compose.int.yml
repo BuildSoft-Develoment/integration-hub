@@ -277,10 +277,15 @@ services:
   # antes del docker build. Ver int/README.md.
   # ---------------------------------------------------------------------------------
   audit-consumer:
-    build:
-      context: ../../../../audit-consumer
-      dockerfile: src/main/docker/Dockerfile.native
-    image: integration-hub-audit-consumer:native
+    # La imagen NO se construye desde aqui, a proposito. El README documenta el comando de
+    # construccion, y desde ADR-029 esta stack tambien puede consumir la imagen YA PUBLICADA por
+    # CI —la misma que corre en la nube— poniendo CONSUMER_IMAGE en el .env.
+    #
+    # Tenia una seccion `build:`, y era una trampa: si la imagen del registro no estaba descargada,
+    # `up` la construia en silencio y la etiquetaba con el nombre del registro. El resultado parecia
+    # la imagen publicada y era otra cosa, que es exactamente lo que la promocion de artefacto
+    # existe para evitar. Con una sola forma de obtenerla, no hay ambiguedad que resolver.
+    image: ${CONSUMER_IMAGE:-integration-hub-audit-consumer:native}
     container_name: ih-int-audit-consumer
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9094
