@@ -301,23 +301,71 @@ eso vale igual para las claves de recuperacion del camino con KMS.
 
 ---
 
-## 7. El token de la aplicacion
+## 7. El motor de secretos y el token de la aplicacion
+
+### 7a. Montar el motor KV
+
+**Recien inicializada, la boveda solo trae `cubbyhole`.** El motor `secret/` no existe hasta que
+alguien lo monta, y sin el la politica del punto siguiente concede lectura sobre rutas que no
+llevan a ninguna parte.
+
+Lo peor es cuando da la cara: no al montar la stack —nada falla— sino mucho despues, al ejecutar
+el primer proceso que resuelve un `${vaultkv:...}`, con un `Missing vaultkv value` que manda a
+revisar el token, que estara bien.
+
+```sh
+read -rsp 'token raiz: ' BAO_TOKEN && echo && export BAO_TOKEN
+
+docker exec -i -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 ih-openbao \
+  bao secrets enable -path=secret -version=2 kv
+```
+
+`-version=2` no es opcional: la politica apunta a `secret/data/...` y `secret/metadata/...`, que
+son las rutas de KV v2. Con la v1 esas rutas no existen y el fallo seria identico.
+
+> **`-e BAO_ADDR` explicito, siempre.** El contenedor trae `BAO_ADDR` en `https`, y `docker exec -e
+> VAR` sin valor solo pasa la variable si existe en TU shell. Sin esto, el CLI habla HTTPS contra un
+> OpenBao que escucha en HTTP plano —el TLS lo termina nginx— y falla con
+> `http: server gave HTTP response to HTTPS client`, que no sugiere en absoluto lo que pasa.
+
+### 7b. La politica y el token
 
 La app **no** usa el token raiz. El raiz lee, escribe, borra y administra la boveda; viviendo en una
 variable de entorno de un contenedor, cualquier volcado de configuracion se vuelve control total.
 
-En la consola de OpenBao, con el token raiz:
-
-1. **Policies → Create ACL policy**, nombre `integration-hub`, y pegar el contenido de
-   [`openbao/policy-integration-hub.hcl`](openbao/policy-integration-hub.hcl). Solo `read` sobre
-   `secret/data/connections/*` y `secret/data/tasks/*`.
-2. **Access → Authentication Methods → token → Create token**, con esa politica.
-
-Ese valor va a `OPENBAO_TOKEN` en `.env`, y despues:
+Se hace por linea de comandos y no por la consola web: ahi la creacion de tokens no esta donde uno
+la busca, y el fichero de la politica ya esta montado dentro del contenedor.
 
 ```sh
+docker exec -i -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 ih-openbao \
+  bao policy write integration-hub /openbao/setup/policy-integration-hub.hcl
+
+T=$(docker exec -i -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 ih-openbao \
+  bao token create -policy=integration-hub -ttl=768h -field=token)
+
+sed -i "s|^OPENBAO_TOKEN=.*|OPENBAO_TOKEN=$T|" .env
+unset T BAO_TOKEN
+
 docker compose -f docker-compose.cloud.yml --env-file .env up -d platform-app
 ```
+
+Ni el token raiz ni el de la app llegan a mostrarse: el primero se teclea sin eco y viaja como
+variable de entorno —no queda en el historial ni en `docker inspect`—, y el segundo se escribe
+directo en `.env`.
+
+**Ese token CADUCA a los 768 horas (32 dias).** Cuando expire, la aplicacion dejara de leer
+credenciales y el registro se llenara de `Missing vaultkv value` sin que nadie haya tocado nada.
+Conviene anotar la fecha al desplegar y repetir las cuatro ultimas lineas antes de que llegue.
+
+### Comprobar que quedo montado
+
+```sh
+docker exec -i -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 ih-openbao bao secrets list
+```
+
+Deben aparecer `cubbyhole/` y `secret/`. En la consola web salen en **Secrets**, y que un usuario
+entrado por SSO los vea confirma de paso que su politica funciona: listar motores exige permiso
+sobre `sys/internal/ui/mounts`, que solo concede `ih-secrets-admin`.
 
 ### Si aparece "Missing vaultkv value"
 
@@ -338,9 +386,17 @@ Lo que se puede hacer dentro sale del **rol**, no de una lista de personas mante
 sitio.
 
 ```sh
-docker exec -e BAO_TOKEN -e PUBLIC_BASE_URL="https://<tu-dominio>" -e OPENBAO_OIDC_CLIENT_SECRET \
+docker exec -i \
+  -e BAO_TOKEN \
+  -e BAO_ADDR=http://127.0.0.1:8200 \
+  -e PUBLIC_BASE_URL="https://<tu-dominio>" \
+  -e OPENBAO_OIDC_CLIENT_SECRET \
   ih-openbao sh /openbao/setup/setup-oidc.sh
 ```
+
+El `-e BAO_ADDR` explicito es imprescindible, por lo mismo que en el paso 7: sin el, el script
+hereda el `https` que trae el contenedor y muere con `http: server gave HTTP response to HTTPS
+client`, un error que no sugiere en absoluto que el problema sea el esquema de la direccion.
 
 `-e VAR` sin `=valor` toma el valor de tu shell: ni el token raiz ni el secreto quedan en el
 historial ni en `docker inspect`. Antes de ejecutarlo, exportarlos en la sesion:
