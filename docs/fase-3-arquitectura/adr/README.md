@@ -38,6 +38,7 @@
 - [ADR-026 Vertical SBS SUCAVE, y toda fuente de entrada debe tener su salida](ADR-026-vertical-sbs-sucave-y-paridad-entrada-salida.md) *(propuesto)*
 - ADR-027 Salida `REST` y `OCI_OBJECT_STORAGE`: publicar no es el espejo de leer *(reservado, sin redactar — ver ADR-026)*
 - [ADR-028 Llamar a otro proceso como una tarea más](ADR-028-llamada-a-otro-proceso-como-tarea.md) *(propuesto)*
+- [ADR-029 Entrega continua con promocion de artefacto; el despliegue lo dispara una persona](ADR-029-entrega-continua-promocion-de-artefacto.md) *(propuesto)*
 
 ## Regla
 
