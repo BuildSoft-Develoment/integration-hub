@@ -1,5 +1,5 @@
-﻿# =====================================================================================
-# Ambiente de INTEGRACION (int) â€” todo dockerizado detras de nginx, replicando el server
+# =====================================================================================
+# Ambiente de INTEGRACION (int) — todo dockerizado detras de nginx, replicando el server
 # real: app en /appih, Keycloak en /iam, host app.buildsoft.com.pe. No es PROD, pero es
 # la forma mas cercana (mismo shape). Soporte en ./int/ (nginx, keycloak, smoke).
 #
@@ -11,7 +11,7 @@
 #   3) hosts file del host:  127.0.0.1  app.buildsoft.com.pe
 #   4) Navegar https://app.buildsoft.com.pe/appih  -> login por /iam -> app.
 #
-# Notas de diseÃ±o:
+# Notas de diseño:
 #  - nginx es la unica puerta. Alias de red `app.buildsoft.com.pe`, asi la app resuelve el
 #    issuer PUBLICO internamente (issuer consistente browser <-> app).
 #  - Los 3 backends gRPC comparten el netns de la app (network_mode: service:platform-app)
@@ -55,7 +55,7 @@ services:
     restart: always
 
   # ---------------------------------------------------------------------------------
-  # Postgres â€” base de datos OPERACIONAL de la plataforma (y del audit-consumer).
+  # Postgres — base de datos OPERACIONAL de la plataforma (y del audit-consumer).
   # ---------------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
@@ -75,7 +75,7 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------------
-  # Keycloak â€” detras de nginx en /iam. Issuer = <PUBLIC_BASE_URL>/iam/realms/â€¦
+  # Keycloak — detras de nginx en /iam. Issuer = <PUBLIC_BASE_URL>/iam/realms/…
   # ---------------------------------------------------------------------------------
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
@@ -89,7 +89,7 @@ services:
       KC_HTTP_PORT: "8180"
       KC_HTTP_RELATIVE_PATH: "/iam"
       KC_PROXY_HEADERS: "xforwarded"
-      # Hostname publico INCLUYENDO el subpath /iam: el issuer queda â€¦/iam/realms/â€¦ y
+      # Hostname publico INCLUYENDO el subpath /iam: el issuer queda …/iam/realms/… y
       # matchea el auth-server-url del app (con KC_HOSTNAME puro origin, KC no lo agrega).
       KC_HOSTNAME: "${PUBLIC_BASE_URL:-https://app.buildsoft.com.pe}/iam"
       KC_HOSTNAME_STRICT: "false"
@@ -131,7 +131,7 @@ services:
       retries: 20
 
   # ---------------------------------------------------------------------------------
-  # Kafka (KRaft) â€” UNICO broker: async dispatch + backbone de auditoria.
+  # Kafka (KRaft) — UNICO broker: async dispatch + backbone de auditoria.
   # ---------------------------------------------------------------------------------
   kafka:
     image: apache/kafka:3.7.0
@@ -159,7 +159,7 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------------
-  # MinIO (S3-compatible) â€” staging de artefactos de plugins + fuentes S3.
+  # MinIO (S3-compatible) — staging de artefactos de plugins + fuentes S3.
   # ---------------------------------------------------------------------------------
   minio:
     image: minio/minio:RELEASE.2024-01-16T16-07-38Z
@@ -193,7 +193,7 @@ services:
       "
 
   # ---------------------------------------------------------------------------------
-  # SFTP fuente â€” SftpSourceProvider.
+  # SFTP fuente — SftpSourceProvider.
   # ---------------------------------------------------------------------------------
   sftp-source:
     image: atmoz/sftp:alpine
@@ -205,7 +205,7 @@ services:
     networks: [ihnet]
 
   # ---------------------------------------------------------------------------------
-  # FTP fuente â€” FtpSourceProvider (PASV).
+  # FTP fuente — FtpSourceProvider (PASV).
   # ---------------------------------------------------------------------------------
   ftp-source:
     image: delfer/alpine-ftp-server:latest
@@ -272,15 +272,20 @@ services:
       timeout: 5s
       retries: 5
   # ---------------------------------------------------------------------------------
-  # Consumidor de auditoria â€” NATIVO. Kafka -> cold-store POSTGRES (default; ClickHouse
+  # Consumidor de auditoria — NATIVO. Kafka -> cold-store POSTGRES (default; ClickHouse
   # deferido). Requiere el runner nativo (mvn -pl audit-consumer -am package -Pnative ...)
   # antes del docker build. Ver int/README.md.
   # ---------------------------------------------------------------------------------
   audit-consumer:
-    build:
-      context: ../../../../audit-consumer
-      dockerfile: src/main/docker/Dockerfile.native
-    image: integration-hub-audit-consumer:native
+    # La imagen NO se construye desde aqui, a proposito. El README documenta el comando de
+    # construccion, y desde ADR-029 esta stack tambien puede consumir la imagen YA PUBLICADA por
+    # CI —la misma que corre en la nube— poniendo CONSUMER_IMAGE en el .env.
+    #
+    # Tenia una seccion `build:`, y era una trampa: si la imagen del registro no estaba descargada,
+    # `up` la construia en silencio y la etiquetaba con el nombre del registro. El resultado parecia
+    # la imagen publicada y era otra cosa, que es exactamente lo que la promocion de artefacto
+    # existe para evitar. Con una sola forma de obtenerla, no hay ambiguedad que resolver.
+    image: ${CONSUMER_IMAGE:-integration-hub-audit-consumer:native}
     container_name: ih-int-audit-consumer
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9094
@@ -381,7 +386,7 @@ services:
     restart: always
 
   # ---------------------------------------------------------------------------------
-  # 3 backends gRPC â€” comparten el netns de la app => la ve en 127.0.0.1:5006x (localhost).
+  # 3 backends gRPC — comparten el netns de la app => la ve en 127.0.0.1:5006x (localhost).
   # ---------------------------------------------------------------------------------
   plugin-java:
     image: demo-transform-java:1.0.0
@@ -423,7 +428,7 @@ services:
         condition: service_started
 
   # ---------------------------------------------------------------------------------
-  # Frontend widget del plugin â€” lo carga el BROWSER via nginx (/pluginwidget).
+  # Frontend widget del plugin — lo carga el BROWSER via nginx (/pluginwidget).
   # ---------------------------------------------------------------------------------
   frontend-widget:
     image: demo-transform-widget:1.0.0
@@ -432,7 +437,7 @@ services:
     restart: always
     networks: [ihnet]
 
-  # Echo HTTP â€” destino de las tareas REST_CALL (para probar el offload async). Devuelve
+  # Echo HTTP — destino de las tareas REST_CALL (para probar el offload async). Devuelve
   # el request como JSON y 200. La app lo alcanza en http://echo.
   echo:
     image: ealen/echo-server:latest
