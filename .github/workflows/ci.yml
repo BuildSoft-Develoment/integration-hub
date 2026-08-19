@@ -20,6 +20,56 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Decide si hace falta compilar y probar, o si el cambio no puede afectar al codigo.
+  #
+  # POR QUE UN JOB Y NO `paths:` EN EL DISPARADOR. Con `paths:` la ejecucion no llega a existir, y
+  # un check que no existe deja colgado a cualquier ruleset que lo exija: el pull request espera para
+  # siempre algo que nunca va a correr. Asi, el job existe y se reporta como omitido, que si satisface
+  # un check obligatorio.
+  #
+  # LA LISTA ES DE RUTAS INERTES, NO DE RUTAS DE CODIGO, y es deliberado. Enumerar el codigo obliga a
+  # acordarse de esta lista cada vez que nace un modulo, y el dia que alguien no se acuerde el cambio
+  # se sube sin probar. Al reves, lo peor que pasa es correr de mas.
+  cambios:
+    name: Que cambio
+    runs-on: ubuntu-latest
+    outputs:
+      pesados: ${{ steps.filtro.outputs.pesados }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filtro
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -eu
+          # Fuera de un pull request no se compara nada: se corre todo. Un push a main es lo que se
+          # taggea y despliega, y ahi la validacion completa es justamente lo que ADR-029 conserva.
+          if [ "$EVENTO" != "pull_request" ]; then
+            echo "pesados=true" >> "$GITHUB_OUTPUT"
+            echo "Evento '$EVENTO': se ejecuta todo."
+            exit 0
+          fi
+
+          git fetch -q --depth=1 origin "$BASE"
+          FICHEROS="$(git diff --name-only FETCH_HEAD...HEAD)"
+          echo "Ficheros cambiados:"; echo "$FICHEROS" | sed 's/^/  /'
+
+          # Rutas que no pueden alterar el comportamiento del codigo compilado.
+          INERTES='^(docs/|specs/|ai/|qa/|ops/|README.md$|CONTRIBUTING.md$|LICENSE)'
+          RESTO="$(echo "$FICHEROS" | grep -Ev "$INERTES" || true)"
+
+          if [ -z "$RESTO" ]; then
+            echo "pesados=false" >> "$GITHUB_OUTPUT"
+            echo "Solo cambiaron rutas inertes: backend y frontend se omiten."
+          else
+            echo "pesados=true" >> "$GITHUB_OUTPUT"
+            echo "Hay cambios fuera de las rutas inertes:"; echo "$RESTO" | sed 's/^/  /'
+          fi
+
   governance:
     name: Gobernanza AI-first (check:all)
     # NO SE REPITE EN EL PUSH A DEVELOP. Ese arbol es el que el pull request acaba de validar,
@@ -131,7 +181,8 @@ jobs:
   backend-fast:
     name: Backend Quarkus fast (build + test + IT)
     # Mismo motivo que en `governance`: el PR ya valido este arbol.
-    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
+    needs: cambios
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') && needs.cambios.outputs.pesados == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -157,7 +208,8 @@ jobs:
   frontend:
     name: Frontend Angular (lint + test + build)
     # Mismo motivo que en `governance`: el PR ya valido este arbol.
-    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
+    needs: cambios
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') && needs.cambios.outputs.pesados == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
