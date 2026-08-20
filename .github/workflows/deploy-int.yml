@@ -29,6 +29,18 @@ on:
         default: develop
         type: string
 
+  # Invocable desde otro workflow, para que la entrega continua no duplique estos pasos.
+  # Si el despliegue a integracion cambia, cambia en UN sitio y los dos caminos lo heredan.
+  workflow_call:
+    inputs:
+      image_tag:
+        required: true
+        type: string
+      git_ref:
+        required: false
+        default: develop
+        type: string
+
 # Dos despliegues a la vez sobre la misma maquina se pisarian a mitad de `up -d`.
 concurrency:
   group: despliegue-integracion
