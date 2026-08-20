@@ -26,6 +26,16 @@ on:
   push:
     tags: ["v*"]
 
+  # Invocable desde la entrega continua a integracion. Los disparadores de arriba NO llevan
+  # filtro de rutas a proposito: esos filtros aplicarian TAMBIEN a los tags, y un release cuyo
+  # commit solo tocase documentacion se quedaria sin publicar en silencio. El filtrado vive en
+  # el workflow que llama, que solo mira ramas.
+  workflow_call:
+    outputs:
+      tag:
+        description: "Tag con el que se publicaron las imagenes"
+        value: ${{ jobs.imagenes.outputs.tag }}
+
 # Impide que dos publicaciones de la misma referencia se pisen empujando el mismo tag.
 concurrency:
   group: publicar-imagenes-vm-${{ github.ref }}
@@ -41,6 +51,12 @@ env:
 jobs:
   imagenes:
     name: ${{ matrix.nombre }} (nativa x86-64)
+    # Se expone el tag calculado en vez de recalcularlo fuera: `github.sha` es el SHA completo
+    # y las imagenes se publican con el corto, asi que derivarlo dos veces daria dos valores
+    # distintos y el despliegue buscaria un tag que no existe. Las dos entradas de la matriz
+    # calculan el mismo valor, asi que da igual cual gane.
+    outputs:
+      tag: ${{ steps.tag.outputs.valor }}
     # platform-app NO CABE en un runner estandar. El requisito esta documentado en
     # ops/fase-7-deploy/dist/NATIVE-STATUS.md: el analisis de GraalVM pica a 9,7 GB y pide un
     # builder de >=12 GB. Un runner estandar de repo privado da 2 nucleos y ~8 GB, de los que
