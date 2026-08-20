@@ -522,7 +522,14 @@ cd ~/integration-hub/ops/fase-7-deploy/dist/vm
 nano .env                                                        # IMAGE_TAG=<la version nueva>
 docker compose -f docker-compose.cloud.yml --env-file .env pull platform-app audit-consumer
 docker compose -f docker-compose.cloud.yml --env-file .env up -d platform-app audit-consumer
+docker compose -f docker-compose.cloud.yml --env-file .env restart nginx
 ```
+
+**Esa tercera linea no es opcional.** El `proxy_pass` de nginx apunta a `platform-app` por nombre y
+sin directiva `resolver`, asi que resuelve la IP UNA sola vez, al cargar la configuracion. Al
+recrear el contenedor la IP cambia y nginx sigue mandando trafico a la anterior: **502 indefinido,
+con la aplicacion viva detras**. Sin ese reinicio, el despliegue parece correcto —los contenedores
+arrancan— y el sitio queda caido.
 
 **No se para la stack.** `up -d` recrea solo los dos contenedores cuya imagen cambio; Postgres,
 Kafka, Keycloak y OpenBao siguen corriendo, asi que **OpenBao no hay que desellarlo otra vez** — que

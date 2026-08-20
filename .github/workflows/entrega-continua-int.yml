@@ -1,0 +1,80 @@
+# =====================================================================================
+# ENTREGA CONTINUA A INTEGRACION. Cada fusion en develop que toque codigo publica una imagen
+# y la despliega en el servidor de integracion on-premise.
+#
+# HASTA INTEGRACION, Y NO MAS. Produccion sigue disparandose a mano (ADR-029, R5): con una
+# sola maquina, migraciones de Flyway que corren al arrancar y un rollback que no es simetrico,
+# automatizar el ultimo salto quitaria al unico humano que hoy mira antes de que el cambio
+# toque el camino del dinero. Aqui abajo, en cambio, automatizarlo es justo lo que hace util
+# el entorno: integracion queda siempre en la cabeza de develop, y ese binario es el mismo que
+# despues se promueve a la nube.
+#
+# NO DUPLICA NADA. Llama a los dos workflows que ya existen —publicar y desplegar—, asi que si
+# alguno cambia, cambia en un solo sitio y este lo hereda.
+# =====================================================================================
+name: Entrega continua a integracion
+
+on:
+  push:
+    branches: [develop]
+
+    # SE FILTRA POR QUE ES DOCUMENTACION, NO POR DONDE VIVE, y esa distincion costo un fallo:
+    # la primera version marcaba `ops/**` inerte entera, y ahi dentro hay 86 ficheros que no son
+    # documentacion. Entre ellos, dos que importan mucho:
+    #
+    #   ops/fase-7-deploy/dist/common/Dockerfile.native   CONSTRUYE la imagen de platform-app
+    #   ops/fase-7-deploy/dist/onprem/docker-compose.int.yml   es lo que se despliega
+    #
+    # Un cambio en la base de la imagen no habria disparado nada, y uno en el compose de
+    # integracion no se habria desplegado. Con `**/*.md` los runbooks de ops/ siguen siendo
+    # inertes, que era la intencion, sin arrastrar todo lo demas.
+    #
+    # `.github/**` SI es inerte AQUI, al contrario que en ci.yml, y no es una incoherencia: las
+    # dos listas responden preguntas distintas. La de ci.yml pregunta "¿hay que PROBAR esto?", y
+    # un cambio en CI se valida con CI. Esta pregunta "¿produce esto un BINARIO distinto?", y un
+    # YAML de workflow no entra en la imagen. Compilar 12 minutos del runner de pago por ajustar
+    # un YAML es tirar dinero.
+    #
+    # El precio de eso, aceptado a sabiendas: cambiar este workflow ya no lo pone a prueba solo.
+    # Se prueba con la siguiente fusion que lleve codigo, o lanzando el despliegue a mano.
+    #
+    # Ojo con lo que NO esta: `frontend/` dispara igual, porque Quinoa compila el SPA DENTRO de
+    # platform-app.
+    paths-ignore:
+      - "docs/**"
+      - "specs/**"
+      - "ai/**"
+      - "qa/**"
+      # Los dos patrones a proposito. La documentacion de GitHub define `**` como "cero o mas
+      # de cualquier caracter", lo que dejaria fuera un .md de la RAIZ —no hay barra que casar—,
+      # pero su propia guia sugiere lo contrario. No pude zanjarlo, y equivocarse aqui es
+      # invisible: un README de la raiz dispararia doce minutos de compilacion sin que nadie lo
+      # note. Con los dos, la duda deja de importar.
+      - "**/*.md"
+      - "*.md"
+      - ".github/**"
+
+# Dos fusiones seguidas en develop no pueden desplegar a la vez sobre la misma maquina. Y no se
+# cancela la que este en curso: abortar a mitad de un `up -d` deja el entorno a medio camino.
+concurrency:
+  group: entrega-continua-integracion
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    name: Publicar imagenes
+    uses: ./.github/workflows/publish-vm-images.yml
+
+  desplegar:
+    name: Desplegar en integracion
+    needs: publicar
+    uses: ./.github/workflows/deploy-int.yml
+    with:
+      # El tag EXACTO que acaba de publicarse, tomado del workflow que lo calculo. Recalcularlo
+      # aqui seria un error silencioso: `github.sha` es el SHA completo y el tag es el corto.
+      image_tag: ${{ needs.publicar.outputs.tag }}
+      git_ref: develop
