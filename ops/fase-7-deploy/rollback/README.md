@@ -23,8 +23,15 @@ historial, asi que no puede haber dos `Vnnn` aunque vengan de modulos distintos.
 
 ## Por que no viven en db/migration
 
-Porque Flyway aplicaria el script de bajada **como una migracion mas**, hacia adelante, en el
-siguiente arranque. Tienen que quedar fuera de las rutas que Flyway escanea.
+Porque Flyway los escanearia, y falla de **dos formas distintas** segun el numero que lleven:
+
+- **Con el mismo numero** que la migracion que deshacen —que es lo que manda la convencion de
+  arriba— la aplicacion ni siquiera arranca:
+  `Found more than one migration with version 101`.
+- **Con un numero nuevo** arranca, y es peor: Flyway lo aplica **hacia adelante** en el siguiente
+  despliegue, deshaciendo la migracion que acababa de aplicar.
+
+Por eso quedan fuera de las rutas que Flyway escanea, y no por prudencia.
 
 ## Las dos mitades
 
