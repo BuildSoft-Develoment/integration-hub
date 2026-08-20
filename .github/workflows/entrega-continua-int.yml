@@ -45,7 +45,13 @@ on:
       - "specs/**"
       - "ai/**"
       - "qa/**"
+      # Los dos patrones a proposito. La documentacion de GitHub define `**` como "cero o mas
+      # de cualquier caracter", lo que dejaria fuera un .md de la RAIZ —no hay barra que casar—,
+      # pero su propia guia sugiere lo contrario. No pude zanjarlo, y equivocarse aqui es
+      # invisible: un README de la raiz dispararia doce minutos de compilacion sin que nadie lo
+      # note. Con los dos, la duda deja de importar.
       - "**/*.md"
+      - "*.md"
       - ".github/**"
 
 # Dos fusiones seguidas en develop no pueden desplegar a la vez sobre la misma maquina. Y no se
