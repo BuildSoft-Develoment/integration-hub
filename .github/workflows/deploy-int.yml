@@ -112,6 +112,37 @@ jobs:
           docker compose -f "$COMPOSE" --env-file int/.env pull platform-app audit-consumer
           docker compose -f "$COMPOSE" --env-file int/.env up -d platform-app audit-consumer
 
+      # NGINX HAY QUE REINICIARLO, Y NO ES UNA PRECAUCION: es la causa del 502.
+      #
+      # Su configuracion usa `proxy_pass http://platform-app:8080` sin directiva `resolver`, asi
+      # que resuelve ese nombre UNA sola vez, al cargar. Al recrear el contenedor cambia su IP y
+      # nginx sigue mandando trafico a la anterior — indefinidamente. El primer despliegue
+      # automatico fallo exactamente asi: 20 intentos, 20 veces HTTP 502, con la aplicacion
+      # perfectamente viva detras.
+      - name: Reiniciar nginx para que resuelva la IP nueva
+        run: |
+          set -eu
+          cd "$RUTA"
+          docker compose -f "$COMPOSE" --env-file int/.env restart nginx
+
+      # Los plugins comparten el espacio de red de platform-app (network_mode: service:...), asi
+      # que al recrearla quedan colgados de un namespace que ya no existe. No basta reiniciarlos:
+      # hay que recrearlos. Se salta el que no este corriendo —plugin-java no compila hoy— para
+      # que un ejemplo roto no tumbe un despliegue que por lo demas fue bien.
+      - name: Recrear los plugins que comparten red con la aplicacion
+        run: |
+          set -eu
+          cd "$RUTA"
+          CORRIENDO="$(docker compose -f "$COMPOSE" --env-file int/.env ps --services --status running || true)"
+          for S in plugin-node plugin-python plugin-java; do
+            if echo "$CORRIENDO" | grep -qx "$S"; then
+              echo "recreando $S"
+              docker compose -f "$COMPOSE" --env-file int/.env up -d --no-deps --force-recreate "$S"
+            else
+              echo "$S no esta corriendo; se omite"
+            fi
+          done
+
       # Un despliegue no termina cuando el contenedor arranca. Se reintenta porque la
       # aplicacion tarda un momento en estar lista, no porque el fallo sea aceptable.
       - name: Comprobar que responde
