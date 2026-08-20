@@ -18,25 +18,41 @@ on:
   push:
     branches: [develop]
 
-    # LA LISTA ES DE RUTAS INERTES, NO DE RUTAS DE CODIGO. Enumerar el codigo obliga a acordarse
-    # de esta lista cada vez que nace un modulo, y el dia que alguien no se acuerde su cambio se
-    # publica sin desplegarse —o peor, no se publica y se despliega una imagen vieja creyendo que
-    # esta al dia—. Al reves, lo peor que pasa es compilar de mas.
+    # SE FILTRA POR QUE ES DOCUMENTACION, NO POR DONDE VIVE, y esa distincion costo un fallo:
+    # la primera version marcaba `ops/**` inerte entera, y ahi dentro hay 86 ficheros que no son
+    # documentacion. Entre ellos, dos que importan mucho:
+    #
+    #   ops/fase-7-deploy/dist/common/Dockerfile.native   CONSTRUYE la imagen de platform-app
+    #   ops/fase-7-deploy/dist/onprem/docker-compose.int.yml   es lo que se despliega
+    #
+    # Un cambio en la base de la imagen no habria disparado nada, y uno en el compose de
+    # integracion no se habria desplegado. Con `**/*.md` los runbooks de ops/ siguen siendo
+    # inertes, que era la intencion, sin arrastrar todo lo demas.
+    #
+    # `.github/**` SI es inerte AQUI, al contrario que en ci.yml, y no es una incoherencia: las
+    # dos listas responden preguntas distintas. La de ci.yml pregunta "¿hay que PROBAR esto?", y
+    # un cambio en CI se valida con CI. Esta pregunta "¿produce esto un BINARIO distinto?", y un
+    # YAML de workflow no entra en la imagen. Compilar 12 minutos del runner de pago por ajustar
+    # un YAML es tirar dinero.
+    #
+    # El precio de eso, aceptado a sabiendas: cambiar este workflow ya no lo pone a prueba solo.
+    # Se prueba con la siguiente fusion que lleve codigo, o lanzando el despliegue a mano.
     #
     # Ojo con lo que NO esta: `frontend/` dispara igual, porque Quinoa compila el SPA DENTRO de
-    # platform-app. Filtrar por "platform-app/ y audit-consumer/" habria dejado fuera los cambios
-    # de frontend y los de los modulos compartidos, que tambien cambian el binario.
-    #
-    # Aqui `paths-ignore` es seguro, al contrario que en ci.yml: alli un check que no existe deja
-    # colgado a un ruleset que lo exija, y por eso los jobs tienen que existir y reportarse como
-    # omitidos. Este workflow no es un check de pull request y nadie lo va a exigir.
+    # platform-app.
     paths-ignore:
       - "docs/**"
       - "specs/**"
       - "ai/**"
       - "qa/**"
-      - "ops/**"
+      # Los dos patrones a proposito. La documentacion de GitHub define `**` como "cero o mas
+      # de cualquier caracter", lo que dejaria fuera un .md de la RAIZ —no hay barra que casar—,
+      # pero su propia guia sugiere lo contrario. No pude zanjarlo, y equivocarse aqui es
+      # invisible: un README de la raiz dispararia doce minutos de compilacion sin que nadie lo
+      # note. Con los dos, la duda deja de importar.
+      - "**/*.md"
       - "*.md"
+      - ".github/**"
 
 # Dos fusiones seguidas en develop no pueden desplegar a la vez sobre la misma maquina. Y no se
 # cancela la que este en curso: abortar a mitad de un `up -d` deja el entorno a medio camino.
