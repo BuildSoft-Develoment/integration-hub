@@ -54,8 +54,24 @@ jobs:
             exit 0
           fi
 
-          git fetch -q --depth=1 origin "$BASE"
-          FICHEROS="$(git diff --name-only FETCH_HEAD...HEAD)"
+          # SIN --depth. Traer la punta de la base sin historia deja el repositorio sin
+          # antepasado comun, y la comparacion de tres puntos —que necesita uno— muere con
+          # "no merge base". Colo en los dos primeros pull requests porque la rama salia justo
+          # de esa punta y el antepasado era ella misma; al primer PR con la base movida, fallo.
+          # El checkout de arriba ya trae la historia completa (fetch-depth: 0).
+          git fetch -q origin "$BASE"
+
+          # SI EL CALCULO FALLA, SE EJECUTA TODO. Un filtro solo puede permitirse OMITIR cuando
+          # esta seguro; ante cualquier duda tiene que caer del lado de probar. Antes, un error
+          # aqui tumbaba el job entero y bloqueaba el pull request —que es el peor de los dos
+          # comportamientos posibles: ni prueba ni deja pasar.
+          if ! FICHEROS="$(git diff --name-only "origin/${BASE}...HEAD" 2>&1)"; then
+            echo "No se pudo comparar contra origin/${BASE}:"
+            echo "$FICHEROS" | sed 's/^/  /'
+            echo "pesados=true" >> "$GITHUB_OUTPUT"
+            echo "Se ejecuta todo por precaucion."
+            exit 0
+          fi
           echo "Ficheros cambiados:"; echo "$FICHEROS" | sed 's/^/  /'
 
           # Rutas que no pueden alterar el comportamiento del codigo compilado.
