@@ -1,0 +1,51 @@
+name: CI origen de main
+
+# MECANIZA UNA REGLA QUE YA ESTABA ESCRITA. CONTRIBUTING.md declara desde hace tiempo que a `main`
+# "solo merges desde develop o hotfix/*", y hasta hoy no lo comprobaba nadie: la ultima docena de
+# fusiones directas sobre main cumplen la regla por disciplina, no porque algo lo impida.
+#
+# POR QUE IMPORTA. `main` es lo que se taggea, y de un tag salen las imagenes que acaban en la VM
+# (publish-vm-images.yml dispara con `push: tags: v*`). Una rama de trabajo fusionada directa a main
+# se salta la validacion completa que solo corre sobre develop, y aterriza en lo desplegable.
+#
+# POR QUE UN CHECK Y NO UNA REGLA DE RAMA. Ni los rulesets ni la proteccion clasica saben restringir
+# DE QUE rama viene un pull request: controlan quien empuja y que checks pasan, no el origen. La via
+# es un check requerido, que es como ya funcionan los otros tres gates de este repositorio.
+#
+# OJO CON LOS REVERT. El boton "Revert" de GitHub crea ramas `revert-<PR>-<rama>`, que este gate
+# rechaza. Es coherente con CONTRIBUTING —un arreglo urgente sobre lo desplegado va por `hotfix/`—
+# pero conviene saberlo antes de necesitarlo con prisa.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  origen:
+    name: Origen permitido para main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Comprobar la rama de origen
+        env:
+          ORIGEN: ${{ github.head_ref }}
+        run: |
+          set -eu
+          case "$ORIGEN" in
+            develop|hotfix/*)
+              echo "Origen '$ORIGEN': permitido por CONTRIBUTING.md."
+              exit 0
+              ;;
+          esac
+
+          echo "::error::A main solo entran 'develop' y 'hotfix/*'; este pull request viene de '$ORIGEN'."
+          echo ""
+          echo "  main es lo desplegable: de sus tags salen las imagenes que corren en la VM. Una rama"
+          echo "  de trabajo fusionada aqui se salta la validacion que solo corre sobre develop."
+          echo ""
+          echo "  Si es trabajo normal:   fusionalo primero en develop y sincroniza main desde ahi."
+          echo "  Si es una urgencia:     abrelo desde una rama hotfix/<asunto>, y despues llevalo"
+          echo "                          tambien a develop —o el siguiente merge lo revierte—."
+          echo ""
+          echo "  La regla no es de este workflow: esta en CONTRIBUTING.md, tabla de ramas."
+          exit 1
