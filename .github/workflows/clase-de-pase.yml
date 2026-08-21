@@ -1,0 +1,100 @@
+name: Clase del pase
+
+# PONE EL VEREDICTO A/B/C EN LA PANTALLA DE APROBACION. Es la segunda mitad de D4 de ADR-030: el
+# clasificador ya existe y corre sobre los pull requests que anaden migraciones, pero quien aprueba un
+# DESPLIEGUE necesita verlo aqui, sobre el salto que va a aplicar, y no en otro pull request de hace
+# tres semanas.
+#
+# POR QUE VIVE EN ESTA RAMA Y NO EN develop. En un `pull_request` GitHub lee los workflows del arbol
+# FUSIONADO (head + base), no de la rama por defecto. Esta rama es huerfana: no comparte historia con
+# develop ni contiene `.github/`. Un workflow que viviera solo alla no se ejecutaria jamas aqui.
+# Comprobado en el sentido contrario: el pull request #103 modifico ci-compat-db.yml y corrio su
+# propia version.
+#
+# DE DONDE SALE EL CLASIFICADOR. De `main`, en un segundo checkout: el script y -sobre todo- la
+# historia completa que necesita para comparar los dos tags. Los tags de despliegue SON SHAs cortos de
+# commits de main, asi que `--desde <tag_estable> --hasta <tag>` compara commits de verdad.
+
+on:
+  pull_request:
+    branches: [estado/vm-produccion]
+
+jobs:
+  clase:
+    name: Clase del pase (A/B/C)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # 1) El pull request: de aqui salen los dos tags.
+      - uses: actions/checkout@v4
+
+      # 2) main: de aqui salen el clasificador y la historia. SIN --depth: la comparacion de tres
+      #    puntos necesita antepasado comun, y ademas los dos tags tienen que existir en el clon.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          path: repo
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Leer los tags del fichero de estado
+        id: tags
+        run: |
+          set -euo pipefail
+          leer() { sed 's/\r$//' estado.yaml | grep -E "^$1:" | head -1 | cut -d: -f2- | tr -d ' '; }
+          TAG="$(leer tag || true)"
+          ESTABLE="$(leer tag_estable || true)"
+          echo "tag=$TAG"             >> "$GITHUB_OUTPUT"
+          echo "estable=$ESTABLE"     >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG · tag_estable=$ESTABLE"
+
+      - name: Clasificar el salto
+        env:
+          TAG: ${{ steps.tags.outputs.tag }}
+          ESTABLE: ${{ steps.tags.outputs.estable }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$TAG" ]; then
+            echo "### Sin despliegue" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`tag\` esta vacio: no hay nada que desplegar y no hay nada que clasificar." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # UN SALTO QUE NO SE PUEDE CLASIFICAR NO ES UN SALTO SEGURO. Sin `tag_estable` no hay base
+          # contra la que comparar, y aprobar a ciegas un pase en el camino del dinero no es opcion.
+          if [ -z "$ESTABLE" ]; then
+            echo '::error::tag_estable esta vacio: no hay base contra la que clasificar el salto.'
+            exit 1
+          fi
+
+          cd repo
+          for ref in "$ESTABLE" "$TAG"; do
+            git cat-file -e "$ref^{commit}" 2>/dev/null || {
+              echo "::error::El tag '$ref' no corresponde a ningun commit del repositorio."
+              exit 1
+            }
+          done
+          cd ..
+
+          {
+            echo "## Clase del pase"
+            echo ""
+            echo "\`$ESTABLE\` → \`$TAG\`"
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # pipefail: sin el, el codigo de salida seria el de `tee` y un pase de clase C sin script
+          # pasaria por verde. Ya nos mordio antes en esta misma consola.
+          set -o pipefail
+          node repo/ci/scripts/check-rollback-class.mjs \
+            --root repo --desde "$ESTABLE" --hasta "$TAG" --strict \
+            2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          CODIGO=$?
+
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $CODIGO
