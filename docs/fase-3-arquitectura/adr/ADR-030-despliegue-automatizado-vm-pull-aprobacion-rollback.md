@@ -108,8 +108,50 @@ manuales, y `ops/**` **no** esta en la lista de rutas inertes de `entrega-contin
 a proposito porque ahi vive `Dockerfile.native`—, asi que dejar el fichero bajo `ops/` en `develop`
 lanzaria doce minutos de compilacion nativa en cada aprobacion y en cada rollback.
 
-**D3. Aprobacion humana antes de escribir esa version.** Con *Environments* y revisores obligatorios
-de GitHub. Cumple R5 de ADR-029.
+**D3. La aprobacion es la fusion de un pull request, no un boton de entorno.** Cumple R5 de ADR-029,
+pero no por donde este ADR decia en su primera version.
+
+**Por que cambia.** Decia "con *Environments* y revisores obligatorios de GitHub". **Eso no esta
+disponible aqui**: comprobado el 2026-08-20 creando el entorno `produccion` en este repositorio, su
+pagina de configuracion ofrece **solo** ramas y tags, secretos y variables. No hay seccion de reglas
+de proteccion: ni revisores obligatorios, ni temporizador, ni *Prevent self-review*. La documentacion
+de GitHub solo lo insinua —"some features for environments have no or limited availability for
+private repositories"— sin decir cuales. Que la seccion *Environments* exista no significa que dentro
+este la puerta.
+
+**Lo que la sustituye.** Por D2 la version deseada ya vive en un fichero versionado: el workflow
+**propone** el cambio de `tag` como un pull request contra la rama de estado, y **fusionarlo es la
+aprobacion**. El agente de la VM ve el commit resultante y despliega.
+
+No es un apano por no tener lo otro; es mejor en tres cosas:
+
+- **Se ve el diff** —`tag: 13da61d -> 9b064f6`—. Aprobar deja de ser un boton sin contexto.
+- **El veredicto A/B/C de D4 cabe en el cuerpo del pull request**, que es donde se lee de verdad.
+- **Las protecciones de rama son mas capaces que las del entorno.** Un entorno admite como mucho
+  1-de-N: "only one of the required reviewers needs to approve". Un pull request permite exigir **N
+  aprobaciones** ("Required number of approvals before merging"), asi que el dia que direccion pida
+  doble firma para el camino del dinero, se puede.
+
+**La configuracion, verificada sobre el formulario de este repositorio:**
+
+- `Require a pull request before merging` sobre la rama de estado;
+- `Require approvals`: 1 hoy, ampliable;
+- `Require approval of the most recent reviewable push` —"whether the most recent reviewable push
+  must be approved by someone other than the person who pushed it"—. Es el *Prevent self-review* que
+  el entorno no ofrecia, y es lo que convierte la pausa en segregacion de funciones;
+- **quien aprueba se designa con `CODEOWNERS`** apuntando el fichero de estado al equipo
+  `@BuildSoft-Develoment/aprobadores-produccion`, mas `Require review from Code Owners`. Sin eso
+  aprueba cualquiera con escritura. El equipo se creo el 2026-08-20 con rol **Read**: un aprobador no
+  necesita mas.
+
+**Mientras haya una sola persona** la regla de "aprobado por alguien distinto de quien empujo" no
+puede cumplirse, igual que pasaba con el entorno. Se deja activada de todos modos: hoy no hay nada
+que desplegar automaticamente, y con ella puesta es **imposible** que un despliegue se apruebe solo
+mientras se construye el resto.
+
+**El entorno `produccion` se conserva** aunque no sea la puerta: su restriccion de ramas y tags
+sigue funcionando y mecaniza la R1 de ADR-029 —solo un tag inmutable despliega—, y da un sitio para
+secretos propios de produccion.
 
 **D4. Cada pase se clasifica solo, y la clase se muestra en la pantalla de aprobacion.** La
 clasificacion sale del diff de **todos** los directorios que declara `quarkus.flyway.locations`, no
@@ -287,9 +329,10 @@ aprobado_por: ...
 fecha: ...
 ```
 
-**Lo escribe el workflow de aprobacion, nunca la maquina.** Es lo que mantiene en pie D1: si el
-agente tuviera que promover el tag estable, necesitaria credencial de **escritura** sobre el
-repositorio, y el modelo pull dejaria de ser solo-lectura por la puerta de atras.
+**Lo propone un workflow y lo fusiona una persona (D3); la maquina no escribe nunca.** Es lo que
+mantiene en pie D1: si el agente tuviera que promover el tag estable, necesitaria credencial de
+**escritura** sobre el repositorio, y el modelo pull dejaria de ser solo-lectura por la puerta de
+atras.
 
 **La promocion es una comprobacion, no un apunte.** Antes de escribir el `tag` nuevo, el workflow
 consulta el endpoint publico de salud —`https://<host>/appih/q/health`, el mismo 200 que ya exige
