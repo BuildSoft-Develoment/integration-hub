@@ -55,6 +55,7 @@
     "check:auto-zones": "node ci/scripts/check-auto-zones.mjs",
     "check:global-matrix": "node ci/scripts/check-global-matrix.mjs --strict",
     "check:migration-immutability": "node ci/scripts/check-migration-immutability.mjs --strict",
+    "check:rollback-class": "node ci/scripts/check-rollback-class.mjs --strict",
     "check:construction-map": "node ci/scripts/check-construction-map.mjs --strict",
     "check:touch-policy": "node ci/scripts/check-touch-policy.mjs --strict",
     "check:disabled-tooltip": "node ci/scripts/check-disabled-tooltip.mjs --strict",
