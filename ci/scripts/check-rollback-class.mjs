@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * check-rollback-class.mjs (v1.0)
+ * check-rollback-class.mjs (v1.1)
  *
  * Clasifica un pase en A/B/C segun lo que costaria RETROCEDERLO, y bloquea el que no traiga con que.
  * Es la regla D4 de ADR-030, y la primera comprobacion mecanica que tiene la R3 de ADR-029.
@@ -24,6 +24,13 @@
  * migracion fuera inofensiva —Quarkus sobrescribe con una lista vacia el `["*:future"]` que Flyway
  * trae por defecto—, y por eso la B lleva variable. Verificado en JVM y en nativo (ADR-030, hecho 1).
  *
+ * EL ANCHO ANTERIOR SE MIDE ANTES, NO DESPUES. Para saber si un `ALTER ... TYPE` ensancha o estrecha
+ * hace falta el tipo previo, y eso obliga a reconstruir el esquema recorriendo las migraciones EN
+ * ORDEN DE VERSION y evaluando cada una con el mapa tal y como estaba ANTES de aplicarla. La v1.0
+ * construia el mapa con todas de golpe, incluida la que estaba clasificando: comparaba la columna
+ * consigo misma, y un `varchar(255) -> varchar(20)` salia como clase B. Verificado con una migracion
+ * de prueba antes y despues del arreglo.
+ *
  * CAE SIEMPRE DEL LADO ESTRICTO. Leer SQL con expresiones regulares se puede enganar. Un filtro solo
  * puede permitirse ser permisivo cuando esta seguro, asi que ante cualquier duda -tipo que no se
  * puede comparar, sentencia que no se reconoce- la clase sube a C. Equivocarse hacia C cuesta
@@ -42,7 +49,7 @@ import { execFileSync } from "node:child_process";
 import { resolve, join } from "node:path";
 import { resolveStrict } from "./_lib/strict-mode.mjs";
 
-const VERSION = "v1.0";
+const VERSION = "v1.1";
 const DIR_BAJADAS = "ops/fase-7-deploy/rollback";
 const PROPIEDADES = "platform-app/src/main/resources/application.properties";
 
@@ -64,15 +71,29 @@ function parseArgs(argv) {
 }
 
 function git(root, args) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return execFileSync("git", args, {
+    cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 32 * 1024 * 1024,
+  });
 }
 
-/** Quita comentarios antes de buscar patrones. Sin esto, un `-- ampliado a varchar(40)` cuenta. */
-function sinComentarios(sql) {
-  return sql.replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+/**
+ * Deja el SQL listo para buscar patrones:
+ *   - fuera comentarios: sin esto, un `-- ampliado a varchar(40) en V38` cuenta como sentencia, y
+ *     este repositorio tiene comentarios asi;
+ *   - fuera cuerpos `$$ ... $$`: el DDL de dentro de una funcion o un trigger no se ejecuta al
+ *     migrar, y ademas sus `;` internos rompen el troceo por sentencia.
+ */
+function limpiar(sql) {
+  return sql
+    .replace(/\r\n/g, "\n")
+    .replace(/\$\$[\s\S]*?\$\$/g, " $BLOQUE$ ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--[^\n]*/g, " ");
 }
 
 const norm = (s) => s.replace(/\s+/g, " ").trim();
+const sinEsquema = (t) => norm(t).toLowerCase().replace(/^[a-z0-9_]+\./, "");
+const versionDe = (nombre) => (nombre.match(/(?:^|\/)V(\d+)__/) || [])[1] || null;
 
 /**
  * Localiza los directorios de migracion leyendo `quarkus.flyway.locations`, NO con una lista escrita.
@@ -92,12 +113,13 @@ function directoriosDeMigracion(root) {
 
   const dirs = [];
   const sinResolver = [];
+  const modulos = readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith(".") && d.name !== "node_modules");
+
   for (const loc of locations) {
-    const encontrados = [];
-    for (const modulo of readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory())) {
-      const cand = join(root, modulo.name, "src", "main", "resources", loc);
-      if (existsSync(cand)) encontrados.push(`${modulo.name}/src/main/resources/${loc}`);
-    }
+    const encontrados = modulos
+      .map((m) => `${m.name}/src/main/resources/${loc}`)
+      .filter((rel) => existsSync(join(root, rel)));
     if (encontrados.length === 0) sinResolver.push(loc);
     else dirs.push(...encontrados);
   }
@@ -106,7 +128,7 @@ function directoriosDeMigracion(root) {
 }
 
 // -------------------------------------------------------------------------------------------------
-// Tipos declarados: para saber si un ALTER ... TYPE ensancha hace falta el tipo ANTERIOR
+// Reconstruccion del ancho declarado de cada columna
 // -------------------------------------------------------------------------------------------------
 
 /** varchar(80) -> 80 · char(1) -> 1 · text -> Infinity · lo demas -> null (no comparable) */
@@ -117,54 +139,74 @@ function anchoDe(tipo) {
   return m ? Number(m[1]) : null;
 }
 
-const sinEsquema = (t) => norm(t).toLowerCase().replace(/^[a-z0-9_]+\./, "");
-
 /**
- * Recorre las migraciones en orden de version y anota el ultimo ancho conocido de cada `tabla.columna`.
- * Se indexa por tabla para no confundir dos columnas homonimas de tablas distintas —`status` aparece
- * declarada con cinco anchos distintos en este repositorio—.
+ * Extrae los cuerpos de `create table ... ( ... )` contando parentesis.
+ * Con expresion regular no vale: el cierre puede caer en la misma linea que la ultima columna, y hay
+ * 45 CREATE TABLE en el repositorio con formatos distintos.
  */
-function anchosDeclarados(ficheros) {
-  const ancho = new Map();
-  const anota = (tabla, col, tipo) => {
-    const a = anchoDe(tipo);
-    ancho.set(`${sinEsquema(tabla)}.${col.toLowerCase()}`, a);
-  };
-
-  for (const { contenido } of ficheros) {
-    const sql = sinComentarios(contenido);
-
-    for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?([a-z0-9_.]+)\s*\(([\s\S]*?)\n\s*\)\s*;/gi)) {
-      const tabla = m[1];
-      for (const cruda of m[2].split("\n")) {
-        const c = norm(cruda).replace(/,$/, "");
-        const d = c.match(/^([a-z0-9_]+)\s+(.+)$/i);
-        if (!d) continue;
-        if (/^(primary|foreign|unique|constraint|check)\b/i.test(d[1])) continue;
-        anota(tabla, d[1], d[2]);
-      }
+function cuerposCreateTable(sql) {
+  const out = [];
+  const re = /create\s+table\s+(?:if\s+not\s+exists\s+)?([a-z0-9_.]+)\s*\(/gi;
+  let m;
+  while ((m = re.exec(sql)) !== null) {
+    let nivel = 1;
+    let i = re.lastIndex;
+    while (i < sql.length && nivel > 0) {
+      if (sql[i] === "(") nivel++;
+      else if (sql[i] === ")") nivel--;
+      i++;
     }
+    if (nivel === 0) out.push({ tabla: m[1], cuerpo: sql.slice(re.lastIndex, i - 1) });
+  }
+  return out;
+}
 
-    for (const m of sql.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?([a-z0-9_.]+)([\s\S]*?);/gi)) {
-      const tabla = m[1];
-      for (const a of m[2].matchAll(/add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z0-9_]+)\s+([^,;]+)/gi)) {
-        anota(tabla, a[1], a[2]);
-      }
-      for (const a of m[2].matchAll(/alter\s+column\s+([a-z0-9_]+)\s+(?:set\s+data\s+)?type\s+([^,;]+)/gi)) {
-        anota(tabla, a[1], a[2]);
-      }
+/** Trocea el cuerpo de un CREATE TABLE por comas de primer nivel: `varchar(80)` no debe partirlo. */
+function columnasDe(cuerpo) {
+  const trozos = [];
+  let nivel = 0, actual = "";
+  for (const ch of cuerpo) {
+    if (ch === "(") nivel++;
+    else if (ch === ")") nivel--;
+    if (ch === "," && nivel === 0) { trozos.push(actual); actual = ""; } else actual += ch;
+  }
+  trozos.push(actual);
+  return trozos;
+}
+
+/** Aplica al mapa las declaraciones de ESTA migracion. Muta `ancho`. */
+function aplicaDeclaraciones(contenido, ancho) {
+  const sql = limpiar(contenido);
+  const anota = (tabla, col, tipo) =>
+    ancho.set(`${sinEsquema(tabla)}.${col.toLowerCase()}`, anchoDe(tipo));
+
+  for (const { tabla, cuerpo } of cuerposCreateTable(sql)) {
+    for (const cruda of columnasDe(cuerpo)) {
+      const c = norm(cruda);
+      const d = c.match(/^([a-z0-9_]+)\s+(.+)$/i);
+      if (!d) continue;
+      if (/^(primary|foreign|unique|constraint|check|exclude|like)$/i.test(d[1])) continue;
+      anota(tabla, d[1], d[2]);
     }
   }
-  return ancho;
+
+  for (const m of sql.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?([a-z0-9_.]+)([\s\S]*?);/gi)) {
+    for (const a of m[2].matchAll(/add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z0-9_]+)\s+([^,;]+)/gi)) {
+      anota(m[1], a[1], a[2]);
+    }
+    for (const a of m[2].matchAll(/alter\s+column\s+([a-z0-9_]+)\s+(?:set\s+data\s+)?type\s+([^,;]+)/gi)) {
+      anota(m[1], a[1], a[2]);
+    }
+  }
 }
 
 // -------------------------------------------------------------------------------------------------
 // Clasificacion de una migracion
 // -------------------------------------------------------------------------------------------------
 
-/** Devuelve los motivos por los que la migracion impide retroceder. Vacio = aditiva. */
-function motivosDestructivos(contenido, anchos) {
-  const sql = sinComentarios(contenido);
+/** Motivos por los que la migracion impide retroceder. Vacio = aditiva. `ancho` es el estado PREVIO. */
+function motivosDestructivos(contenido, ancho) {
+  const sql = limpiar(contenido);
   const motivos = [];
 
   for (const m of sql.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?([a-z0-9_.]+)([\s\S]*?);/gi)) {
@@ -181,19 +223,19 @@ function motivosDestructivos(contenido, anchos) {
       motivos.push(`SET NOT NULL ${sinEsquema(tabla)}.${s[1]} — la version vieja insertaria NULL`);
     }
     for (const a of cuerpo.matchAll(/add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z0-9_]+)\s+([^,;]+)/gi)) {
-      const def = a[2];
-      if (/\bnot\s+null\b/i.test(def) && !/\bdefault\b/i.test(def)) {
+      if (/\bnot\s+null\b/i.test(a[2]) && !/\bdefault\b/i.test(a[2])) {
         motivos.push(`ADD COLUMN ${sinEsquema(tabla)}.${a[1]} NOT NULL sin DEFAULT — la version vieja no la rellena`);
       }
     }
     for (const t of cuerpo.matchAll(/alter\s+column\s+([a-z0-9_]+)\s+(?:set\s+data\s+)?type\s+([^,;]+)/gi)) {
-      const col = t[1];
+      const clave = `${sinEsquema(tabla)}.${t[1].toLowerCase()}`;
       const nuevo = anchoDe(t[2]);
-      const previo = anchos.get(`${sinEsquema(tabla)}.${col.toLowerCase()}`);
+      const previo = ancho.get(clave);
       if (nuevo === null || previo === null || previo === undefined) {
-        motivos.push(`ALTER TYPE ${sinEsquema(tabla)}.${col} -> ${norm(t[2])} — no se puede probar que ensanche`);
+        motivos.push(`ALTER TYPE ${sinEsquema(tabla)}.${t[1]} -> ${norm(t[2])} — no se puede probar que ensanche`);
       } else if (nuevo < previo) {
-        motivos.push(`ALTER TYPE ${sinEsquema(tabla)}.${col} estrecha ${previo} -> ${nuevo} — los datos existentes pueden no caber`);
+        const antes = previo === Infinity ? "text" : previo;
+        motivos.push(`ALTER TYPE ${sinEsquema(tabla)}.${t[1]} ESTRECHA ${antes} -> ${nuevo} — los datos existentes pueden no caber`);
       }
     }
   }
@@ -204,8 +246,6 @@ function motivosDestructivos(contenido, anchos) {
 
   return motivos;
 }
-
-const versionDe = (nombre) => (nombre.match(/(?:^|\/)V(\d+)__/) || [])[1] || null;
 
 // -------------------------------------------------------------------------------------------------
 // Principal
@@ -232,7 +272,7 @@ function main() {
   let anadidos;
   try {
     const salida = git(root, ["diff", "--name-only", "--diff-filter=A", `${desde}...${hasta}`, "--", ...dirs]);
-    anadidos = salida.split("\n").map((s) => s.trim()).filter((s) => s.endsWith(".sql"));
+    anadidos = new Set(salida.split("\n").map((s) => s.trim()).filter((s) => s.endsWith(".sql")));
   } catch (e) {
     console.error(`No se pudo comparar ${desde}...${hasta}: ${String(e.stderr || e.message).trim()}`);
     console.error("Un veredicto que no se puede calcular no es un veredicto de clase A.");
@@ -241,42 +281,41 @@ function main() {
 
   console.log(`Salto analizado: ${desde}...${hasta}`);
 
-  if (anadidos.length === 0) {
+  if (anadidos.size === 0) {
     console.log("");
     console.log("CLASE A — el salto no anade migraciones.");
     console.log("Retroceder es cambiar el tag: ni script de bajada ni variables ni instantanea.");
     return 0;
   }
 
-  // El contenido se lee del lado `hasta`: los ficheros pueden no existir en la copia de trabajo.
-  const ficheros = [];
-  for (const ruta of anadidos) {
+  // Todo el historial DEL LADO `hasta`, no de la copia de trabajo: el salto puede no ser HEAD.
+  let inventario;
+  try {
+    inventario = git(root, ["ls-tree", "-r", "--name-only", hasta, "--", ...dirs])
+      .split("\n").map((s) => s.trim()).filter((s) => /\/V\d+__.*\.sql$/.test(s));
+  } catch (e) {
+    console.error(`No se pudo listar las migraciones en ${hasta}: ${String(e.stderr || e.message).trim()}`);
+    return 1;
+  }
+  inventario.sort((a, b) => Number(versionDe(a)) - Number(versionDe(b)));
+
+  // ORDEN DE VERSION, y cada migracion se juzga con el esquema tal y como estaba ANTES de ella.
+  const ancho = new Map();
+  const destructivas = [];
+  const aditivas = [];
+  for (const ruta of inventario) {
+    let contenido;
     try {
-      ficheros.push({ ruta, contenido: git(root, ["show", `${hasta}:${ruta}`]) });
+      contenido = git(root, ["show", `${hasta}:${ruta}`]);
     } catch {
       console.error(`No se pudo leer ${ruta} en ${hasta}.`);
       return 1;
     }
-  }
-  ficheros.sort((a, b) => Number(versionDe(a.ruta) || 0) - Number(versionDe(b.ruta) || 0));
-
-  // Para comparar anchos hace falta la historia completa, no solo lo que anade el salto.
-  const todas = [];
-  for (const dir of dirs) {
-    const abs = join(root, dir);
-    if (!existsSync(abs)) continue;
-    for (const n of readdirSync(abs).filter((f) => f.endsWith(".sql"))) {
-      todas.push({ ruta: `${dir}/${n}`, contenido: readFileSync(join(abs, n), "utf8") });
+    if (anadidos.has(ruta)) {
+      const motivos = motivosDestructivos(contenido, ancho);
+      (motivos.length ? destructivas : aditivas).push({ ruta, motivos });
     }
-  }
-  todas.sort((a, b) => Number(versionDe(a.ruta) || 0) - Number(versionDe(b.ruta) || 0));
-  const anchos = anchosDeclarados(todas);
-
-  const destructivas = [];
-  const aditivas = [];
-  for (const f of ficheros) {
-    const motivos = motivosDestructivos(f.contenido, anchos);
-    (motivos.length ? destructivas : aditivas).push({ ...f, motivos });
+    aplicaDeclaraciones(contenido, ancho);
   }
 
   console.log("");
@@ -297,9 +336,7 @@ function main() {
     console.log(`  ! ${f.ruta}`);
     for (const m of f.motivos) console.log(`      ${m}`);
   }
-  if (aditivas.length) {
-    console.log(`  (${aditivas.length} aditiva(s) mas en el mismo salto)`);
-  }
+  if (aditivas.length) console.log(`  (${aditivas.length} aditiva(s) mas en el mismo salto)`);
 
   // D7: un pase de clase C no se aprueba sin script de bajada, y el script lleva DOS mitades.
   const dirBajadas = join(root, DIR_BAJADAS);
@@ -317,8 +354,7 @@ function main() {
       hallazgos.push(`falta ${DIR_BAJADAS}/V${v}__<nombre>.down.sql para ${f.ruta}`);
       continue;
     }
-    const cuerpo = readFileSync(join(dirBajadas, bajada), "utf8");
-    if (!/flyway_schema_history/i.test(cuerpo)) {
+    if (!/flyway_schema_history/i.test(readFileSync(join(dirBajadas, bajada), "utf8"))) {
       hallazgos.push(
         `${DIR_BAJADAS}/${bajada} deshace el DDL pero no borra su fila de flyway_schema_history; ` +
         `sin esa mitad la imagen anterior tampoco arranca.`,
