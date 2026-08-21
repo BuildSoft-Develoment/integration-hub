@@ -90,11 +90,17 @@ jobs:
 
           # pipefail: sin el, el codigo de salida seria el de `tee` y un pase de clase C sin script
           # pasaria por verde. Ya nos mordio antes en esta misma consola.
+          # SEGUNDA GUARDA, Y NO ES DECORATIVA: sin set +e, el set -e de arriba aborta el paso en
+          # la tuberia y las dos lineas de abajo NO se ejecutan. El codigo de salida acaba siendo
+          # el correcto por accidente, pero el resumen se queda con el bloque de codigo sin cerrar
+          # justo en el unico caso que importa: el rechazo. Comprobado ejecutandolo, no leyendolo.
           set -o pipefail
+          set +e
           node repo/ci/scripts/check-rollback-class.mjs \
             --root repo --desde "$ESTABLE" --hasta "$TAG" --strict \
             2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           CODIGO=$?
+          set -e
 
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit $CODIGO
