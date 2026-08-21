@@ -14,7 +14,7 @@ tag: f9c273d
 # La ultima version que se probo SANA, y por tanto el destino de un rollback.
 # NO es "el tag anterior": si un pase salio mal, el que quieres es su predecesor, no el.
 # Solo avanza cuando se puede probar que la version anterior corria y respondia sana (D13).
-tag_estable: f9c273d
+tag_estable: 31b03f70
 # A | B | C, calculada por `ci/scripts/check-rollback-class.mjs` sobre el salto tag_estable..tag:
 #   A  sin migraciones      -> retroceder es cambiar el tag
 #   B  solo aditivas        -> ademas QUARKUS_FLYWAY_IGNORE_FUTURE_MIGRATIONS=true (D5),
