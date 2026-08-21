@@ -1,0 +1,29 @@
+# ESTADO DE DESPLIEGUE DE LA VM DE PRODUCCION
+#
+# Unica fuente de verdad de que version debe correr en la VM (ADR-030, D2). El agente de la maquina
+# lo lee y aplica lo que diga. Nadie empuja hacia la maquina: la maquina tira.
+#
+# COMO SE CAMBIA: nunca a mano sobre esta rama. Un workflow propone el cambio como pull request y
+# FUSIONARLO es la aprobacion (D3). Asi cada despliegue y cada rollback quedan como un commit con
+# autor y fecha, revisable y revertible.
+#
+# UN ROLLBACK es escribir en `tag` el valor de `tag_estable`, dejando `tag_estable` intacto.
+
+# Lo que la maquina debe correr. Un tag INMUTABLE: nunca latest, main ni develop (R1 de ADR-029).
+tag:
+
+# La ultima version que se probo SANA, y por tanto el destino de un rollback.
+# NO es "el tag anterior": si un pase salio mal, el que quieres es su predecesor, no el.
+# Solo avanza cuando se puede probar que la version anterior corria y respondia sana (D13).
+tag_estable:
+
+# A | B | C, calculada por `ci/scripts/check-rollback-class.mjs` sobre el salto tag_estable..tag:
+#   A  sin migraciones      -> retroceder es cambiar el tag
+#   B  solo aditivas        -> ademas QUARKUS_FLYWAY_IGNORE_FUTURE_MIGRATIONS=true (D5),
+#                              que se RETIRA al volver adelante (D6)
+#   C  alguna destructiva   -> script de bajada + borrado del historial + instantanea (D7, D9)
+clase:
+
+# Quien aprobo, y cuando. Los rellena el workflow con los datos de la fusion.
+aprobado_por:
+fecha:
