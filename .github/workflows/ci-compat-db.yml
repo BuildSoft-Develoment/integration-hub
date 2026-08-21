@@ -54,7 +54,32 @@ jobs:
     # dejaria un runner colgado consumiendo cuota si un contenedor no levanta.
     timeout-minutes: 60
     steps:
+      # SIN --depth. La clase de rollback sale de una comparacion de TRES PUNTOS contra la base, y
+      # esa necesita un antepasado comun: con el clon superficial muere con "no merge base". Es el
+      # mismo tropiezo que ya costo un pull request bloqueado en ci.yml.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ADR-030 D4/D7. Se pone ANTES de la matriz multi-motor a proposito: tarda segundos y responde
+      # la pregunta que mas caro sale tarde —si esta release se puede retroceder—, mientras que la
+      # matriz tarda decenas de minutos. Si el pase es de clase C sin script de bajada, no merece la
+      # pena arrancar cuatro motores para averiguar lo demas.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Clase de rollback del pase (ADR-030 D4)
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -eu
+          if [ -z "${BASE:-}" ]; then
+            echo "Fuera de un pull request no hay base contra la que comparar: se omite."
+            exit 0
+          fi
+          git fetch -q origin "$BASE"
+          node ci/scripts/check-rollback-class.mjs --desde "origin/$BASE" --hasta HEAD --strict
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
