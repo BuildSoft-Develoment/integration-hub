@@ -71,6 +71,11 @@ const META_VALIDATORS = new Set([
 const CI_ONLY_VALIDATORS = new Set([
   "check-github-actions.mjs",      // valida workflows .github/, CI-level
   "check-openapi-diff.mjs",        // requiere --base/--head git refs
+  // ADR-030 D4/D7. Compara dos refs con --desde/--hasta, asi que necesita la base fetcheada; en
+  // check:project moriria con "no merge base" en todo pull request. Se invoca desde
+  // ci-compat-db.yml, que ya se dispara con cambios en migraciones y hace checkout con
+  // fetch-depth: 0.
+  "check-rollback-class.mjs",      // requiere --desde/--hasta git refs
 ]);
 
 if (!existsSync(join(root, "package.json"))) {
