@@ -13,7 +13,7 @@ DESPLIEGUE=/home/ndavilal88_gmail_com/integration-hub/ops/fase-7-deploy/dist/vm
 
 # El mismo PUBLIC_HOST del .env del despliegue. El agente lo usa para preguntar por la salud a
 # traves de nginx, forzando la conexion a 127.0.0.1 para no depender del hairpin NAT.
-PUBLIC_HOST=ih.buildsoft.com.pe
+PUBLIC_HOST=34.176.119.47.sslip.io
 
 # Rama huerfana con el fichero de estado. No hace falta tocarla.
 RAMA_ESTADO=estado/vm-produccion

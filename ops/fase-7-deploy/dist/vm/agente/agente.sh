@@ -78,9 +78,14 @@ dc() { docker compose -f "$COMPOSE" --env-file "$ENTORNO" "$@"; }
 # `--resolve` fuerza la conexion a la propia maquina manteniendo el nombre en SNI y en Host. Sin
 # el, la peticion sale a internet y vuelve por la IP publica (hairpin NAT), que no siempre
 # funciona: la comprobacion fallaria por red, no por la aplicacion.
+# SIN -f, Y ES EL PUNTO. Con -f curl aborta ante un 4xx/5xx y no llega a imprimir el codigo: un
+# 503 -la aplicacion viva pero con una dependencia caida- y un 000 -no hay nadie escuchando- se
+# verian iguales en el log, y son dos madrugadas distintas.
 salud() {
-  curl -fsS --max-time 10 --resolve "$PUBLIC_HOST:443:127.0.0.1" \
-    -o /dev/null -w '%{http_code}' "https://$PUBLIC_HOST/q/health" 2>/dev/null || echo "000"
+  local codigo
+  codigo="$(curl -sS --max-time 10 --resolve "$PUBLIC_HOST:443:127.0.0.1" \
+    -o /dev/null -w '%{http_code}' "https://$PUBLIC_HOST/q/health" 2>/dev/null)" || codigo="000"
+  echo "${codigo:-000}"
 }
 
 esperar_salud() {

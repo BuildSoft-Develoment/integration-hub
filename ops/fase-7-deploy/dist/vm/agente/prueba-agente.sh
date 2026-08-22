@@ -58,6 +58,9 @@ DOBLE
 
 cat > "$BANCO/bin/curl" <<'DOBLE'
 #!/usr/bin/env bash
+# 000 no es un codigo HTTP: es curl sin poder conectar. Se imita fallando de verdad, no
+# imprimiendo la cadena, porque el agente distingue los dos casos y el doble tambien debe.
+if [ "${FALSA_SALUD:-200}" = "000" ]; then echo "000"; exit 7; fi
 echo "${FALSA_SALUD:-200}"
 DOBLE
 
@@ -139,7 +142,9 @@ env_dice "IMAGE_TAG=9b064f6"
 env_dice "FLYWAY_IGNORE_FUTURE=false"
 
 FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=503 \
-  caso "aplica pero la salud no vuelve" 30 "f9c273d" "9b064f6" "f9c273d" "A"
+  caso "aplica y la salud responde 503" 30 "f9c273d" "9b064f6" "f9c273d" "A"
+FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=000 \
+  caso "aplica y no hay nadie escuchando" 30 "f9c273d" "9b064f6" "f9c273d" "A"
 
 echo
 echo "D12 - trabajo en vuelo"
