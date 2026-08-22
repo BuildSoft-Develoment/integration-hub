@@ -82,9 +82,15 @@ sudo systemctl enable --now ih-agente.timer
 
 ```bash
 sudo systemctl start ih-agente.service
-journalctl -u ih-agente.service -n 40 --no-pager
+sudo journalctl -u ih-agente.service -n 40 --no-pager
 cat /var/lib/ih-agente/ultimo.txt
 ```
+
+**El `sudo` del journal no es decoracion.** Sin el, y si el usuario no esta en `adm` ni en
+`systemd-journal`, `journalctl` imprime un aviso y **cero lineas** -- que se lee como "el agente no
+registra nada" cuando en realidad registra y no te deja verlo. Se resuelve con `sudo` y no metiendo
+al usuario en `systemd-journal`, que le daria acceso a TODOS los registros del sistema para leer
+los de un script.
 
 Con el fichero de estado pidiendo la version que ya corre, debe decir *"ya corre la version pedida"*
 y salir. Ese es el primer ensayo, y no cambia nada.
@@ -93,8 +99,11 @@ y salir. Ese es el primer ensayo, y no cambia nada.
 
 ```bash
 systemctl list-timers ih-agente.timer     # cuando toca la siguiente vuelta
-journalctl -u ih-agente.service -f        # verlo trabajar
+sudo journalctl -u ih-agente.service -f   # verlo trabajar (el sudo hace falta, ver arriba)
 cat /var/lib/ih-agente/ultimo.txt         # la ultima decision, en una pantalla
+
+# Como fue la ultima vuelta, sin necesidad de leer el journal:
+systemctl show ih-agente.service -p Result -p ExecMainStatus -p ExecMainStartTimestamp
 ```
 
 La constancia no es el log: el journal se rota, y ese fichero es lo que se mira a las tres de la
