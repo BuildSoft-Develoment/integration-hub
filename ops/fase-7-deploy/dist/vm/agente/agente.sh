@@ -34,6 +34,16 @@ SALUD_ESPERA="${SALUD_ESPERA:-5}"
 COMPOSE="$DESPLIEGUE/docker-compose.cloud.yml"
 ENTORNO="$DESPLIEGUE/.env"
 
+# UN SOLO AGENTE A LA VEZ. systemd no lanza una segunda instancia mientras la primera corre, pero
+# ejecutar el script a mano -- que es exactamente como se prueba-- se salta a systemd por completo.
+# Dos `docker compose up` simultaneos sobre el mismo proyecto es un lio que no quiero descubrir en
+# produccion. Si el cerrojo esta tomado, esta vuelta se salta y ya habra otra en cinco minutos.
+mkdir -p "$(dirname "$ESTADO_AGENTE")"
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$(dirname "$ESTADO_AGENTE")/cerrojo"
+  flock -n 9 || { echo "otro agente esta corriendo; esta vuelta se salta"; exit 0; }
+fi
+
 log() { printf '%s  %s\n' "$(date -Is)" "$*"; }
 
 # LA CONSTANCIA NO ES UN LOG. El journal se rota; esto es lo que mira una persona a las tres de

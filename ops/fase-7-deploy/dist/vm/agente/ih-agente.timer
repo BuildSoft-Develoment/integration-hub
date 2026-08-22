@@ -13,8 +13,11 @@ OnUnitActiveSec=5min
 # Sin esto, todo lo que se dispare cada cinco minutos arranca en el mismo instante.
 RandomizedDelaySec=30
 
-# Si la maquina estuvo apagada, al encender se ejecuta una vez en lugar de esperar el hueco.
-Persistent=true
+# NO se pone Persistent=. Solo hace algo con OnCalendar=, y estos dos temporizadores son
+# monotonos: con OnCalendar systemd recuerda la ultima vez que disparo y recupera las citas
+# perdidas mientras la maquina estuvo apagada; con OnBootSec/OnUnitActiveSec no hay cita que
+# recuperar, el reloj arranca de cero en cada arranque. Estaba puesto con un comentario que
+# prometia justo eso, y era falso: lo que cubre ese caso es OnBootSec, tres lineas mas arriba.
 
 [Install]
 WantedBy=timers.target
