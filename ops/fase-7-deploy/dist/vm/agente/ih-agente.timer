@@ -1,0 +1,23 @@
+[Unit]
+Description=Despierta al agente de despliegue cada pocos minutos (ADR-030, D1)
+
+[Timer]
+# CINCO MINUTOS, y el numero tiene motivo. El agente solo hace trabajo de verdad cuando el tag
+# del fichero cambia; el resto de las veces es un `git fetch` y un `grep`. Bajar a uno no
+# aprovecha nada -- entre que alguien fusiona el pull request y que la maquina esta ociosa pasan
+# mas de cinco minutos-- y subir a treinta convierte cualquier despliegue en media hora de espera
+# sin saber si el agente esta vivo.
+OnBootSec=3min
+OnUnitActiveSec=5min
+
+# Sin esto, todo lo que se dispare cada cinco minutos arranca en el mismo instante.
+RandomizedDelaySec=30
+
+# NO se pone Persistent=. Solo hace algo con OnCalendar=, y estos dos temporizadores son
+# monotonos: con OnCalendar systemd recuerda la ultima vez que disparo y recupera las citas
+# perdidas mientras la maquina estuvo apagada; con OnBootSec/OnUnitActiveSec no hay cita que
+# recuperar, el reloj arranca de cero en cada arranque. Estaba puesto con un comentario que
+# prometia justo eso, y era falso: lo que cubre ese caso es OnBootSec, tres lineas mas arriba.
+
+[Install]
+WantedBy=timers.target

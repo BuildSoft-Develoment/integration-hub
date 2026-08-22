@@ -1,0 +1,28 @@
+# ===== Configuracion del agente de despliegue - copiar a /etc/ih-agente.conf =====
+#
+# Se lee con `.` desde el script, asi que es sintaxis de shell: sin espacios alrededor del `=`.
+# No contiene ningun secreto y no tiene por que ser 600: la credencial de lectura del repositorio
+# es la clave SSH del usuario, no una variable de aqui.
+
+# Clon del repositorio en la maquina. De aqui sale el fichero de estado, y tambien la historia
+# con la que el agente decide si un salto va hacia adelante o hacia atras.
+REPO=/home/ndavilal88_gmail_com/integration-hub
+
+# Directorio donde viven docker-compose.cloud.yml y .env. NO tiene por que estar dentro del clon.
+DESPLIEGUE=/home/ndavilal88_gmail_com/integration-hub/ops/fase-7-deploy/dist/vm
+
+# El mismo PUBLIC_HOST del .env del despliegue. El agente lo usa para preguntar por la salud a
+# traves de nginx, forzando la conexion a 127.0.0.1 para no depender del hairpin NAT.
+PUBLIC_HOST=34.176.119.47.sslip.io
+
+# Rama huerfana con el fichero de estado. No hace falta tocarla.
+RAMA_ESTADO=estado/vm-produccion
+
+# Donde deja el agente su ultima decision, en texto plano y legible.
+ESTADO_AGENTE=/var/lib/ih-agente/ultimo.txt
+
+# Cuanto espera a que /q/health devuelva 200 tras levantar: intentos x segundos.
+# 36 x 5 = tres minutos. El arranque nativo tarda menos de un segundo, pero Flyway migrando sobre
+# una base grande no, y ahi es donde de verdad hay que tener paciencia.
+SALUD_INTENTOS=36
+SALUD_ESPERA=5
