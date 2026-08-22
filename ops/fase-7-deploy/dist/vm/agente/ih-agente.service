@@ -1,0 +1,55 @@
+[Unit]
+Description=Agente de despliegue de Integration Hub (ADR-030)
+Documentation=file:///home/ndavilal88_gmail_com/integration-hub/ops/fase-7-deploy/dist/vm/agente/README.md
+# Sin docker no hay nada que hacer, y sin red no se puede leer la rama de estado.
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+
+# CORRE COMO LA PERSONA, NO COMO ROOT. La clave SSH de lectura del repositorio y la pertenencia
+# al grupo docker son de este usuario; con root habria que duplicar las dos cosas.
+User=ndavilal88_gmail_com
+
+# SIN Group=. Omitido a proposito: systemd usa entonces el grupo primario que diga /etc/passwd,
+# y en una VM de GCP ese nombre no siempre coincide con el del usuario. Escribirlo a mano seria
+# apostar a que coinciden, y la unidad fallaria al arrancar por algo que no tiene nada que ver
+# con el despliegue.
+SupplementaryGroups=docker
+
+ExecStart=/home/ndavilal88_gmail_com/integration-hub/ops/fase-7-deploy/dist/vm/agente/agente.sh /etc/ih-agente.conf
+
+# NO REINTENTAR EN CALIENTE. Si el agente sale mal, el timer lo volvera a intentar en unos
+# minutos con el mundo posiblemente distinto. Un Restart=on-failure aqui seria un bucle de
+# `docker compose up` contra una maquina que ya esta teniendo un mal dia.
+Restart=no
+
+# APLAZAR NO ES FALLAR. El agente sale con 10 cuando hay trabajo en vuelo, y eso es el sistema
+# funcionando: se reintenta solo en la vuelta siguiente. Sin esta linea, cada aplazamiento dejaria
+# la unidad en estado `failed` y `systemctl --failed` se llenaria de alarmas que no lo son --
+# hasta que alguien aprenda a ignorarlas, que es cuando dejan de servir para nada.
+#
+# 20 y 30 SI quedan como fallo, a proposito: un retroceso rechazado o un despliegue sin salud
+# necesitan que una persona mire.
+SuccessExitStatus=10
+
+# Tres minutos de espera de salud mas la descarga de dos imagenes. Quince es holgado y sigue
+# siendo un techo: un agente colgado no puede quedarse tomado el bloqueo del timer.
+TimeoutStartSec=900
+
+# El fichero de constancia vive aqui, y systemd lo crea con el dueno correcto.
+StateDirectory=ih-agente
+
+# Endurecimiento razonable para algo que habla con el socket de docker: no puede escalar
+# privilegios, no ve /home ajeno, y solo escribe donde tiene que escribir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
