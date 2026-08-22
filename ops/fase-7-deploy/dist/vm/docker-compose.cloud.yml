@@ -293,6 +293,15 @@ services:
       QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
       QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_HOST: "true"
       QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_PREFIX: "true"
+      # EL UNICO POMO DEL ROLLBACK DE CLASE B (ADR-030, D5). Sin el, volver a la imagen
+      # anterior NO ARRANCA aunque la migracion fuera aditiva: Quarkus pisa el default de
+      # Flyway con una lista vacia de patrones a ignorar, la validacion encuentra en
+      # flyway_schema_history versiones que ese jar no lleva dentro, y aborta. Comprobado
+      # ejecutandolo contra esta misma imagen, en JVM y en nativo.
+      #
+      # SE RETIRA AL VOLVER ADELANTE (D6): dejarla puesta convierte en silenciosa la unica
+      # senal que avisa de que la base va por delante del binario.
+      QUARKUS_FLYWAY_IGNORE_FUTURE_MIGRATIONS: "${FLYWAY_IGNORE_FUTURE:-false}"
       QUARKUS_DATASOURCE_JDBC_URL: "jdbc:postgresql://postgres:5432/integration_hub"
       QUARKUS_DATASOURCE_USERNAME: "postgres"
       QUARKUS_DATASOURCE_PASSWORD: "${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}"
