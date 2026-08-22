@@ -39,7 +39,16 @@ DOBLE
 
 cat > "$BANCO/bin/docker" <<'DOBLE'
 #!/usr/bin/env bash
-if [ "${1:-}" = "compose" ]; then echo "[doble] docker $*" >> "$FALSO_DIARIO"; exit 0; fi
+if [ "${1:-}" = "compose" ]; then
+  echo "[doble] docker $*" >> "$FALSO_DIARIO"
+  # Un tag que no existe en el registro: `pull` falla y `up` nunca deberia llegar a correr.
+  for a in "$@"; do
+    if [ "$a" = "pull" ] && [ "${FALSO_PULL:-ok}" = "falla" ]; then
+      echo "Error response from daemon: manifest unknown" >&2; exit 1
+    fi
+  done
+  exit 0
+fi
 if [ "${1:-}" = "exec" ] && [ "${2:-}" = "ih-nginx" ]; then
   echo "[doble] nginx reload" >> "$FALSO_DIARIO"; exit 0
 fi
@@ -140,6 +149,12 @@ FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=200 \
 env_dice "IMAGE_TAG=9b064f6"
 # D6: la variable se retira SIEMPRE al ir hacia adelante, la hubiera puesto quien la hubiera puesto.
 env_dice "FLYWAY_IGNORE_FUTURE=false"
+
+# EL ORDEN IMPORTA: si la imagen no existe, el .env NO puede quedar escrito. Escrito, la vuelta
+# siguiente veria deseado == corriendo y daria por bueno un despliegue que nunca ocurrio.
+FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSO_PULL=falla \
+  caso "la imagen del tag no existe en el registro" 1 "f9c273d" "9b064f6" "f9c273d" "A"
+env_dice "IMAGE_TAG=f9c273d"
 
 FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=503 \
   caso "aplica y la salud responde 503" 30 "f9c273d" "9b064f6" "f9c273d" "A"

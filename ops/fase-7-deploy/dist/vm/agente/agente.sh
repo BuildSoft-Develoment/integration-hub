@@ -174,10 +174,20 @@ IGNORAR="false"
 if [ "$DIRECCION" = "atras" ] && [ "$CLASE" = "B" ]; then IGNORAR="true"; fi
 
 log "aplicando $ACTUAL -> $DESEADO (clase ${CLASE:-A}, FLYWAY_IGNORE_FUTURE=$IGNORAR)"
+
+# PRIMERO SE DESCARGA, DESPUES SE ESCRIBE, Y EL ORDEN NO ES ESTETICO. Al reves -escribir el .env y
+# luego descargar- un tag que no existe en el registro deja el fichero apuntando a una version que
+# NO corre; y en la vuelta siguiente el agente lee ese mismo valor, lo compara con el deseado,
+# coinciden, y anuncia "ya corre la version pedida". Un despliegue que nunca ocurrio, dado por
+# bueno para siempre. Con este orden, si la descarga falla el .env sigue describiendo la realidad.
+#
+# El tag viaja por el entorno: en compose, la variable del shell tiene precedencia sobre el
+# --env-file, asi que se descarga la version nueva sin haber tocado todavia el fichero.
+log "descargando las imagenes de $DESEADO"
+( export IMAGE_TAG="$DESEADO"; dc pull platform-app audit-consumer )
+
 poner_env IMAGE_TAG "$DESEADO"
 poner_env FLYWAY_IGNORE_FUTURE "$IGNORAR"
-
-dc pull platform-app audit-consumer
 dc up -d platform-app audit-consumer
 
 # D11: nginx resuelve `platform-app` UNA VEZ, al arrancar - el template no tiene `resolver`. Al
