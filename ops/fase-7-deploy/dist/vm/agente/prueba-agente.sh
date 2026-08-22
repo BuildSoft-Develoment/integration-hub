@@ -31,7 +31,10 @@ for a in "$@"; do
   case "$a" in
     fetch)      exit 0 ;;
     show)       cat "$FALSO_ESTADO"; exit 0 ;;
-    merge-base) [ "${FALSA_DIRECCION:-adelante}" = "atras" ] && exit 0 || exit 1 ;;
+    # `git -C repo ls-tree -r --name-only <ref>`: el ref es el ULTIMO argumento. De aqui sale el
+    # conjunto de migraciones que conoce cada commit, que es lo unico que decide si la base queda
+    # por delante del binario.
+    ls-tree)    f="$FALSO_MIG/${!#}.txt"; [ -f "$f" ] && cat "$f"; exit 0 ;;
   esac
 done
 exit 0
@@ -89,6 +92,12 @@ caso() {
   printf 'services: {}\n' > "$caja/despliegue/docker-compose.cloud.yml"
   printf 'tag: %s\ntag_estable: %s\nclase: %s\n' "$tag" "$estable" "$clase" > "$caja/estado.yaml"
 
+  # Las migraciones que conoce cada commit. Con MIG_ACTUAL="101 102" y MIG_DESEADO="101", el
+  # destino no conoce la 102: la base queda por delante del binario.
+  mkdir -p "$caja/mig"; : > "$caja/mig/$actual.txt"; : > "$caja/mig/$tag.txt"
+  for v in ${MIG_ACTUAL:-};  do echo "platform-app/src/main/resources/db/migration/V${v}__x.sql" >> "$caja/mig/$actual.txt"; done
+  for v in ${MIG_DESEADO:-}; do echo "platform-app/src/main/resources/db/migration/V${v}__x.sql" >> "$caja/mig/$tag.txt"; done
+
   cat > "$caja/conf" <<CONF
 REPO=$caja
 DESPLIEGUE=$caja/despliegue
@@ -103,6 +112,7 @@ CONF
   PATH="$BANCO/bin:$PATH" \
   FALSO_ESTADO="$caja/estado.yaml" \
   FALSO_DIARIO="$caja/diario.txt" \
+  FALSO_MIG="$caja/mig" \
     "$AGENTE" "$caja/conf" > "$caja/salida.txt" 2>&1
   obtenido=$?
   set -e
@@ -144,7 +154,7 @@ FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 \
 
 echo
 echo "Hacia adelante"
-FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=200 \
+MIG_ACTUAL="101" MIG_DESEADO="101 102" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=200 \
   caso "pase normal, maquina ociosa" 0 "f9c273d" "9b064f6" "f9c273d" "A"
 env_dice "IMAGE_TAG=9b064f6"
 # D6: la variable se retira SIEMPRE al ir hacia adelante, la hubiera puesto quien la hubiera puesto.
@@ -152,39 +162,41 @@ env_dice "FLYWAY_IGNORE_FUTURE=false"
 
 # EL ORDEN IMPORTA: si la imagen no existe, el .env NO puede quedar escrito. Escrito, la vuelta
 # siguiente veria deseado == corriendo y daria por bueno un despliegue que nunca ocurrio.
-FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSO_PULL=falla \
+MIG_ACTUAL="101" MIG_DESEADO="101 102" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSO_PULL=falla \
   caso "la imagen del tag no existe en el registro" 1 "f9c273d" "9b064f6" "f9c273d" "A"
 env_dice "IMAGE_TAG=f9c273d"
 
-FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=503 \
+MIG_ACTUAL="101" MIG_DESEADO="101 102" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=503 \
   caso "aplica y la salud responde 503" 30 "f9c273d" "9b064f6" "f9c273d" "A"
-FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=000 \
+MIG_ACTUAL="101" MIG_DESEADO="101 102" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=000 \
   caso "aplica y no hay nadie escuchando" 30 "f9c273d" "9b064f6" "f9c273d" "A"
 
 echo
 echo "D12 - trabajo en vuelo"
-FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=3 FALSOS_PAGOS=0 \
+MIG_ACTUAL="101" MIG_DESEADO="101 102" FALSAS_EJECUCIONES=3 FALSOS_PAGOS=0 \
   caso "hay ejecuciones RUNNING o PENDING" 10 "f9c273d" "9b064f6" "f9c273d" "A"
 env_dice "IMAGE_TAG=f9c273d"
-FALSA_DIRECCION=adelante FALSAS_EJECUCIONES=0 FALSOS_PAGOS=1 \
+MIG_ACTUAL="101" MIG_DESEADO="101 102" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=1 \
   caso "hay un pago correctivo con arrendamiento vivo" 10 "f9c273d" "9b064f6" "f9c273d" "A"
 
 echo
 echo "Hacia atras"
-FALSA_DIRECCION=atras FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=200 \
+# Clase A retrocediendo: el destino conoce TODAS las migraciones aplicadas, asi que la base no
+# queda por delante de nada y la variable de Flyway no pinta aqui.
+MIG_ACTUAL="101" MIG_DESEADO="101" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=200 \
   caso "retroceso de clase A" 0 "9b064f6" "f9c273d" "f9c273d" "A"
 env_dice "FLYWAY_IGNORE_FUTURE=false"
 
 # D5: sin esta variable la imagen vieja NO ARRANCA, aunque la migracion fuera aditiva.
-FALSA_DIRECCION=atras FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=200 \
+MIG_ACTUAL="101 102" MIG_DESEADO="101" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 FALSA_SALUD=200 \
   caso "retroceso de clase B" 0 "9b064f6" "f9c273d" "f9c273d" "B"
 env_dice "FLYWAY_IGNORE_FUTURE=true"
 
-FALSA_DIRECCION=atras FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 \
+MIG_ACTUAL="101 102" MIG_DESEADO="101" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 \
   caso "retroceso de clase C - se niega" 20 "9b064f6" "f9c273d" "f9c273d" "C"
 env_dice "IMAGE_TAG=9b064f6"
 
-FALSA_DIRECCION=atras FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 \
+MIG_ACTUAL="101 102" MIG_DESEADO="101" FALSAS_EJECUCIONES=0 FALSOS_PAGOS=0 \
   caso "retroceso sin clase declarada - se niega" 20 "9b064f6" "f9c273d" "f9c273d" ""
 env_dice "IMAGE_TAG=9b064f6"
 

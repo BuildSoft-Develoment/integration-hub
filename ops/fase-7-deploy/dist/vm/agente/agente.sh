@@ -121,27 +121,47 @@ if [ "$DESEADO" = "$ACTUAL" ]; then
   exit 0
 fi
 
-# -- direccion del salto -------------------------------------------------------------------------
-# ADELANTE o ATRAS no se deduce del fichero sino de la historia: si el deseado es antepasado del
-# que corre, se esta retrocediendo. Es exacto, y el clon ya tiene el dato.
-DIRECCION="adelante"
-if [ -n "$ACTUAL" ] && git -C "$REPO" merge-base --is-ancestor "$DESEADO" "$ACTUAL" 2>/dev/null; then
-  DIRECCION="atras"
+# -- LA PREGUNTA NO ES SI SE RETROCEDE, SINO SI LA BASE QUEDA POR DELANTE DEL BINARIO -------------
+# La primera version preguntaba por antepasados: "el deseado es antepasado del que corre => se
+# retrocede". Es INTUITIVO Y FALSO, y lo demuestran los propios tags de esta maquina: f9c273d es un
+# merge de sincronizacion a main y 6243232 un merge en develop; los dos estan en la historia de
+# main y NINGUNO es antepasado del otro. Retroceder de 6243232 a f9c273d se habria clasificado como
+# "adelante", no se habria puesto la variable de Flyway, y la imagen vieja no habria arrancado --
+# exactamente el fallo que ADR-030 existe para evitar.
+#
+# Lo que de verdad decide es otra cosa: que migraciones conoce el binario al que se va. Si la base
+# tiene versiones aplicadas que ese jar no lleva dentro, Flyway aborta al validar. Asi que se
+# comparan los conjuntos de migraciones de los dos commits -- la pregunta literal, no una topologia
+# de la que haya que deducirla.
+#
+# El patron cubre los dos directorios de quarkus.flyway.locations sin nombrar ningun modulo:
+# db/migration y db/migration-mt101 casan los dos con db/migration*.
+migraciones_de() {
+  git -C "$REPO" ls-tree -r --name-only "$1" 2>/dev/null \
+    | grep -E '/db/migration[^/]*/V[0-9]+(\.[0-9]+)*__[^/]*\.sql$' \
+    | sed -E 's#.*/V([0-9]+(\.[0-9]+)*)__.*#\1#' | sort -u || true
+}
+
+PERDIDAS=""
+if [ -n "$ACTUAL" ]; then
+  PERDIDAS="$(comm -23 <(migraciones_de "$ACTUAL") <(migraciones_de "$DESEADO") | tr '\n' ' ')"
 fi
-log "el salto va hacia $DIRECCION"
+if [ -n "$(printf '%s' "$PERDIDAS" | tr -d ' ')" ]; then BASE_ADELANTADA="si"; else BASE_ADELANTADA="no"; fi
+log "migraciones que el binario destino no conoce: ${PERDIDAS:-ninguna} (base por delante: $BASE_ADELANTADA)"
 
 # -- D7/D9/D10: un retroceso de clase C no lo aplica una maquina ----------------------------------
-if [ "$DIRECCION" = "atras" ] && [ "$CLASE" = "C" ]; then
+if [ "$BASE_ADELANTADA" = "si" ] && [ "$CLASE" = "C" ]; then
   log "RECHAZADO: retroceso de clase C"
-  constancia "rechazado" "motivo: retroceso de clase C" "deseado: $DESEADO" "corriendo: $ACTUAL" \
+  constancia "rechazado" "motivo: retroceso de clase C; la base quedaria por delante del binario" \
+    "migraciones que el destino no conoce: $PERDIDAS" "deseado: $DESEADO" "corriendo: $ACTUAL" \
     "que hacer: aplicar a mano el script de ops/fase-7-deploy/rollback/ y la instantanea previa (D7, D9)"
   exit 20
 fi
 
-if [ "$DIRECCION" = "atras" ] && [ -z "$CLASE" ]; then
-  log "RECHAZADO: retroceso sin clase declarada"
-  constancia "rechazado" "motivo: se pide retroceder y el campo clase esta vacio" \
-    "deseado: $DESEADO" "corriendo: $ACTUAL" \
+if [ "$BASE_ADELANTADA" = "si" ] && [ -z "$CLASE" ]; then
+  log "RECHAZADO: la base quedaria por delante y no hay clase declarada"
+  constancia "rechazado" "motivo: la base quedaria por delante del binario y el campo clase esta vacio" \
+    "migraciones que el destino no conoce: $PERDIDAS" "deseado: $DESEADO" "corriendo: $ACTUAL" \
     "que hacer: declarar la clase en estado.yaml; el gate del pull request la verifica"
   exit 20
 fi
@@ -171,7 +191,7 @@ fi
 # D5: el retroceso de clase B necesita la variable para que la imagen vieja arranque con la base ya
 # migrada. D6: en cualquier salto hacia adelante se RETIRA, siempre, la pusiera quien la pusiera.
 IGNORAR="false"
-if [ "$DIRECCION" = "atras" ] && [ "$CLASE" = "B" ]; then IGNORAR="true"; fi
+if [ "$BASE_ADELANTADA" = "si" ] && [ "$CLASE" = "B" ]; then IGNORAR="true"; fi
 
 log "aplicando $ACTUAL -> $DESEADO (clase ${CLASE:-A}, FLYWAY_IGNORE_FUTURE=$IGNORAR)"
 
@@ -199,7 +219,8 @@ docker exec ih-nginx nginx -s reload
 
 if esperar_salud; then
   log "LISTO: corriendo $DESEADO"
-  constancia "aplicado" "de: $ACTUAL" "a: $DESEADO" "clase: ${CLASE:-A}" "direccion: $DIRECCION" \
+  constancia "aplicado" "de: $ACTUAL" "a: $DESEADO" "clase: ${CLASE:-A}" \
+    "base por delante del binario: $BASE_ADELANTADA" \
     "flyway_ignore_future: $IGNORAR" \
     "tag_estable en el fichero: $ESTABLE" \
     "siguiente paso humano: si esta version se sostiene, avanzar tag_estable a $DESEADO (D13)"
