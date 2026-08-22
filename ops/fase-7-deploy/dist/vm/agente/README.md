@@ -1,6 +1,6 @@
 # Agente de despliegue de la VM
 
-Implementa el lado maquina de [ADR-030](../../../../docs/fase-3-arquitectura/adr/ADR-030-despliegue-automatizado-vm-pull-aprobacion-rollback.md).
+Implementa el lado maquina de [ADR-030](../../../../../docs/fase-3-arquitectura/adr/ADR-030-despliegue-automatizado-vm-pull-aprobacion-rollback.md).
 Un temporizador de systemd despierta cada cinco minutos un script que lee que version debe correr
 —en la rama huerfana `estado/vm-produccion`— y, si no es la que corre, la aplica.
 
