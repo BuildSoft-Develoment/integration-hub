@@ -40,21 +40,24 @@ jobs:
         with:
           node-version: 22
 
-      - name: Leer los tags del fichero de estado
+      - name: Leer el fichero de estado
         id: tags
         run: |
           set -euo pipefail
           leer() { sed 's/\r$//' estado.yaml | grep -E "^$1:" | head -1 | cut -d: -f2- | tr -d ' '; }
           TAG="$(leer tag || true)"
           ESTABLE="$(leer tag_estable || true)"
-          echo "tag=$TAG"             >> "$GITHUB_OUTPUT"
-          echo "estable=$ESTABLE"     >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG · tag_estable=$ESTABLE"
+          CLASE="$(leer clase || true)"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "estable=$ESTABLE" >> "$GITHUB_OUTPUT"
+          echo "clase=$CLASE"     >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG · tag_estable=$ESTABLE · clase=${CLASE:-<vacia>}"
 
       - name: Clasificar el salto
         env:
           TAG: ${{ steps.tags.outputs.tag }}
           ESTABLE: ${{ steps.tags.outputs.estable }}
+          CLASE: ${{ steps.tags.outputs.clase }}
         run: |
           set -euo pipefail
 
@@ -88,19 +91,79 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # pipefail: sin el, el codigo de salida seria el de `tee` y un pase de clase C sin script
-          # pasaria por verde. Ya nos mordio antes en esta misma consola.
-          # SEGUNDA GUARDA, Y NO ES DECORATIVA: sin set +e, el set -e de arriba aborta el paso en
-          # la tuberia y las dos lineas de abajo NO se ejecutan. El codigo de salida acaba siendo
-          # el correcto por accidente, pero el resumen se queda con el bloque de codigo sin cerrar
-          # justo en el unico caso que importa: el rechazo. Comprobado ejecutandolo, no leyendolo.
-          set -o pipefail
+          # SIN TUBERIA. Antes esto era `node ... | tee -a`, y hacia falta pipefail para que el
+          # codigo de salida no fuera el de `tee` y un pase de clase C sin script pasara por verde,
+          # mas un `set +e` para que `set -e` no abortara el paso antes de cerrar la valla del
+          # resumen. Guardando la salida en un fichero desaparecen las dos guardas y la salida
+          # queda ademas disponible para leerle el veredicto.
           set +e
           node repo/ci/scripts/check-rollback-class.mjs \
-            --root repo --desde "$ESTABLE" --hasta "$TAG" --strict \
-            2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+            --root repo --desde "$ESTABLE" --hasta "$TAG" --strict > veredicto.txt 2>&1
           CODIGO=$?
           set -e
 
+          cat veredicto.txt
+          cat veredicto.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # ---------------------------------------------------------------------------------------
+          # LA CLASE DECLARADA CONTRA LA CALCULADA.
+          #
+          # POR QUE SE DECLARA A MANO SI LA MAQUINA SABE CALCULARLA. Porque el agente de la VM se
+          # fia de ese campo para decidir si un retroceso necesita
+          # QUARKUS_FLYWAY_IGNORE_FUTURE_MIGRATIONS, y un dato del que depende el arranque de la
+          # aplicacion no puede entrar sin que nadie lo haya mirado. Declararlo obliga a quien abre
+          # el pase a leer el veredicto; comprobarlo impide que se equivoque al copiarlo.
+          #
+          # POR QUE SE LEE DE LA SALIDA. El clasificador no tiene modo legible por maquina: imprime
+          # `CLASE A — ...` para que lo lea una persona. Anadirle una bandera exigiria que el cambio
+          # llegara a main antes de que este gate pudiera usarla. Se lee esa linea, y si no aparece
+          # EXACTAMENTE una, esto falla en vez de seguir con una comparacion sin sentido.
+          # ---------------------------------------------------------------------------------------
+          CUANTAS="$(grep -cE '^CLASE [ABC] ' veredicto.txt || true)"
+          if [ "$CUANTAS" != "1" ]; then
+            echo "::error::No se pudo leer la clase de la salida del clasificador (lineas 'CLASE X' encontradas: $CUANTAS)."
+            echo ""
+            echo "  El gate lee la linea que empieza por 'CLASE ' de check-rollback-class.mjs."
+            echo "  Si ese formato cambio, hay que actualizar este workflow: la comprobacion de la"
+            echo "  clase declarada depende de el, y prefiero que falle a que la de por buena."
+            exit 1
+          fi
+          CALCULADA="$(grep -E '^CLASE [ABC] ' veredicto.txt | head -1 | cut -d' ' -f2)"
+
+          {
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| clase declarada en \`estado.yaml\` | \`${CLASE:-—}\` |"
+            echo "| clase calculada por el clasificador | \`$CALCULADA\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$CLASE" ]; then
+            echo "::error::estado.yaml no declara la clase del pase. El clasificador dice que es $CALCULADA."
+            echo ""
+            echo "  Escribe en estado.yaml:   clase: $CALCULADA"
+            echo ""
+            echo "  No es burocracia: el agente de la VM se fia de ese campo para decidir si un"
+            echo "  retroceso necesita QUARKUS_FLYWAY_IGNORE_FUTURE_MIGRATIONS, y sin esa variable"
+            echo "  la imagen anterior NO ARRANCA. Declararlo es la forma de que alguien lo haya"
+            echo "  mirado antes de que una maquina actue sobre ello."
+            exit 1
+          fi
+
+          if [ "$CLASE" != "$CALCULADA" ]; then
+            echo "::error::La clase declarada ($CLASE) no coincide con la calculada ($CALCULADA)."
+            echo ""
+            echo "  Corrige estado.yaml:   clase: $CALCULADA"
+            echo ""
+            echo "  Declarar B donde toca C se salta el script de bajada y la instantanea previa."
+            echo "  Declarar A donde toca B deja sin poner la variable de Flyway, y el retroceso"
+            echo "  acaba en una aplicacion que no arranca. Por eso esto no es un aviso."
+            exit 1
+          fi
+
+          echo "Clase declarada y calculada coinciden: $CLASE"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Declarada y calculada coinciden." >> "$GITHUB_STEP_SUMMARY"
+
           exit $CODIGO
