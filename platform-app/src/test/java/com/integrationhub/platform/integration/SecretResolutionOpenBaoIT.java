@@ -150,8 +150,8 @@ class SecretResolutionOpenBaoIT {
         // file-vault devuelve un valor DISTINTO a proposito: si el enrutado por prefijo se rompiera, el
         // test no veria un vacio ambiguo sino el valor del otro almacen.
         var fileVault = new SecretValueProvider() {
-            @Override public boolean supports(String source) {
-                return "secret".equalsIgnoreCase(source) || "vault".equalsIgnoreCase(source);
+            @Override public java.util.Set<String> sources() {
+                return java.util.Set.of("secret", "vault");
             }
             @Override public Optional<String> resolve(String reference) {
                 return Optional.of("valor-del-file-vault");

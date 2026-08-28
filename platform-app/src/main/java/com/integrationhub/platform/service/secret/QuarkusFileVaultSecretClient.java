@@ -23,6 +23,20 @@ public class QuarkusFileVaultSecretClient implements FileVaultSecretClient {
         this.config = config;
     }
 
+    /**
+     * Hay keystore configurado y con ruta. Es la comprobacion que {@code readSecret} hace tarde --
+     * alli lanza {@code IllegalArgumentException} EN EJECUCION, que es exactamente como
+     * ${secret:...} revienta en la VM sin que nada lo detecte al guardar (ADR-031, hecho 3).
+     */
+    @Override
+    public boolean disponible() {
+        return config.getOptionalValue("integrationhub.secrets.file-vault.default-provider", String.class)
+                .filter(nombre -> !nombre.isBlank())
+                .flatMap(nombre -> config.getOptionalValue(PROVIDER_PREFIX + nombre + ".path", String.class))
+                .filter(ruta -> !ruta.isBlank())
+                .isPresent();
+    }
+
     @Override
     public Optional<Map<String, String>> readSecret(String providerName, String alias) {
         String baseKey = PROVIDER_PREFIX + providerName + ".";

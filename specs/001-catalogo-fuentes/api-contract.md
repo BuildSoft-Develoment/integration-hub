@@ -25,6 +25,11 @@
 ### GET /api/source-types
 **Trace**: `RF-001` · **Auth**: platform-admin, integration-admin, auditor · Lista el catalogo de source types locales y aportados por plugins con type, origin, provider, pluginId, pluginVersion, transport, status y reason, espejo de reader-types, para poblar el selector de tipos de fuente y marcar los no confiables.
 
+### GET /api/secret-sources
+**Trace**: `QA-006`, ADR-031 D1 · **Auth**: platform-admin, integration-admin, auditor · Declara que fuentes de secreto resuelve ESTE despliegue (`vaultkv`, `config`, `env`...), para que la interfaz deje de recomendar un prefijo que aqui no existe. En la VM un `${secret:...}` falla en ejecucion porque no hay file-vault, y hoy nada lo detecta antes de que reviente.
+
+> **Vive aqui de forma provisional.** El endpoint sirve tambien a conexiones y tareas (ADR-031 D6). Cuando exista la feature de referencias de secreto, se mueve alli.
+
 ## Paths OpenAPI
 
 ```yaml
@@ -102,6 +107,30 @@ paths:
       responses:
         '200':
           description: OK
+  /api/secret-sources:
+    get:
+      summary: Declara que fuentes de secreto resuelve este despliegue, y cuales pueden enumerarse
+      operationId: listSecretSources
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      required: [source, enumerable]
+                      properties:
+                        source:
+                          type: string
+                          example: vaultkv
+                        enumerable:
+                          type: boolean
 ```
 
 ## Schema OpenAPI

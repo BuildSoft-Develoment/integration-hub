@@ -21,8 +21,8 @@ class ConfigPluginTrustMaterialProviderTest {
         var second = trustedKey("secret-key");
         var resolver = new SecretResolver(List.<SecretValueProvider>of(new SecretValueProvider() {
             @Override
-            public boolean supports(String source) {
-                return "config".equalsIgnoreCase(source);
+            public java.util.Set<String> sources() {
+                return java.util.Set.of("config");
             }
 
             @Override

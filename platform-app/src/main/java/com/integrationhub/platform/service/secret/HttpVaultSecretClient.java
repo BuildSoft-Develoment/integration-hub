@@ -49,9 +49,19 @@ public class HttpVaultSecretClient implements VaultSecretClient {
         this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     }
 
+    /**
+     * La condicion ya existia dentro de {@code readSecret}; aqui solo se le pone nombre. Extraerla
+     * evita que el catalogo de ADR-031 D1 diga "resuelvo vaultkv" mientras la lectura devuelve
+     * vacio por la misma configuracion que el catalogo no miro.
+     */
+    @Override
+    public boolean disponible() {
+        return enabled && !address.isEmpty() && !token.isEmpty();
+    }
+
     @Override
     public Optional<Map<String, String>> readSecret(String path) {
-        if (!enabled || address.isEmpty() || token.isEmpty() || path == null || path.isBlank()) {
+        if (!disponible() || path == null || path.isBlank()) {
             return Optional.empty();
         }
         try {

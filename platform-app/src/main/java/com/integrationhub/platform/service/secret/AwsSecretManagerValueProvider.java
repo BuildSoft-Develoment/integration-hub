@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.secret;
 
+import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -24,8 +25,8 @@ public class AwsSecretManagerValueProvider implements SecretValueProvider {
     }
 
     @Override
-    public boolean supports(String source) {
-        return SOURCE.equalsIgnoreCase(source);
+    public Set<String> sources() {
+        return Set.of(SOURCE);
     }
 
     @Override
