@@ -118,3 +118,90 @@ guardada. Lo que es igual es la **ausencia de control**.
 Relacionado con ADR-031: la seleccion asistida de referencias hace *facil* lo correcto, pero **no
 sustituye al control**. Un desplegable no impide que alguien escriba la contrasena a mano en un campo
 que nadie valida.
+
+---
+
+# Ampliacion — segunda pasada sobre tareas y conexiones (2026-08-28)
+
+Escrita al ir a **implementar** el arreglo. La primera version proponia "generalizar
+`SourceCredentialPolicy`" como la opcion 1. Esa propuesta se sostenia en una suposicion que no
+aguanta: que el modelo de `credentialKeys()` sirve para las tres superficies. **No sirve para dos de
+ellas**, y ademas el inventario de tareas afectadas estaba incompleto.
+
+## 1. Hay mas tareas con credencial de las tres que se listaron
+
+La primera version nombro `FILE_COMPRESS`, `NOTIFICATION` y `REST_CALL`, sacadas de los providers
+del frontend. Buscando en el backend aparecen mas, y una esta en el camino del dinero:
+
+| clase | linea | credencial |
+|---|---|---|
+| `FileCompressTaskProvider` | 188 | `configuration.get("password")` |
+| `FtpSink` | 43 | `requireString(configuration, "password")` — **obligatoria** |
+| `SftpSink` | 41 | `optionalString(configuration, "password")` — **la entrega al banco** |
+
+`FileCompressTaskProvider:193` ya resuelve esa contrasena con
+`jsonConfigurationMapper.resolveSecretsIn(...)`, asi que **el camino de resolucion de `${...}` en
+tareas ya funciona**. Lo que falta no es resolver: es la politica que rechaza al escribir y enmascara
+al leer.
+
+## 2. El `default` derivado del esquema NO cubre a ninguno
+
+`TaskProvider` tiene `configSchema()`, asi que a primera vista bastaba copiar el `default` de
+`SourceProvider` —el que deriva las claves de los campos declarados `secret`—. Comprobado provider a
+provider, **devolveria lista vacia en los tres**:
+
+- `FileCompressTaskProvider` y `RestCallTaskProvider` **no declaran esquema**.
+- `NotificationTaskProvider` si lo declara, y sus campos son `channel`, `message`, `url` y
+  `bodyTemplate`: **ninguno es secreto**.
+
+Y una lista vacia no es inocua. El javadoc de `SourceProvider.credentialKeys()` lo dice: *"devolver
+la lista vacia es una AFIRMACION: «este tipo no tiene ninguna credencial» (...) no vale como
+olvido"*. Copiar el `default` sin mas produciria tres afirmaciones falsas, con la apariencia de un
+control activo.
+
+## 3. Dos casos no caben en el modelo, y comparten forma
+
+`credentialKeys()` devuelve **nombres de campo de primer nivel**. Hay dos credenciales que no son un
+campo:
+
+- **`REST_CALL`**: autentica por `headers`, un mapa clave-valor libre
+  (`RestCallTaskProvider:64`). La credencial es una *entrada dentro* de un campo.
+- **`MONGODB`**: la credencial viaja embebida en `connectionString`, en la forma
+  `usuario:clave@host`.
+
+Los dos son la misma forma de problema: **el secreto esta dentro de otro valor**. No se arregla
+ampliando la lista de claves; pide otra idea (un predicado por campo, o que el provider devuelva
+tambien "rutas" y no solo nombres). Ese diseno esta sin hacer.
+
+## 4. `NOTIFICATION` guarda credenciales que el backend no lee
+
+El provider del frontend envia estas claves (`notification-task.provider.ts`,
+`NOTIFICATION_CHANNEL_KEYS`):
+
+```
+authType, username, password, token, loginUrl, loginMethod,
+loginBodyTemplate, tokenPath, loginHeaders, loginTimeoutSeconds, tokenTtlSeconds
+```
+
+**Ninguna clase del backend de tareas las lee.** `NotificationTaskSupport` y `RestTaskSupport`: cero
+ocurrencias. El unico lector de `authType`/`username`/`password`/`token` en todo el backend es
+`RestSourceProvider`, que es una **fuente**.
+
+Es decir: se guardan en `configuration_json` y no se consumen. Configuracion muerta transportando
+credenciales vivas. Antes de protegerlas hay que decidir si deben existir.
+
+## Que cambia en las opciones
+
+La opcion 1 de la primera version —"generalizar la politica"— sigue siendo la direccion correcta,
+pero **no es un cambio mecanico** y no puede hacerse de una pieza:
+
+1. **Tareas con campo de primer nivel** (`FILE_COMPRESS`, `FtpSink`, `SftpSink`): encajan en el
+   modelo actual. Requieren declarar `credentialKeys()` explicitamente en cada provider —no por
+   `default`— y cablear la politica en el guardado y la lectura de procesos.
+2. **`REST_CALL` y `MONGODB`**: no encajan. Necesitan una decision de diseno previa.
+3. **`NOTIFICATION`**: necesita antes decidir si esos campos deben seguir existiendo.
+4. **Conexiones**: ademas de lo anterior, no hay `ConnectionProvider` a quien preguntar. Es un
+   `enum ConnectionType` manejado por `ConnectionCatalogService`.
+
+Nada de esto invalida el hallazgo: **conexiones y tareas siguen sin ningun control**. Lo que cambia
+es que el arreglo es mas grande de lo que parecia, y que una parte de el es diseno, no codigo.
