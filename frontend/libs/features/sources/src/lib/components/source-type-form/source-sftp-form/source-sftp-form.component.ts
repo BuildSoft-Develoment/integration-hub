@@ -5,22 +5,22 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { SuggestInputComponent } from '@integration-hub/shared/ui';
+import { SecretReferenceFieldComponent, SuggestInputComponent } from '@integration-hub/shared/ui';
 import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
 @Component({
   selector: 'ih-source-sftp-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSlideToggleModule, SuggestInputComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSlideToggleModule, SuggestInputComponent, SecretReferenceFieldComponent],
   template: `
     <div class="form-grid">
       <mat-form-field><mat-label>{{ i18n.t('ui.host') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().host" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('host', $event)" /></mat-form-field>
       <mat-form-field><mat-label>{{ i18n.t('ui.port') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().port" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('port', $event)" /></mat-form-field>
       <mat-form-field><mat-label>{{ i18n.t('ui.username') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().username" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('username', $event)" /></mat-form-field>
-      <mat-form-field><mat-label>{{ i18n.t('ui.password') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().password" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('password', $event)" /><mat-hint>{{ i18n.t(credentialHintKey(draft().password)) }}</mat-hint></mat-form-field>
+      <ih-secret-reference-field [label]="i18n.t('ui.password')" [value]="draft().password" [readonly]="readonly()" (valueChange)="update('password', $event)" />
       <mat-form-field class="full"><mat-label>{{ i18n.t('ui.remotePath') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().remotePath" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('remotePath', $event)" /></mat-form-field>
       <mat-form-field><mat-label>{{ i18n.t('ui.privateKeyPath') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().privateKeyPath" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('privateKeyPath', $event)" /></mat-form-field>
-      <mat-form-field><mat-label>{{ i18n.t('ui.passphrase') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().passphrase" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('passphrase', $event)" /><mat-hint>{{ i18n.t(credentialHintKey(draft().passphrase)) }}</mat-hint></mat-form-field>
+      <ih-secret-reference-field [label]="i18n.t('ui.passphrase')" [value]="draft().passphrase" [readonly]="readonly()" (valueChange)="update('passphrase', $event)" />
       <mat-form-field><mat-label>{{ i18n.t('ui.knownHostsPath') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().knownHostsPath" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('knownHostsPath', $event)" /></mat-form-field>
       <mat-form-field><mat-label>{{ i18n.t('ui.timeoutMillis') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().timeoutMillis" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('timeoutMillis', $event)" /></mat-form-field>
       <ih-suggest-input [label]="i18n.t('ui.mediaType')" [hint]="i18n.t('ui.mediaTypeHint')" [suggestions]="mediaTypes" [disabled]="readonly()" [value]="draft().mediaType" (valueChange)="update('mediaType', $event)" />

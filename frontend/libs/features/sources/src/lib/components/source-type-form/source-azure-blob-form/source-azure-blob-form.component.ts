@@ -5,13 +5,13 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { SuggestInputComponent } from '@integration-hub/shared/ui';
+import { SecretReferenceFieldComponent, SuggestInputComponent } from '@integration-hub/shared/ui';
 import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
 @Component({
   selector: 'ih-source-azure-blob-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, SuggestInputComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, SuggestInputComponent, SecretReferenceFieldComponent],
   template: `
     <div class="form-grid">
       <mat-form-field><mat-label>{{ i18n.t('ui.accountName') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accountName" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accountName', $event)" /></mat-form-field>
@@ -37,13 +37,13 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
       <ih-suggest-input [label]="i18n.t('ui.mediaType')" [hint]="i18n.t('ui.mediaTypeHint')" [suggestions]="mediaTypes" [disabled]="readonly()" [value]="draft().mediaType" (valueChange)="update('mediaType', $event)" />
 
       @if (draft().authMode === 'account-key') {
-        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.accountKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().accountKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accountKey', $event)" /></mat-form-field>
+        <ih-secret-reference-field [label]="i18n.t('ui.accountKey')" [value]="draft().accountKey" [readonly]="readonly()" fieldClass="full" (valueChange)="update('accountKey', $event)" />
       }
       @if (draft().authMode === 'sas-token') {
-        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.sasToken') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().sasToken" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('sasToken', $event)" /></mat-form-field>
+        <ih-secret-reference-field [label]="i18n.t('ui.sasToken')" [value]="draft().sasToken" [readonly]="readonly()" fieldClass="full" (valueChange)="update('sasToken', $event)" />
       }
       @if (draft().authMode === 'connection-string') {
-        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.connectionString') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().connectionString" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('connectionString', $event)" /></mat-form-field>
+        <ih-secret-reference-field [label]="i18n.t('ui.connectionString')" [value]="draft().connectionString" [readonly]="readonly()" fieldClass="full" (valueChange)="update('connectionString', $event)" />
       }
 
       <mat-form-field class="full"><mat-label>{{ i18n.t('ui.templateVariablesText') }}</mat-label><textarea matInput [disabled]="readonly()" rows="4" [ngModel]="draft().templateVariablesText" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('templateVariablesText', $event)"></textarea><mat-hint>{{ i18n.t('ui.templateVariablesHint') }}</mat-hint></mat-form-field>

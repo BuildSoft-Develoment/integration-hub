@@ -9,10 +9,12 @@
     <input matInput [disabled]="readonly()" [ngModel]="draft().username || ''" (ngModelChange)="update('username', $event)" name="jdbcUsername" />
   </mat-form-field>
 
-  <mat-form-field>
-    <mat-label>{{ i18n.t('ui.password') }}</mat-label>
-    <input matInput type="password" [disabled]="readonly()" [ngModel]="draft().password || ''" (ngModelChange)="update('password', $event)" name="jdbcPassword" />
-  </mat-form-field>
+  <ih-secret-reference-field
+    [label]="i18n.t('ui.password')"
+    [value]="draft().password || ''"
+    [readonly]="readonly()"
+    (valueChange)="update('password', $event)"
+  />
 
   <mat-form-field>
     <mat-label>{{ i18n.t('connections.minSize') }}</mat-label>

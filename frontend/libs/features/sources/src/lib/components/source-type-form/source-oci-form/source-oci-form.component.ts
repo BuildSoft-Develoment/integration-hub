@@ -5,13 +5,13 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { SuggestInputComponent } from '@integration-hub/shared/ui';
+import { SecretReferenceFieldComponent, SuggestInputComponent } from '@integration-hub/shared/ui';
 import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
 @Component({
   selector: 'ih-source-oci-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, SuggestInputComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, SuggestInputComponent, SecretReferenceFieldComponent],
   template: `
     <div class="form-grid">
       <mat-form-field><mat-label>{{ i18n.t('ui.namespace') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().namespace" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('namespace', $event)" /></mat-form-field>
@@ -29,7 +29,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
       </mat-form-field>
 
       <mat-form-field><mat-label>{{ i18n.t('ui.accessKeyId') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accessKeyId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accessKeyId', $event)" /></mat-form-field>
-      <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /><mat-hint>{{ i18n.t(credentialHintKey(draft().secretAccessKey)) }}</mat-hint></mat-form-field>
+      <ih-secret-reference-field [label]="i18n.t('ui.secretAccessKey')" [value]="draft().secretAccessKey" [readonly]="readonly()" (valueChange)="update('secretAccessKey', $event)" />
 
       <mat-form-field class="full"><mat-label>{{ i18n.t('ui.endpoint') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().endpoint" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('endpoint', $event)" /></mat-form-field>
       <ih-suggest-input [label]="i18n.t('ui.mediaType')" [hint]="i18n.t('ui.mediaTypeHint')" [suggestions]="mediaTypes" [disabled]="readonly()" [value]="draft().mediaType" (valueChange)="update('mediaType', $event)" />

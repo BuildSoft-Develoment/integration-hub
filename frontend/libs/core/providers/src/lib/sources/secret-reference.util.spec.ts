@@ -6,7 +6,9 @@ import {
   SOURCE_TYPES_WITHOUT_CREDENTIALS,
   isPlaintextSecret,
   isSecretReference,
+  parseSecretReference,
   plaintextCredentialKeys,
+  withSecretSource,
 } from './secret-reference.util';
 
 // process.cwd() es `frontend/` cuando corre el runner de Angular.
@@ -117,6 +119,51 @@ describe('secret-reference util (QA-006)', () => {
       const sobran = [...Object.keys(SOURCE_CREDENTIAL_KEYS), ...SOURCE_TYPES_WITHOUT_CREDENTIALS]
         .filter((t) => !tipos.has(t));
       expect(sobran, `declarados aqui pero sin provider detras: ${sobran.join(', ')}`).toEqual([]);
+    });
+  });
+
+  // @trace ADR-031 D6 (descomponer y recomponer la referencia para el campo compartido)
+  describe('parseSecretReference', () => {
+    it('separa origen y ruta', () => {
+      expect(parseSecretReference('${vaultkv:tasks/zip/password}')).toEqual({
+        source: 'vaultkv',
+        path: 'tasks/zip/password',
+      });
+    });
+
+    it('corta por el PRIMER dos-puntos: una ruta puede llevar mas', () => {
+      // Cortar por el ultimo dejaria el origen a merced de la ruta (una URL, por ejemplo).
+      expect(parseSecretReference('${config:http://host:8080/x}')).toEqual({
+        source: 'config',
+        path: 'http://host:8080/x',
+      });
+    });
+
+    it('lo que no es una referencia devuelve null', () => {
+      expect(parseSecretReference('hunter2')).toBeNull();
+      expect(parseSecretReference('')).toBeNull();
+      expect(parseSecretReference('${vaultkv:}')).toBeNull();
+      expect(parseSecretReference(undefined)).toBeNull();
+    });
+  });
+
+  describe('withSecretSource', () => {
+    it('cambia el prefijo y respeta la ruta', () => {
+      expect(withSecretSource('${secret:sources/sftp/password}', 'vaultkv')).toBe(
+        '${vaultkv:sources/sftp/password}',
+      );
+    });
+
+    it('envuelve el texto plano en vez de perderlo', () => {
+      expect(withSecretSource('hunter2', 'vaultkv')).toBe('${vaultkv:hunter2}');
+    });
+
+    it('sobre vacio deja la referencia a medio escribir, no una valida', () => {
+      // `${vaultkv:}` NO pasa `isSecretReference`: la interfaz pide la ruta en vez de dar por buena
+      // una referencia que no resuelve nada.
+      const aMedias = withSecretSource('', 'vaultkv');
+      expect(aMedias).toBe('${vaultkv:}');
+      expect(isSecretReference(aMedias)).toBe(false);
     });
   });
 });

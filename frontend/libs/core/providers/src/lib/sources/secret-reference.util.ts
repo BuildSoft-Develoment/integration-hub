@@ -12,6 +12,37 @@ export function isSecretReference(value: unknown): boolean {
   return typeof value === 'string' && SECRET_REFERENCE_PATTERN.test(value.trim());
 }
 
+/**
+ * Descompone una referencia en su origen y su ruta: `${vaultkv:tasks/x/password}` -> `vaultkv` +
+ * `tasks/x/password`. Devuelve `null` si el valor no es una referencia.
+ *
+ * Corta por el PRIMER `:` a proposito. El backend hace lo contrario con el ultimo `/` para separar la
+ * ruta del nombre de campo, pero el origen es siempre el primer segmento y una ruta puede llevar `:`
+ * dentro (una URL, por ejemplo). Cortar por el ultimo dejaria el origen a merced de la ruta.
+ */
+export function parseSecretReference(value: unknown): { source: string; path: string } | null {
+  if (!isSecretReference(value)) {
+    return null;
+  }
+  const interior = String(value).trim().slice(2, -1);
+  const corte = interior.indexOf(':');
+  return { source: interior.slice(0, corte), path: interior.slice(corte + 1) };
+}
+
+/**
+ * Cambia el origen de un valor conservando lo que ya habia escrito.
+ *
+ * Si era una referencia se le cambia el prefijo y la ruta se respeta. Si era texto plano se envuelve
+ * tal cual: es la forma natural de decir "esto que escribi es en realidad la ruta", y deja a la vista
+ * lo que quedo para corregirlo. Si estaba vacio queda `${origen:}`, que TODAVIA no es una referencia
+ * valida -le falta la ruta- y la interfaz lo dice en vez de tratarlo como un secreto en claro.
+ */
+export function withSecretSource(value: unknown, source: string): string {
+  const actual = parseSecretReference(value);
+  const ruta = actual ? actual.path : String(value ?? '').trim();
+  return `\${${source}:${ruta}}`;
+}
+
 /** True si el valor es un secreto en CLARO: no vacio y no una referencia (lo que QA-006 prohibe persistir). */
 export function isPlaintextSecret(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0 && !isSecretReference(value);
