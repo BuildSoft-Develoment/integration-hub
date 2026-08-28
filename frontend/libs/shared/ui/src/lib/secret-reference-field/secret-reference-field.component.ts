@@ -96,9 +96,38 @@ import { I18nService, SecretSourcesService } from '@integration-hub/core/service
 
       <mat-menu #menu="matMenu">
         @for (fuente of secretSources.sources(); track fuente.source) {
-          <button mat-menu-item type="button" (click)="usarOrigen(fuente.source)">
-            <code>{{ ejemplo(fuente.source) }}</code>
-          </button>
+          @if (fuente.enumerable) {
+            <button
+              mat-menu-item
+              type="button"
+              [matMenuTriggerFor]="claves"
+              (menuOpened)="pedirClaves(fuente.source)"
+              (mouseenter)="pedirClaves(fuente.source)"
+            >
+              <code>{{ ejemplo(fuente.source) }}</code>
+            </button>
+            <mat-menu #claves="matMenu">
+              @for (clave of clavesDe(fuente.source); track clave) {
+                <button mat-menu-item type="button" (click)="usarReferencia(clave)">
+                  <code>{{ clave }}</code>
+                </button>
+              } @empty {
+                <!-- Ni "cargando" ni una lista inventada: lo que hay es que no hay nada que ofrecer,
+                     y el campo sigue aceptando texto libre (D2). -->
+                <span class="secret-field__empty">{{ i18n.t('secretField.noEntries') }}</span>
+              }
+              @if (!secretSources.entriesOf(fuente.source).complete) {
+                <span class="secret-field__empty">{{ i18n.t('secretField.truncated') }}</span>
+              }
+              <button mat-menu-item type="button" (click)="usarOrigen(fuente.source)">
+                {{ i18n.t('secretField.writeByHand') }}
+              </button>
+            </mat-menu>
+          } @else {
+            <button mat-menu-item type="button" (click)="usarOrigen(fuente.source)">
+              <code>{{ ejemplo(fuente.source) }}</code>
+            </button>
+          }
         } @empty {
           <!-- Sin catalogo no se inventa una lista: decirlo es mas util que ofrecer un origen que
                quiza no resuelva aqui, que es justo el fallo que ADR-031 arregla. -->
@@ -173,10 +202,48 @@ export class SecretReferenceFieldComponent {
 
   protected readonly enClaro = computed(() => isPlaintextSecret(this.value()) && !this.sinRuta());
 
+  /** Las referencias completas que ofrece una fuente: una por cada pareja ruta + campo. */
+  protected clavesDe(source: string): readonly string[] {
+    return this.secretSources
+      .entriesOf(source)
+      .entries.flatMap((entrada) =>
+        entrada.fields.length === 0
+          ? // Sin nombres de campo legibles, la ruta sola sigue ahorrando la mitad: se ofrece con la
+            // barra puesta y el hint pide el campo.
+            [`\${${source}:${entrada.path}/}`]
+          : entrada.fields.map((campo) => `\${${source}:${entrada.path}/${campo}}`),
+      );
+  }
+
+  protected pedirClaves(source: string): void {
+    void this.secretSources.loadEntries(source);
+  }
+
+  protected usarReferencia(referencia: string): void {
+    if (this.readonly()) {
+      return;
+    }
+    this.valueChange.emit(referencia);
+  }
+
   /** `${vaultkv:}` recien elegido del desplegable: todavia no es referencia, y no es texto plano. */
   protected readonly sinRuta = computed(() =>
     /^\$\{[a-z]+:\}$/i.test(String(this.value() ?? '').trim()),
   );
+
+  /**
+   * `${vaultkv:connections/db/ih-internal/}`: hay ruta pero no nombre de campo.
+   *
+   * <p>Pasa al elegir del desplegable una ruta cuyos campos este despliegue no puede leer —le
+   * faltan las dos lineas de politica de D4—. El patron de referencia lo da por bueno porque hay
+   * algo detras de los dos puntos, y el backend parte por el ULTIMO `/`, asi que el campo saldria
+   * vacio y fallaria EN EJECUCION. Decirlo aqui es la diferencia entre corregirlo ahora o
+   * descubrirlo en mitad de un proceso.</p>
+   */
+  protected readonly sinCampo = computed(() => {
+    const actual = this.referencia();
+    return actual !== null && actual.path.endsWith('/');
+  });
 
   /**
    * El valor guardado usa un origen que este despliegue NO resuelve.
@@ -198,6 +265,9 @@ export class SecretReferenceFieldComponent {
   protected readonly hint = computed(() => {
     if (this.sinRuta()) {
       return this.i18n.t('secretField.missingPath');
+    }
+    if (this.sinCampo()) {
+      return this.i18n.t('secretField.missingField');
     }
     if (this.enClaro()) {
       return this.i18n.t('sources.credentialPlaintext');

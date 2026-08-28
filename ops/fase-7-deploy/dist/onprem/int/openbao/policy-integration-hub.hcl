@@ -22,6 +22,20 @@ path "secret/data/tasks/*" {
   capabilities = ["read"]
 }
 
+// Subkeys: los NOMBRES de campo de un secreto, con los valores a null (ADR-031 D4). Es lo que
+// permite que la interfaz ofrezca "password" en un desplegable sin que el backend llegue a tener el
+// password en memoria. Por "data" tambien saldrian los nombres, pero con los valores dentro, y la
+// seguridad pasaria a depender de que nadie escriba un "return values" en un refactor futuro.
+//
+// Sin "list" en metadata (abajo) esto no sirve de nada: primero hay que saber que rutas existen.
+path "secret/subkeys/connections/*" {
+  capabilities = ["read"]
+}
+
+path "secret/subkeys/tasks/*" {
+  capabilities = ["read"]
+}
+
 // Metadata: la necesita el cliente para resolver la version vigente de un secreto KV v2.
 path "secret/metadata/connections/*" {
   capabilities = ["read", "list"]

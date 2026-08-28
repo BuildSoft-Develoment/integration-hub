@@ -12,10 +12,16 @@ import { SecretReferenceFieldComponent } from './secret-reference-field.componen
  */
 class CatalogoFalso {
   fuentes: { source: string; enumerable: boolean }[] = [];
+  entradas: Record<string, { entries: { path: string; fields: string[] }[]; complete: boolean }> = {};
+  pedidas: string[] = [];
   sources = () => this.fuentes;
   prefijos = () => this.fuentes.map((f) => '${' + f.source + ':...}').join(', ');
   enumerables = () => this.fuentes.filter((f) => f.enumerable);
   load = async () => undefined;
+  entriesOf = (source: string) => this.entradas[source] ?? { entries: [], complete: true };
+  loadEntries = async (source: string) => {
+    this.pedidas.push(source);
+  };
 }
 
 describe('ih-secret-reference-field · ADR-031 D6', () => {
@@ -149,5 +155,82 @@ describe('ih-secret-reference-field · ADR-031 D6', () => {
     componente.visible.set(true);
     fixture.detectChanges();
     expect(input().type).toBe('text');
+  });
+
+  it('ofrece la referencia COMPLETA de cada pareja ruta + campo', () => {
+    catalogo.entradas['vaultkv'] = {
+      entries: [
+        { path: 'connections/db/ih-internal', fields: ['username', 'password'] },
+        { path: 'tasks/zip', fields: ['password'] },
+      ],
+      complete: true,
+    };
+    montar('');
+    const componente = fixture.componentInstance as unknown as {
+      clavesDe(s: string): readonly string[];
+    };
+
+    expect(componente.clavesDe('vaultkv')).toEqual([
+      '${vaultkv:connections/db/ih-internal/username}',
+      '${vaultkv:connections/db/ih-internal/password}',
+      '${vaultkv:tasks/zip/password}',
+    ]);
+  });
+
+  it('una ruta sin nombres de campo legibles se ofrece igual, con la barra puesta', () => {
+    // Es el despliegue al que le faltan las dos lineas de politica de D4: lista el arbol pero no
+    // puede leer los nombres. La ruta sola sigue ahorrando la mitad del trabajo.
+    catalogo.entradas['vaultkv'] = {
+      entries: [{ path: 'connections/sftp-banco', fields: [] }],
+      complete: true,
+    };
+    montar('');
+    const componente = fixture.componentInstance as unknown as {
+      clavesDe(s: string): readonly string[];
+    };
+
+    expect(componente.clavesDe('vaultkv')).toEqual(['${vaultkv:connections/sftp-banco/}']);
+  });
+
+  it('esa referencia a medias NO se da por buena: pide el nombre del campo', () => {
+    // El patron de referencia la acepta -hay algo detras de los dos puntos- y el backend parte por
+    // el ULTIMO '/', asi que el campo saldria vacio y fallaria EN EJECUCION.
+    montar('${vaultkv:connections/sftp-banco/}');
+    expect(hint()).toBe(i18n.t('secretField.missingField'));
+  });
+
+  it('elegir una clave la escribe entera', () => {
+    const componente = montar('');
+    const emitido: string[] = [];
+    componente.valueChange.subscribe((v) => emitido.push(v));
+
+    (componente as unknown as { usarReferencia(r: string): void }).usarReferencia(
+      '${vaultkv:tasks/zip/password}',
+    );
+
+    expect(emitido).toEqual(['${vaultkv:tasks/zip/password}']);
+  });
+
+  it('en solo lectura, elegir una clave no emite nada', () => {
+    const componente = montar('');
+    fixture.componentRef.setInput('readonly', true);
+    fixture.detectChanges();
+    const emitido: string[] = [];
+    componente.valueChange.subscribe((v) => emitido.push(v));
+
+    (componente as unknown as { usarReferencia(r: string): void }).usarReferencia(
+      '${vaultkv:tasks/zip/password}',
+    );
+
+    expect(emitido).toEqual([]);
+  });
+
+  it('las claves NO se piden al pintar: solo al abrir el desplegable (D5 deja rastro)', () => {
+    montar('');
+    expect(catalogo.pedidas).toEqual([]);
+
+    (fixture.componentInstance as unknown as { pedirClaves(s: string): void }).pedirClaves('vaultkv');
+
+    expect(catalogo.pedidas).toEqual(['vaultkv']);
   });
 });

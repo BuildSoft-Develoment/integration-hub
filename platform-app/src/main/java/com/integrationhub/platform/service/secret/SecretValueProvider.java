@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.secret;
 
 // @trace ADR-031 D1 (la interfaz ofrece las referencias que ESTE despliegue resuelve)
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -61,5 +62,21 @@ public interface SecretValueProvider {
      */
     default boolean enumerable() {
         return false;
+    }
+
+    /**
+     * Los secretos que existen en esta fuente, con sus nombres de campo y sin un solo valor
+     * (ADR-031 D3, D5).
+     *
+     * <p><b>Por que convive con {@link #enumerable()} en vez de derivarse de el.</b> Son dos cosas
+     * distintas: {@code enumerable()} es una DECLARACION barata que responde el catalogo de D1 en
+     * cada carga de pantalla, y esto es una OPERACION que recorre la boveda. Derivar una de otra
+     * obligaria al catalogo a hacer ese recorrido para contestar si se puede recorrer.</p>
+     *
+     * <p>El default devuelve vacio y no lanza: quien no sabe enumerar no es un error, es la
+     * mayoria. La interfaz degrada a escritura manual (D2).</p>
+     */
+    default SecretEnumeration enumerate() {
+        return SecretEnumeration.vacia();
     }
 }

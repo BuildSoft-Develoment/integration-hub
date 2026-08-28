@@ -14,6 +14,25 @@ interface SecretSourceCatalogResponse {
   readonly sources: readonly SecretSource[];
 }
 
+/** Un secreto que existe en la boveda: donde esta y como se llaman sus campos. Nunca su valor. */
+export interface SecretEntry {
+  readonly path: string;
+  readonly fields: readonly string[];
+}
+
+interface SecretEnumerationResponse {
+  readonly source: string;
+  readonly entries: readonly SecretEntry[];
+  /** `false` si el recorrido se corto por sus topes: la lista NO es todo lo que hay. */
+  readonly complete: boolean;
+}
+
+/** Lo enumerado de una fuente, tal y como lo pinta el desplegable. */
+export interface SecretEntries {
+  readonly entries: readonly SecretEntry[];
+  readonly complete: boolean;
+}
+
 /**
  * Que prefijos de referencia de secreto funcionan en este despliegue.
  *
@@ -54,6 +73,53 @@ export class SecretSourcesService {
 
   /** Las que ademas se pueden enumerar (ADR-031 D2/D3). Hoy solo `vaultkv`. */
   readonly enumerables = computed(() => this.fuentes().filter((fuente) => fuente.enumerable));
+
+  /** Lo enumerado por fuente. Se pide una vez por fuente y se reutiliza. */
+  private readonly entradas = signal<Record<string, SecretEntries>>({});
+
+  /**
+   * Los secretos de una fuente, o vacio mientras no se hayan pedido.
+   *
+   * <p>Vacio y "no pedido todavia" se ven igual a proposito: en los dos casos el desplegable no
+   * tiene nada que ofrecer y el campo sigue aceptando texto libre (D2). Distinguirlos obligaria a
+   * la pantalla a pintar un estado de carga para una ayuda opcional.</p>
+   */
+  entriesOf(source: string): SecretEntries {
+    return this.entradas()[source] ?? { entries: [], complete: true };
+  }
+
+  /**
+   * Pide los secretos de una fuente enumerable. Idempotente por fuente.
+   *
+   * <p>No se pide en la carga del catalogo sino cuando hace falta: enumerar recorre la boveda, y
+   * ADR-031 D5 lo trata como un acto que deja rastro. Hacerlo en cada pintado de pantalla llenaria
+   * la traza de ruido y no diria nada de quien de verdad fue a mirar.</p>
+   */
+  async loadEntries(source: string): Promise<void> {
+    if (!this.http || !source || source in this.entradas()) {
+      return;
+    }
+    this.entradas.update((actual) => ({ ...actual, [source]: { entries: [], complete: true } }));
+    try {
+      const respuesta = await firstValueFrom(
+        this.http.get<SecretEnumerationResponse>(
+          `/api/secret-sources/${encodeURIComponent(source)}/entries`,
+        ),
+      );
+      this.entradas.update((actual) => ({
+        ...actual,
+        [source]: { entries: respuesta?.entries ?? [], complete: respuesta?.complete ?? true },
+      }));
+    } catch {
+      // Sin permiso -este endpoint pide el rol de editar conexiones- o sin boveda, el desplegable se
+      // queda sin claves y el campo sigue aceptando texto libre. Se permite reintentar.
+      this.entradas.update((actual) => {
+        const copia = { ...actual };
+        delete copia[source];
+        return copia;
+      });
+    }
+  }
 
   /**
    * Carga el catalogo una vez. Idempotente: las pantallas de fuentes, conexiones y tareas la
