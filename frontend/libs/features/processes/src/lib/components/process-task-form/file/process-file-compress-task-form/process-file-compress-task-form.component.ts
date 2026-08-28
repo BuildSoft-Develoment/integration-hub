@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
+import { I18nService, ProcessTaskManagerService, SecretSourcesService } from '@integration-hub/core/services';
 import { FileCompressTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskFormModel } from '../../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
@@ -32,6 +32,12 @@ import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit
 })
 export class ProcessFileCompressTaskFormComponent {
   readonly i18n = inject(I18nService);
+  /** ADR-031 D7: el ejemplo de referencia lo dice el backend, no una constante. */
+  readonly secretSources = inject(SecretSourcesService);
+
+  constructor() {
+    void this.secretSources.load();
+  }
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bridge = inject(ProcessTaskFormBridgeService);
 

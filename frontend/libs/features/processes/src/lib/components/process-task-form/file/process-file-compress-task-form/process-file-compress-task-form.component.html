@@ -43,7 +43,7 @@
       <mat-form-field>
         <mat-label>{{ i18n.t('ui.compress.password') }}</mat-label>
         <input matInput type="password" [disabled]="readonly()" [ngModel]="draft().password" (ngModelChange)="updateDraft({ password: $event })" />
-        <mat-hint>{{ i18n.t('ui.compress.passwordHint') }}</mat-hint>
+        <mat-hint>{{ i18n.t('ui.compress.passwordHint', { prefijos: secretSources.prefijos() }) }}</mat-hint>
       </mat-form-field>
     }
 

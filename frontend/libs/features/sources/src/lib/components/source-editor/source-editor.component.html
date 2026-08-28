@@ -67,7 +67,7 @@
 
         @if (!readonly() && !credentialsValid()) {
           <p class="editor-form__credential-block" role="alert">
-            {{ i18n.t('sources.credentialPlaintextBlock') }} ({{ credentialFieldsInPlaintext().join(', ') }})
+            {{ i18n.t('sources.credentialPlaintextBlock', { prefijos: secretSources.prefijos() }) }} ({{ credentialFieldsInPlaintext().join(', ') }})
           </p>
         }
 

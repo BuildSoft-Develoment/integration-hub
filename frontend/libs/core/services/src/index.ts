@@ -10,6 +10,7 @@ export * from './lib/managers/connection-manager.service';
 export * from './lib/managers/managed-editor-state.base';
 export * from './lib/managers/process-task-manager.service';
 export * from './lib/managers/reader-manager.service';
+export * from './lib/managers/secret-sources.service';
 export * from './lib/managers/source-manager.service';
 export * from './lib/ui/theme.service';
 export * from './lib/ui/system-theme-config.service';
