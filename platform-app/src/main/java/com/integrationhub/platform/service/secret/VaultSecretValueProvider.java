@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.secret;
 
+import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -25,8 +26,25 @@ public class VaultSecretValueProvider implements SecretValueProvider {
     }
 
     @Override
-    public boolean supports(String source) {
-        return SOURCE.equalsIgnoreCase(source);
+    public Set<String> sources() {
+        return Set.of(SOURCE);
+    }
+
+    /** Lo sabe el cliente: habilitado, con direccion y con token. */
+    @Override
+    public boolean disponible() {
+        return client.disponible();
+    }
+
+    /**
+     * La unica fuente enumerable hoy. La politica de la aplicacion en OpenBao ya concede
+     * {@code list} sobre {@code secret/metadata/connections/*} y {@code tasks/*} -- comprobado
+     * ejecutandolo contra un OpenBao 2.6.1 con esa politica exacta, a cuatro niveles de
+     * profundidad, con la raiz del motor denegada.
+     */
+    @Override
+    public boolean enumerable() {
+        return true;
     }
 
     @Override

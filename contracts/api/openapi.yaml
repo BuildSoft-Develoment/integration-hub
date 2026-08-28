@@ -88,6 +88,34 @@ paths:
       operationId: listSourceTypes
       responses:
         '200':
+          description: OK
+      x-source-feature: "001-catalogo-fuentes"
+  /api/secret-sources:
+    get:
+      summary: Declara que fuentes de secreto resuelve este despliegue, y cuales pueden enumerarse
+      operationId: listSecretSources
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sources
+                properties:
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - source
+                        - enumerable
+                      properties:
+                        source:
+                          type: string
+                          example: vaultkv
+                        enumerable:
 
       x-source-feature: "001-catalogo-fuentes"
   /api/reader-definitions:
@@ -1148,7 +1176,7 @@ paths:
                 rules: {}
       responses:
         '200':
-          description: OK
+
       x-source-feature: "008-mensajeria-pagos"
   /api/output-sinks:
     get:

@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.secret;
 
 // @trace spec 001-catalogo-fuentes RF-004 (reingenieria: clase que implementa el/los RF en produccion)
 
+import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -33,8 +34,14 @@ public class FileVaultSecretValueProvider implements SecretValueProvider {
     }
 
     @Override
-    public boolean supports(String source) {
-        return "secret".equalsIgnoreCase(source) || "vault".equalsIgnoreCase(source);
+    public Set<String> sources() {
+        return Set.of("secret", "vault");
+    }
+
+    /** Lo sabe el cliente, que es quien tiene la configuracion del keystore. */
+    @Override
+    public boolean disponible() {
+        return fileVaultSecretClient.disponible();
     }
 
     @Override

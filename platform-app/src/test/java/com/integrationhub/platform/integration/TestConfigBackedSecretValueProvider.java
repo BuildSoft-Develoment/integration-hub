@@ -1,5 +1,6 @@
 package com.integrationhub.platform.integration;
 
+import java.util.Set;
 import com.integrationhub.platform.service.secret.SecretValueProvider;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -33,8 +34,8 @@ public class TestConfigBackedSecretValueProvider implements SecretValueProvider 
     }
 
     @Override
-    public boolean supports(String source) {
-        return "secret".equalsIgnoreCase(source);
+    public Set<String> sources() {
+        return Set.of("secret");
     }
 
     @Override

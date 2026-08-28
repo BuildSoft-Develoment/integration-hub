@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.secret;
 
+import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.Config;
@@ -23,8 +24,8 @@ public class EnvironmentSecretValueProvider implements SecretValueProvider {
     }
 
     @Override
-    public boolean supports(String source) {
-        return "env".equalsIgnoreCase(source);
+    public Set<String> sources() {
+        return Set.of("env");
     }
 
     @Override
