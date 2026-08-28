@@ -40,6 +40,7 @@
 - [ADR-028 Llamar a otro proceso como una tarea más](ADR-028-llamada-a-otro-proceso-como-tarea.md) *(propuesto)*
 - [ADR-029 Entrega continua con promocion de artefacto; el despliegue lo dispara una persona](ADR-029-entrega-continua-promocion-de-artefacto.md) *(propuesto)*
 - [ADR-030 Despliegue automatizado a la VM: modelo pull con aprobacion, y rollback clasificado por migracion](ADR-030-despliegue-automatizado-vm-pull-aprobacion-rollback.md) *(propuesto)*
+- [ADR-031 La interfaz ofrece las referencias de secreto que este despliegue resuelve](ADR-031-seleccion-de-referencias-de-secreto-en-la-interfaz.md) *(propuesto)*
 
 ## Regla
 
