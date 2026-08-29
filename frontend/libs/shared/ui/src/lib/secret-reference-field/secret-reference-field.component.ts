@@ -25,9 +25,12 @@ import { I18nService, SecretSourcesService } from '@integration-hub/core/service
  * Diez copias son diez sitios donde arreglar el mismo fallo la proxima vez.</p>
  *
  * <p><b>Que ofrece el desplegable.</b> Los origenes que ESTE despliegue resuelve, preguntados al
- * backend (ADR-031 D1). Elegir uno reescribe el prefijo y respeta la ruta que ya hubiera. No ofrece
- * todavia las CLAVES concretas: eso es enumerar la boveda, y necesita la pieza de D3/D4, que aun no
- * existe. Cuando exista, entra aqui y en ningun otro sitio.</p>
+ * backend (ADR-031 D1). Los que ademas se pueden enumerar abren un submenu con las CLAVES que existen
+ * de verdad en la boveda —ruta y nombre de campo, jamas el valor (D3, D4, D5)—, y elegir una la
+ * escribe entera. Elegir solo el origen reescribe el prefijo y respeta la ruta que ya hubiera.</p>
+ *
+ * <p>Las claves se piden al ABRIR el submenu y no al pintar la pantalla: enumerar la boveda deja
+ * rastro (D5), y hacerlo en cada pintado llenaria la traza sin decir quien fue de verdad a mirar.</p>
  *
  * <p><b>El campo sigue aceptando texto libre</b> (D2). El desplegable asiste; no sustituye. Uno que
  * no supiera degradar a escritura manual romperia los despliegues en nube, donde los gestores de
@@ -138,7 +141,7 @@ import { I18nService, SecretSourcesService } from '@integration-hub/core/service
       @if (error()) {
         <mat-error>{{ error() }}</mat-error>
       } @else {
-        <mat-hint [class.secret-field__warn]="enClaro() || sinRuta() || origenDesconocido()">
+        <mat-hint [class.secret-field__warn]="enClaro() || sinRuta() || sinCampo() || origenDesconocido()">
           {{ hint() }}
         </mat-hint>
       }

@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-// @trace ADR-031 D1, D7 (la ayuda deja de nombrar un prefijo fijo; lo dice el backend)
+// @trace ADR-031 D1, D3, D7 (que fuentes resuelve este despliegue, y que claves existen en ellas)
 
 /** Una fuente de secreto que ESTE despliegue resuelve (`GET /api/secret-sources`). */
 export interface SecretSource {

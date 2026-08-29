@@ -380,6 +380,13 @@ variable de entorno de un contenedor, cualquier volcado de configuracion se vuel
 Se hace por linea de comandos y no por la consola web: ahi la creacion de tokens no esta donde uno
 la busca, y el fichero de la politica ya esta montado dentro del contenedor.
 
+> **Si cambia `policy-integration-hub.hcl`, hay que volver a escribirla.** Un despliegue de la
+> aplicacion no la aplica: la politica vive dentro de OpenBao, no en la imagen. Basta el primer
+> comando de abajo —`bao policy write`—; **no** hace falta crear un token nuevo, porque OpenBao
+> evalua la politica en cada peticion contra el nombre que el token lleva atado. Lo pide, por
+> ejemplo, ADR-031 D4, que anadio `secret/subkeys/*` para que la interfaz pueda ofrecer los nombres
+> de campo sin leer los valores.
+
 ```sh
 docker exec -i -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 ih-openbao \
   bao policy write integration-hub /openbao/setup/policy-integration-hub.hcl

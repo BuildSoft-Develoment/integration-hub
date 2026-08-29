@@ -63,31 +63,20 @@ public class HttpVaultSecretClient implements VaultSecretClient {
 
     @Override
     public Optional<Map<String, String>> readSecret(String path) {
-        if (!disponible() || path == null || path.isBlank()) {
+        if (path == null || path.isBlank()) {
             return Optional.empty();
         }
-        try {
-            var uri = URI.create(stripTrailingSlash(address) + "/v1/" + kvMount + "/data/" + path.trim());
-            var request = HttpRequest.newBuilder(uri)
-                    .timeout(Duration.ofSeconds(5))
-                    .header("X-Vault-Token", token)
-                    .header("Accept", "application/json")
-                    .GET()
-                    .build();
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                return Optional.empty();
-            }
-            var data = mapper.readTree(response.body()).path("data").path("data");
-            if (!data.isObject()) {
-                return Optional.empty();
-            }
-            Map<String, String> values = new HashMap<>();
-            data.fields().forEachRemaining(entry -> values.put(entry.getKey(), asText(entry.getValue())));
-            return Optional.of(values);
-        } catch (Exception error) {
+        var cuerpo = pedir("/data/" + normalizar(path));
+        if (cuerpo.isEmpty()) {
             return Optional.empty();
         }
+        var data = cuerpo.get().path("data").path("data");
+        if (!data.isObject()) {
+            return Optional.empty();
+        }
+        Map<String, String> values = new HashMap<>();
+        data.fields().forEachRemaining(entry -> values.put(entry.getKey(), asText(entry.getValue())));
+        return Optional.of(values);
     }
 
     @Override
