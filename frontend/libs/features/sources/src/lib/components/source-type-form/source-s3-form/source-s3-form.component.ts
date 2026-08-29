@@ -6,13 +6,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { SuggestInputComponent } from '@integration-hub/shared/ui';
+import { SecretReferenceFieldComponent, SuggestInputComponent } from '@integration-hub/shared/ui';
 import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
 @Component({
   selector: 'ih-source-s3-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, SuggestInputComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, SuggestInputComponent, SecretReferenceFieldComponent],
   template: `
     <div class="form-grid">
       <mat-form-field><mat-label>{{ i18n.t('ui.region') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().region" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('region', $event)" /></mat-form-field>
@@ -40,7 +40,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
       @if (draft().authMode === 'access-key') {
         <mat-form-field><mat-label>{{ i18n.t('ui.accessKeyId') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accessKeyId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accessKeyId', $event)" /></mat-form-field>
-        <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /><mat-hint>{{ i18n.t(credentialHintKey(draft().secretAccessKey)) }}</mat-hint></mat-form-field>
+        <ih-secret-reference-field [label]="i18n.t('ui.secretAccessKey')" [value]="draft().secretAccessKey" [readonly]="readonly()" (valueChange)="update('secretAccessKey', $event)" />
       }
       @if (draft().authMode === 'assume-role') {
         <mat-form-field class="full"><mat-label>{{ i18n.t('ui.roleArn') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().roleArn" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('roleArn', $event)" /></mat-form-field>

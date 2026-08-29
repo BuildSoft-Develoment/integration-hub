@@ -10,21 +10,13 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import { FileCompressTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskFormModel } from '../../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { SecretReferenceFieldComponent } from '@integration-hub/shared/ui';
 import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
 @Component({
   selector: 'ih-process-file-compress-task-form',
   standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatSlideToggleModule,
-    ProcessTaskRuntimePanelComponent,
-    TaskFormShellComponent,
-  ],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, ProcessTaskRuntimePanelComponent, TaskFormShellComponent, SecretReferenceFieldComponent],
   templateUrl: './process-file-compress-task-form.component.html',
   // shared css = clases de contenido (task-grid/toggle-wrap); css propio (2do, gana) solo pasa el :host al
   // modelo del shell (altura fija; la .tfs-body scrollea) sin tocar el shared de FILE_WRITE/FILE_DELIVER.

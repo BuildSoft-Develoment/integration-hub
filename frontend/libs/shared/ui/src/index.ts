@@ -48,3 +48,4 @@ export * from './lib/pipes/relative-time.pipe';
 // @integration-hub/shared/models y el snackbar en @integration-hub/plugin-ui-kit (ya re-exportado arriba),
 // para romper el ciclo shared/ui ↔ core/services. Se re-exportan aquí para no cambiar la API del barrel.
 export * from '@integration-hub/shared/models';
+export * from './lib/secret-reference-field/secret-reference-field.component';

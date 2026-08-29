@@ -10,7 +10,7 @@ import {
   SourceProviderDescriptor,
   SourceProviderType,
 } from '@integration-hub/core/providers';
-import { I18nService, SourceManagerService } from '@integration-hub/core/services';
+import { I18nService, SecretSourcesService, SourceManagerService } from '@integration-hub/core/services';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent, ManagedEditorTestResultComponent } from '@integration-hub/shared/ui';
 import { SourceFormModel, SourceTestResult } from '../../models/source.models';
 import { SourceTypeFormHostComponent } from '../source-type-form/source-type-form-host/source-type-form-host.component';
@@ -39,6 +39,12 @@ import { SourceTypeFormHostComponent } from '../source-type-form/source-type-for
 export class SourceEditorComponent {
   private readonly sourceManager = inject(SourceManagerService);
   readonly i18n = inject(I18nService);
+  /** ADR-031 D7: los prefijos del aviso los dice el backend, no una constante. */
+  readonly secretSources = inject(SecretSourcesService);
+
+  constructor() {
+    void this.secretSources.load();
+  }
 
   readonly form = input.required<SourceFormModel>();
   readonly draft = input.required<SourceDraft>();

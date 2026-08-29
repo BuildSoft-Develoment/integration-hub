@@ -23,6 +23,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
+import { SecretReferenceFieldComponent } from '../secret-reference-field/secret-reference-field.component';
 
 import {
   SCHEMA_FIELD_RENDERERS,
@@ -53,6 +54,7 @@ import {
     MatInputModule,
     MatSelectModule,
     MatSlideToggleModule,
+    SecretReferenceFieldComponent,
   ],
   templateUrl: './schema-form.component.html',
   styleUrl: './schema-form.component.css',
@@ -119,6 +121,18 @@ export class SchemaFormComponent {
     return option.labelKey
       ? this.i18n.t(option.labelKey)
       : option.label ?? option.value;
+  }
+
+  /**
+   * El error a pintar bajo un campo `secret`, o cadena vacia si no hay.
+   *
+   * <p>Existe porque el campo compartido no conoce `FormControl`: recibe el texto ya resuelto. Sin
+   * esto, pasar los `secret` por el componente les quitaria en silencio la validacion que el resto
+   * de campos si tiene.</p>
+   */
+  protected errorDe(field: SchemaFieldDescriptor): string {
+    const control = this.control(field.key);
+    return control.invalid && control.touched ? this.i18n.t('schemaForm.required') : '';
   }
 
   protected control(key: string): FormControl {

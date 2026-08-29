@@ -116,6 +116,48 @@ paths:
                           type: string
                           example: vaultkv
                         enumerable:
+                          type: boolean
+      x-source-feature: "001-catalogo-fuentes"
+  /api/secret-sources/{source}/entries:
+    get:
+      summary: Enumera los secretos de una fuente (rutas y nombres de campo, jamas valores)
+      operationId: listSecretEntries
+      parameters:
+        - name: source
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - source
+                  - entries
+                  - complete
+                properties:
+                  source:
+                    type: string
+                    example: vaultkv
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - path
+                        - fields
+                      properties:
+                        path:
+                          type: string
+                          example: connections/db/ih-internal
+                        fields:
+                          type: array
+                          items:
+                            type: string
+                          example:
+                            - username
+                            - password
+                  complete:
 
       x-source-feature: "001-catalogo-fuentes"
   /api/reader-definitions:

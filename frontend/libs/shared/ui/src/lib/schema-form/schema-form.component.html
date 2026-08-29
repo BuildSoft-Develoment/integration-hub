@@ -68,23 +68,25 @@
       }
 
       @default {
-        @if (field.type === 'text' || field.type === 'password' || field.type === 'secret') {
+        @if (field.type === 'secret') {
+          <ih-secret-reference-field
+            fieldClass="schema-form__field"
+            [label]="fieldLabel(field)"
+            [value]="control(field.key).value"
+            [readonly]="readonly()"
+            [error]="errorDe(field)"
+            (valueChange)="control(field.key).setValue($event)"
+          />
+        } @else if (field.type === 'text' || field.type === 'password') {
           <mat-form-field appearance="outline" class="schema-form__field">
-            <mat-label>
-              {{ fieldLabel(field) }}
-              @if (field.type === 'secret') {
-                <span class="schema-form__secret" [attr.aria-label]="i18n.t('schemaForm.secretRef')">🔒</span>
-              }
-            </mat-label>
+            <mat-label>{{ fieldLabel(field) }}</mat-label>
             <input
               matInput
-              [type]="field.type === 'password' || field.type === 'secret' ? 'password' : 'text'"
+              [type]="field.type === 'password' ? 'password' : 'text'"
               [formControlName]="field.key"
               [placeholder]="fieldPlaceholder(field)"
             />
-            @if (field.type === 'secret') {
-              <mat-hint>{{ i18n.t('schemaForm.secretRef') }}</mat-hint>
-            } @else if (fieldHint(field); as hint) {
+            @if (fieldHint(field); as hint) {
               <mat-hint>{{ hint }}</mat-hint>
             }
             @if (control(field.key).invalid && control(field.key).touched) {

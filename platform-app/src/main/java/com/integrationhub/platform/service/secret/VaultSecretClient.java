@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.secret;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -11,6 +12,31 @@ import java.util.Optional;
 public interface VaultSecretClient {
 
     Optional<Map<String, String>> readSecret(String path);
+
+    /**
+     * Los nombres que cuelgan de {@code prefix}, con {@code /} al final los que son carpeta
+     * (ADR-031 D3). Vacio si no se puede listar: la funcion se degrada, no falla.
+     *
+     * <p>Va contra {@code <mount>/metadata/...}, que es donde KV v2 guarda el arbol. La politica de
+     * la aplicacion ya concede {@code list} ahi —no hace falta ampliarla— y por metadata NO viajan
+     * valores.</p>
+     */
+    default List<String> listPaths(String prefix) {
+        return List.of();
+    }
+
+    /**
+     * Los NOMBRES de campo de un secreto, sin sus valores (ADR-031 D4).
+     *
+     * <p>Se lee por {@code <mount>/subkeys/...}, <b>nunca</b> por {@code <mount>/data/...}. No es
+     * una preferencia de estilo: por {@code data} el backend tendria los secretos en memoria y la
+     * seguridad dependeria de que nadie escriba {@code return values} en un refactor de dentro de
+     * dos anos. Por {@code subkeys} los valores no salen de la boveda, y el modo seguro deja de
+     * depender de la memoria de quien mantiene el codigo.</p>
+     */
+    default List<String> readFieldNames(String path) {
+        return List.of();
+    }
 
     /**
      * Si este despliegue tiene el almacen configurado (ADR-031 D1).

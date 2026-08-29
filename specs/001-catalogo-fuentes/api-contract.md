@@ -30,6 +30,13 @@
 
 > **Vive aqui de forma provisional.** El endpoint sirve tambien a conexiones y tareas (ADR-031 D6). Cuando exista la feature de referencias de secreto, se mueve alli.
 
+### GET /api/secret-sources/{source}/entries
+**Trace**: `QA-006`, ADR-031 D3, D4, D5 · **Auth**: platform-admin, integration-admin · Enumera los secretos que existen en una fuente: **rutas y nombres de campo, jamas valores**. Es lo que permite ofrecer la clave en un desplegable en vez de escribirla de memoria.
+
+Los nombres de campo se leen por `secret/subkeys` y nunca por `secret/data` (D4): por `subkeys` OpenBao devuelve el arbol de claves con los valores a `null`, asi que el backend no llega a tener el secreto en memoria. `complete: false` avisa de que el recorrido se corto por sus topes — una lista recortada y una completa se ven igual desde la pantalla.
+
+RBAC **mas estrecho que el del catalogo**: sin `auditor`. Una ruta no es un secreto, pero `connections/banco-XXX/sftp` dice con quien operas y cuantos son, asi que pide el mismo permiso que editar conexiones. Una fuente inexistente, no disponible o no enumerable responden las tres lo mismo — lista vacia —, para no convertir la ruta en un detector de que proveedores tiene montados la maquina.
+
 ## Paths OpenAPI
 
 ```yaml
@@ -131,6 +138,45 @@ paths:
                           example: vaultkv
                         enumerable:
                           type: boolean
+  /api/secret-sources/{source}/entries:
+    get:
+      summary: Enumera los secretos de una fuente (rutas y nombres de campo, jamas valores)
+      operationId: listSecretEntries
+      parameters:
+        - name: source
+          in: path
+          required: true
+          schema:
+            type: string
+          example: vaultkv
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [source, entries, complete]
+                properties:
+                  source:
+                    type: string
+                    example: vaultkv
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      required: [path, fields]
+                      properties:
+                        path:
+                          type: string
+                          example: connections/db/ih-internal
+                        fields:
+                          type: array
+                          items:
+                            type: string
+                          example: [username, password]
+                  complete:
+                    type: boolean
 ```
 
 ## Schema OpenAPI

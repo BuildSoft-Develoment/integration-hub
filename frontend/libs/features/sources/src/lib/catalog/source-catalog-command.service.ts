@@ -6,6 +6,7 @@ import { plaintextCredentialKeys } from '@integration-hub/core/providers';
 import {
   AppFeedbackService,
   I18nService,
+  SecretSourcesService,
   SourceManagerService,
 } from '@integration-hub/core/services';
 
@@ -17,11 +18,19 @@ import { SourceRecord, SourceTestResult } from '../models/source.models';
 @Injectable()
 export class SourceCatalogCommandService {
   private readonly api = inject(SourceApiService);
+  // ADR-031 D7: los prefijos del mensaje salen del backend, no de una constante escrita aqui.
+  private readonly secretSources = inject(SecretSourcesService);
   private readonly sourceManager = inject(SourceManagerService);
   private readonly editor = inject(SourceEditorStateService);
   private readonly query = inject(SourceCatalogQueryStore);
   private readonly feedback = inject(AppFeedbackService);
   private readonly i18n = inject(I18nService);
+
+  constructor() {
+    // Se pide al construir la pantalla y no al fallar el guardado: `load()` es asincrono, y
+    // pedirlo en el momento del error dejaria el PRIMER mensaje -el unico que importa- sin ejemplo.
+    void this.secretSources.load();
+  }
 
   async save(): Promise<void> {
     const form = this.editor.form();
@@ -33,7 +42,9 @@ export class SourceCatalogCommandService {
     // QA-006: no persistir credenciales en texto plano (defensa en el comando, no solo en el form).
     // Fail-closed: si el config no parsea, se bloquea igual (no se puede verificar que no haya secretos en claro).
     if (!this.credentialsAreReferences(configurationJson, form.sourceType)) {
-      this.feedback.error('sources.credentialPlaintextBlock');
+      this.feedback.error('sources.credentialPlaintextBlock', {
+        prefijos: this.secretSources.prefijos(),
+      });
       return;
     }
 
